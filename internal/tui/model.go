@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -254,6 +255,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.done(msg)
 	case clonedMsg:
 		return m, m.cloned(msg)
+	case actionMsg:
+		return m, m.actionDone(msg)
 	case planMsg:
 		return m, m.planned(msg)
 	case cleanedMsg:
@@ -497,6 +500,10 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	op := m.keys.op(k)
 	var cmd tea.Cmd
+	if i, ok := strings.CutPrefix(op, "action:"); ok {
+		n, _ := strconv.Atoi(i)
+		return m, m.startAction(n)
+	}
 	switch op {
 	case opQuit:
 		return m, tea.Quit

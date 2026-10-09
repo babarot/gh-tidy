@@ -321,3 +321,32 @@ func TestCleanupDialog(t *testing.T) {
 		t.Errorf("esc does not cancel:\n%s", plain(m))
 	}
 }
+
+func TestCustomAction(t *testing.T) {
+	w := newWorld(t)
+	app := w.clone("app")
+	wt := filepath.Join(w.base, "wt", "feature")
+	gittest.Git(t, app, "worktree", "add", "-q", "-b", "feature", wt)
+	log := filepath.Join(w.base, "action.log")
+	m := w.model(func(c *config.File) {
+		c.Actions = []config.Action{
+			{Key: "H", Name: "where", Scope: config.ScopeWorktree, Run: []string{"sh", "-c", `echo "$PWD $1 $2" > ` + log + `; echo said hello`, "sh", "{branch}", "{name}"}},
+			{Key: "X", Name: "fail", Run: []string{"sh", "-c", "echo broken >&2; exit 3"}},
+		}
+	})
+	selectRepo(t, m, "app")
+	press(t, m, "enter")
+	m.sel += 2 // the feature worktree, after the main one
+	press(t, m, "H")
+	got, _ := os.ReadFile(log)
+	if strings.TrimSpace(string(got)) != wt+" feature app" {
+		t.Errorf("action ran with %q", got)
+	}
+	if !strings.Contains(plain(m), "where: said hello") {
+		t.Errorf("no output in the status:\n%s", plain(m))
+	}
+	press(t, m, "X")
+	if !strings.Contains(plain(m), "fail: broken") {
+		t.Errorf("no failure in the status:\n%s", plain(m))
+	}
+}

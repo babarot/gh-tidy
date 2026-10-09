@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/babarot/gh-fleet/internal/config"
 	"github.com/babarot/gh-fleet/internal/gitx"
 	"github.com/babarot/gh-fleet/internal/locate"
 	"github.com/babarot/gh-fleet/internal/repo"
@@ -148,6 +149,7 @@ func (m *Model) done(msg doneMsg) tea.Cmd {
 		return tea.Batch(cmds...)
 	}
 	switch {
+	case msg.what == "quiet":
 	case msg.err != nil:
 		cmds = append(cmds, m.setStatus(segs{{msg.r.Name + ": " + oneLine(msg.err), m.st.warn}}))
 	case msg.what == "pulled" && !msg.moved:
@@ -227,4 +229,62 @@ func oneLine(err error) string {
 		s = s[i+1:]
 	}
 	return s
+}
+
+// actionMsg is a custom action that finished.
+type actionMsg struct {
+	name string
+	path string // the clone, read again
+	out  string
+	err  error
+}
+
+// startAction runs the i-th [[actions]] on the selected repository or
+// worktree.
+func (m *Model) startAction(i int) tea.Cmd {
+	if m.screen != screenList || m.tab != tabCloned {
+		return nil
+	}
+	rows := m.rows()
+	if m.sel >= len(rows) {
+		return nil
+	}
+	a := m.cfg.Actions[i]
+	r, w := rows[m.sel].r, rows[m.sel].wt
+	if a.Scope != config.ScopeWorktree {
+		w = nil
+	}
+	vars := m.vars(r, w)
+	argv := config.Expand(a.Run, vars)
+	dir := vars["path"]
+	name := a.Name
+	if name == "" {
+		name = argv[0]
+	}
+	cmd := exec.CommandContext(m.ctx, argv[0], argv[1:]...)
+	cmd.Dir = dir
+	if a.Interactive {
+		return tea.ExecProcess(cmd, func(err error) tea.Msg { return actionMsg{name: name, path: r.Path, err: err} })
+	}
+	return tea.Batch(m.setStatus(segs{{name + "…", m.st.accent}}), func() tea.Msg {
+		out, err := cmd.CombinedOutput()
+		return actionMsg{name: name, path: r.Path, out: strings.TrimSpace(string(out)), err: err}
+	})
+}
+
+func (m *Model) actionDone(msg actionMsg) tea.Cmd {
+	var s segs
+	switch {
+	case msg.err != nil && msg.out != "":
+		s = segs{{msg.name + ": " + oneLine(fmt.Errorf("%s", msg.out)), m.st.warn}}
+	case msg.err != nil:
+		s = segs{{msg.name + ": " + msg.err.Error(), m.st.warn}}
+	case msg.out != "":
+		s = segs{{msg.name + ": " + oneLine(fmt.Errorf("%s", msg.out)), m.st.ok}}
+	default:
+		s = segs{{msg.name + ": done", m.st.ok}}
+	}
+	// The command may have changed the clone.
+	ctx, path := m.ctx, msg.path
+	return tea.Batch(m.setStatus(s), func() tea.Msg { return doneMsg{r: repo.Scan(ctx, path), what: "quiet"} })
 }
