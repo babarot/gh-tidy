@@ -70,10 +70,18 @@ type Model struct {
 	help        bool
 	busy        map[string]string // path -> what is running on it
 
+	// F and P: how many are still running, and what to say when none are.
+	pending    int
+	batchWhat  string
+	batchErrs  []string
+	batchMoved int
+
 	status   segs
 	statusID int
 
 	width, height int
+
+	noTimers bool // tests: no ticks, statuses stay
 }
 
 // New returns the TUI for target.
@@ -96,7 +104,7 @@ func New(ctx context.Context, cfg config.File, root string, target locate.Target
 
 // Init starts reading the owner's clones and GitHub.
 func (m *Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{tea.RequestBackgroundColor, tick()}
+	cmds := []tea.Cmd{tea.RequestBackgroundColor, m.tick()}
 	if m.screen == screenList {
 		cmds = append(cmds, m.open(m.owner))
 	}
@@ -120,12 +128,15 @@ type (
 		repos []github.Repo
 		err   error
 	}
-	adjustedMsg struct{ r *repo.Repo }
-	tickMsg     time.Time
+	adjustedMsg  struct{ r *repo.Repo }
+	tickMsg      time.Time
 	statusExpMsg struct{ id int }
 )
 
-func tick() tea.Cmd {
+func (m *Model) tick() tea.Cmd {
+	if m.noTimers {
+		return nil
+	}
 	return tea.Tick(30*time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
@@ -175,7 +186,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clamp()
 	case tickMsg:
 		m.now = time.Time(msg)
-		return m, tick()
+		return m, m.tick()
 	case scanStartMsg:
 		if msg.err != nil && !errors.Is(msg.err, fs.ErrNotExist) {
 			m.setStatus(segs{{msg.err.Error(), m.st.warn}})
@@ -232,6 +243,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.repos[i] = msg.r
 			}
 		}
+	case doneMsg:
+		return m, m.done(msg)
+	case clonedMsg:
+		return m, m.cloned(msg)
 	case statusExpMsg:
 		if msg.id == m.statusID {
 			m.status = nil
@@ -426,6 +441,9 @@ func (m *Model) setStatus(s segs) tea.Cmd {
 	m.status = s
 	m.statusID++
 	id := m.statusID
+	if m.noTimers {
+		return nil
+	}
 	return tea.Tick(4*time.Second, func(time.Time) tea.Msg { return statusExpMsg{id} })
 }
 
@@ -499,6 +517,30 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case opExpand:
 		cmd = m.expand()
+	case opFetch:
+		if r := m.selectedRepo(); r != nil {
+			if !r.HasOrigin() {
+				cmd = m.setStatus(segs{{r.Name + ": no origin to fetch", m.st.prompt}})
+			} else {
+				cmd = m.startFetch(r, false, nil)
+			}
+		}
+	case opFetchAll:
+		if m.screen == screenList && !m.scanning {
+			cmd = m.startFetchAll()
+		}
+	case opPull:
+		if r := m.selectedRepo(); r != nil {
+			cmd = m.startPull(r)
+		}
+	case opPullAll:
+		if m.screen == screenList && !m.scanning {
+			cmd = m.startPullAll()
+		}
+	case opClone:
+		if m.screen == screenList && m.tab == tabNotCloned {
+			cmd = m.startClone()
+		}
 	case opOpenBrowser:
 		if u := m.selectedURL(); u != "" {
 			cmd = runQuiet(openCommand(u))

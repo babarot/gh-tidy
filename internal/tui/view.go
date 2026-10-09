@@ -501,25 +501,36 @@ func (m *Model) pickerLines() []string {
 }
 
 func (m *Model) helpLine() string {
+	k := m.keys.first
+	both := func(a, b string) string {
+		switch {
+		case a == "":
+			return b
+		case b == "":
+			return a
+		}
+		return a + "/" + b
+	}
 	var ops [][2]string
 	switch {
 	case m.filtering:
 		ops = [][2]string{{"enter", "keep filter"}, {"esc", "clear"}}
 	case m.screen == screenPicker:
-		ops = [][2]string{{m.keys.first(opExpand), "open"}, {m.keys.first(opSearch), "filter"}, {m.keys.first(opOpenBrowser), "browser"}, {m.keys.first(opQuit), "quit"}}
+		ops = [][2]string{{k(opExpand), "open"}, {k(opSearch), "filter"}, {k(opOpenBrowser), "browser"}, {k(opQuit), "quit"}}
 	case m.tab == tabNotCloned:
-		ops = [][2]string{{m.keys.first(opSwitchTab), "cloned"}, {m.keys.first(opOpenBrowser), "browser"}, {m.keys.first(opCopyURL), "copy url"}, {m.keys.first(opSearch), "filter"}, {m.keys.first(opHelp), "keys"}, {m.keys.first(opQuit), "quit"}}
+		ops = [][2]string{{k(opClone), "clone"}, {k(opOpenBrowser), "browser"}, {k(opCopyURL), "copy url"},
+			{k(opSwitchTab), "cloned"}, {k(opSearch), "filter"}, {k(opHelp), "keys"}, {k(opQuit), "quit"}}
 	default:
-		ops = [][2]string{{m.keys.first(opExpand), "worktrees"}, {m.keys.first(opOpenBrowser), "browser"}, {m.keys.first(opReveal), "finder"},
-			{m.keys.first(opCopyPath) + "/" + m.keys.first(opCopyURL), "copy"}, {m.keys.first(opShowAll), "all"}, {m.keys.first(opSort), "sort"},
-			{m.keys.first(opSwitchTab), "not cloned"}, {m.keys.first(opSearch), "filter"}, {m.keys.first(opHelp), "keys"}, {m.keys.first(opQuit), "quit"}}
+		ops = [][2]string{{k(opExpand), "worktrees"}, {both(k(opFetch), k(opFetchAll)), "fetch"}, {both(k(opPull), k(opPullAll)), "pull"},
+			{k(opCleanup), "clean up"}, {k(opOpenBrowser), "browser"}, {k(opReveal), "finder"}, {both(k(opCopyPath), k(opCopyURL)), "copy"},
+			{k(opShowAll), "all"}, {k(opSwitchTab), "not cloned"}, {k(opSearch), "filter"}, {k(opHelp), "keys"}, {k(opQuit), "quit"}}
 	}
 	var s segs
-	for i, o := range ops {
-		if o[0] == "" || o[0] == "/" {
-			continue
+	for _, o := range ops {
+		if o[0] == "" {
+			continue // the operation has no key
 		}
-		if i > 0 && len(s) > 0 {
+		if len(s) > 0 {
 			s = append(s, seg{" · ", m.st.rule})
 		}
 		s = append(s, seg{o[0], m.st.key}, seg{" " + o[1], m.st.muted})

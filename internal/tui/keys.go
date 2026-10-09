@@ -27,6 +27,12 @@ const (
 	opReveal      = "reveal"
 	opCopyPath    = "copy_path"
 	opCopyURL     = "copy_url"
+	opFetch       = "fetch"
+	opFetchAll    = "fetch_all"
+	opPull        = "pull"
+	opPullAll     = "pull_all"
+	opCleanup     = "cleanup"
+	opClone       = "clone"
 	opHelp        = "help"
 	opQuit        = "quit"
 )
@@ -48,6 +54,12 @@ var defaultKeys = []struct {
 	{opSearch, []string{"/"}, "filter by name or branch"},
 	{opShowAll, []string{"a"}, "show the hidden repositories"},
 	{opSort, []string{"s"}, "change the order"},
+	{opFetch, []string{"f"}, "fetch the selected repository"},
+	{opFetchAll, []string{"F"}, "fetch every repository"},
+	{opPull, []string{"p"}, "pull --ff-only the selected repository"},
+	{opPullAll, []string{"P"}, "fetch every repository, then pull those behind with nothing in the way"},
+	{opCleanup, []string{"d"}, "remove merged worktrees and branches"},
+	{opClone, []string{"c"}, "clone (not cloned)"},
 	{opOpenBrowser, []string{"o"}, "open on GitHub"},
 	{opReveal, []string{"R"}, "reveal in Finder"},
 	{opCopyPath, []string{"y"}, "copy the path"},

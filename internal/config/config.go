@@ -99,8 +99,8 @@ type Cleanup struct {
 
 // Action is a custom command run on the selected repository or worktree.
 type Action struct {
-	Key  string   `toml:"key"`
-	Name string   `toml:"name"`
+	Key  string `toml:"key"`
+	Name string `toml:"name"`
 	// Scope is ScopeRepo or ScopeWorktree.
 	Scope string   `toml:"scope"`
 	Run   []string `toml:"run"`
@@ -290,6 +290,12 @@ const Template = `# gh fleet settings. Uncomment a line to change it.
 # search = "/"
 # show_all = "a"
 # sort = "s"
+# fetch = "f"
+# fetch_all = "F"
+# pull = "p"
+# pull_all = "P"
+# cleanup = "d"
+# clone = "c"
 # open_browser = "o"
 # reveal = "R"
 # copy_path = "y"

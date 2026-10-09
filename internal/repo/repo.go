@@ -6,6 +6,7 @@ package repo
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -298,4 +299,30 @@ func ScanAll(ctx context.Context, paths []string, n int, each func(*Repo)) {
 // SortByName sorts repositories by directory name.
 func SortByName(rs []*Repo) {
 	slices.SortFunc(rs, func(a, b *Repo) int { return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) })
+}
+
+// PullBlocker says why git pull --ff-only should not run, or "" when it
+// may: it would refuse, or the result would surprise.
+func (r *Repo) PullBlocker() string {
+	switch {
+	case r.Err != nil:
+		return "unreadable"
+	case !r.HasOrigin():
+		return "no origin to pull from"
+	case r.Head == "":
+		return "detached HEAD"
+	case r.Upstream == "":
+		return "no upstream"
+	case r.Dirty() > 0:
+		return fmt.Sprintf("%d uncommitted changes", r.Dirty())
+	case r.Ahead > 0 && r.Behind > 0:
+		return "diverged from " + r.Upstream + "; rebase or merge it yourself"
+	}
+	return ""
+}
+
+// CanFastForward reports whether pull --ff-only would move the branch with
+// nothing in the way: behind, not ahead, nothing uncommitted.
+func (r *Repo) CanFastForward() bool {
+	return r.PullBlocker() == "" && r.Behind > 0 && r.Ahead == 0
 }
