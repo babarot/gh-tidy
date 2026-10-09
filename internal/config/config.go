@@ -311,6 +311,6 @@ const Template = `# gh fleet settings. Uncomment a line to change it.
 # key = "H"
 # name = "open in herdr"
 # scope = "worktree"   # "repo" (default) or "worktree"
-# run = ["herdr", "worktree", "open", "{path}"]
+# run = ["herdr", "worktree", "open", "--path", "{path}"]
 # interactive = false  # true hands the terminal to the command
 `
