@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -81,6 +82,9 @@ type Model struct {
 
 	width, height int
 
+	cwd     string // where gh fleet runs; d keeps the worktree holding it
+	confirm *confirm
+
 	noTimers bool // tests: no ticks, statuses stay
 }
 
@@ -93,6 +97,9 @@ func New(ctx context.Context, cfg config.File, root string, target locate.Target
 	m := &Model{ctx: ctx, cfg: cfg, keys: km, st: newStyles(theme.Get(cfg.TUI.Theme, true)), now: time.Now(),
 		root: root, host: target.Host, expanded: map[string]bool{}, busy: map[string]string{},
 		sortIdx: max(0, slices.Index(config.Sorts, cfg.TUI.Sort))}
+	if wd, err := os.Getwd(); err == nil {
+		m.cwd, _ = filepath.EvalSymlinks(wd)
+	}
 	if target.Kind == locate.Picker {
 		m.screen = screenPicker
 		m.owners, _ = locate.Owners(root, target.Host)
@@ -247,6 +254,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.done(msg)
 	case clonedMsg:
 		return m, m.cloned(msg)
+	case planMsg:
+		return m, m.planned(msg)
+	case cleanedMsg:
+		return m, m.cleaned(msg)
 	case statusExpMsg:
 		if msg.id == m.statusID {
 			m.status = nil
@@ -452,6 +463,9 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if k == "ctrl+c" {
 		return m, tea.Quit
 	}
+	if m.confirm != nil {
+		return m, m.confirmKey(k)
+	}
 	if m.help {
 		m.help = false
 		return m, nil
@@ -536,6 +550,10 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case opPullAll:
 		if m.screen == screenList && !m.scanning {
 			cmd = m.startPullAll()
+		}
+	case opCleanup:
+		if r := m.selectedRepo(); r != nil {
+			cmd = m.startCleanup(r)
 		}
 	case opClone:
 		if m.screen == screenList && m.tab == tabNotCloned {

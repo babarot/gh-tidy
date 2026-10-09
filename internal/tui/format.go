@@ -42,10 +42,14 @@ func worktreeName(w repo.Worktree) string {
 	if w.Main {
 		return "(main)"
 	}
-	if m := herdrWorktree.FindStringSubmatch(w.Path); m != nil {
+	return pathName(w.Path)
+}
+
+func pathName(p string) string {
+	if m := herdrWorktree.FindStringSubmatch(p); m != nil {
 		return m[1]
 	}
-	return filepath.Base(w.Path)
+	return filepath.Base(p)
 }
 
 // statusSegs is STATUS: counts (3* 1+ 12% 2$) or zsh-mini-prompt's symbols.

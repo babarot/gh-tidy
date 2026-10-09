@@ -276,3 +276,48 @@ func TestKeysFromConfig(t *testing.T) {
 		t.Errorf("an unknown operation = %v", err)
 	}
 }
+
+func TestCleanupDialog(t *testing.T) {
+	w := newWorld(t)
+	app := w.clone("app")
+	wt := filepath.Join(w.base, "wt", "landed")
+	gittest.Git(t, app, "worktree", "add", "-q", "-b", "landed", wt)
+	gittest.Commit(t, wt, "l", "landed work")
+	gittest.Git(t, wt, "push", "-q", "origin", "landed:main")
+	gittest.Git(t, app, "fetch", "-q")
+	gittest.Git(t, app, "worktree", "add", "-q", "-b", "fresh", filepath.Join(w.base, "wt", "fresh"), "origin/main")
+
+	m := w.model(nil)
+	selectRepo(t, m, "app")
+	press(t, m, "d")
+	s := plain(m)
+	for _, want := range []string{"clean up app", "REMOVE 1", "⌥ landed landed", "KEEP 1", "⌥ fresh fresh  no commits since it was created"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("dialog lacks %q:\n%s", want, s)
+		}
+	}
+	press(t, m, "y") // copy path outside the dialog; nothing here
+	press(t, m, "j")
+	if m.confirm == nil {
+		t.Fatal("a key other than enter or esc closed the dialog")
+	}
+	if _, err := os.Stat(wt); err != nil {
+		t.Fatal("removed before enter")
+	}
+	press(t, m, "enter")
+	if m.confirm != nil {
+		t.Error("the dialog stays open after enter")
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Errorf("the landed worktree is still there")
+	}
+	if !strings.Contains(plain(m), "app: removed 1") {
+		t.Errorf("no status:\n%s", plain(m))
+	}
+
+	press(t, m, "d")
+	press(t, m, "esc")
+	if m.confirm != nil || !strings.Contains(plain(m), "nothing removed") {
+		t.Errorf("esc does not cancel:\n%s", plain(m))
+	}
+}

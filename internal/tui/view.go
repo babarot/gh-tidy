@@ -62,6 +62,16 @@ func (m *Model) render() string {
 		lines = append(lines, m.detail()...)
 	}
 	lines = append(lines, m.status.render(m.width, nil), m.helpLine())
+	if m.confirm != nil {
+		// The dialog covers the list from its first row.
+		w := min(110, m.width-4)
+		pad := strings.Repeat(" ", (m.width-w)/2)
+		for i, l := range m.confirmLines(w) {
+			if at := 4 + i; at < len(lines)-2 {
+				lines[at] = pad + l
+			}
+		}
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -267,7 +277,12 @@ func (m *Model) detail() []string {
 }
 
 func frame(st styles, title string, body []string, width int) []string {
-	b := lipgloss.NewStyle().Foreground(st.border)
+	return frameColored(st, title, body, width, lipgloss.NewStyle().Foreground(st.border))
+}
+
+// frameColored draws body in a rounded frame of b's color, title on its top
+// edge.
+func frameColored(st styles, title string, body []string, width int, b lipgloss.Style) []string {
 	top := "╭─"
 	if title != "" {
 		top += " " + st.strong.Bold(true).Render(title) + b.Render(" ")
@@ -513,6 +528,8 @@ func (m *Model) helpLine() string {
 	}
 	var ops [][2]string
 	switch {
+	case m.confirm != nil:
+		ops = [][2]string{{"enter", "remove"}, {"esc", "cancel"}}
 	case m.filtering:
 		ops = [][2]string{{"enter", "keep filter"}, {"esc", "clear"}}
 	case m.screen == screenPicker:
