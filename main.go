@@ -1,6 +1,7 @@
-// Command gh-fleet lists one GitHub owner's local clones with what each has
-// to say: how far it is from its upstream and its default branch, what is not
-// committed or not pushed, and its worktrees.
+// Command gh-tidy keeps one GitHub owner's local clones up to date and clear
+// of finished work, so they are ready to hand to a coding agent. It lists the
+// clones with what stands in the way: how far each is from its upstream and
+// its default branch, what is not committed or not pushed, and its worktrees.
 package main
 
 import (
@@ -18,18 +19,20 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/babarot/gh-fleet/internal/config"
-	"github.com/babarot/gh-fleet/internal/locate"
-	"github.com/babarot/gh-fleet/internal/repo"
-	"github.com/babarot/gh-fleet/internal/tui"
-	"github.com/babarot/gh-fleet/internal/version"
+	"github.com/babarot/gh-tidy/internal/config"
+	"github.com/babarot/gh-tidy/internal/locate"
+	"github.com/babarot/gh-tidy/internal/repo"
+	"github.com/babarot/gh-tidy/internal/tui"
+	"github.com/babarot/gh-tidy/internal/version"
 )
 
-const usage = `gh fleet lists one owner's local clones: how far each is from its upstream
-and its default branch, what is not committed or not pushed, and its worktrees.
+const usage = `gh tidy keeps one owner's local clones up to date and clear of what you are
+done with, so they are ready to hand to a coding agent. It lists the clones
+with what stands in the way: how far each is from its upstream and its default
+branch, what is not committed or not pushed, and its worktrees.
 
 Usage:
-  gh fleet [flags] [OWNER | HOST/OWNER]
+  gh tidy [flags] [OWNER | HOST/OWNER]
 
 Without OWNER, the owner comes from where it is started: the owner of the
 clone or worktree it is in, the owner directory under the root
@@ -42,13 +45,13 @@ Flags:
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "gh fleet:", err)
+		fmt.Fprintln(os.Stderr, "gh tidy:", err)
 		os.Exit(1)
 	}
 }
 
 func run() error {
-	fs := flag.NewFlagSet("gh-fleet", flag.ContinueOnError)
+	fs := flag.NewFlagSet("gh-tidy", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), usage, locate.Abbrev(config.Path()))
 		fs.PrintDefaults()
@@ -62,7 +65,7 @@ func run() error {
 		return err
 	}
 	if *showVersion {
-		fmt.Println("gh-fleet", version.Version)
+		fmt.Println("gh-tidy", version.Version)
 		return nil
 	}
 	if fs.NArg() > 1 {

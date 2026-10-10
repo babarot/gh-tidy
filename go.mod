@@ -1,4 +1,4 @@
-module github.com/babarot/gh-fleet
+module github.com/babarot/gh-tidy
 
 go 1.26.8
 

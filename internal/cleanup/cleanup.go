@@ -1,7 +1,7 @@
 // Package cleanup decides which worktrees and branches of a clone are done
 // with, says why it keeps the others, and removes the ones it decided on.
 // Nothing is removed by force: a worktree with changes, one never committed
-// to, or the one gh fleet runs in stays.
+// to, or the one gh tidy runs in stays.
 package cleanup
 
 import (
@@ -13,9 +13,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/babarot/gh-fleet/internal/config"
-	"github.com/babarot/gh-fleet/internal/gitx"
-	"github.com/babarot/gh-fleet/internal/repo"
+	"github.com/babarot/gh-tidy/internal/config"
+	"github.com/babarot/gh-tidy/internal/gitx"
+	"github.com/babarot/gh-tidy/internal/repo"
 )
 
 // Kind is what an item is.
@@ -49,7 +49,7 @@ type Plan struct {
 // ErrNoDefault is returned when the clone's default branch is unknown.
 var ErrNoDefault = errors.New("default branch unknown (run git remote set-head origin -a)")
 
-// Decide plans the cleanup of r. cwd is where gh fleet runs: the worktree
+// Decide plans the cleanup of r. cwd is where gh tidy runs: the worktree
 // holding it is kept.
 func Decide(ctx context.Context, r *repo.Repo, cfg config.Cleanup, cwd string) (*Plan, error) {
 	if r.Default == "" {

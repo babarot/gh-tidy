@@ -1,4 +1,4 @@
-// Package config reads ~/.config/gh-fleet/config.toml. The file is written
+// Package config reads ~/.config/gh-tidy/config.toml. The file is written
 // on first run with every setting commented out at its default, so a default
 // changed later still applies until the user picks a value. A mistake is
 // reported where it is in the file rather than ignored.
@@ -16,7 +16,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/babarot/gh-fleet/internal/theme"
+	"github.com/babarot/gh-tidy/internal/theme"
 )
 
 // How STATUS is written.
@@ -65,7 +65,7 @@ type Core struct {
 	// Root is where clones live, laid out as <host>/<owner>/<repo>. Empty
 	// reads git config ghq.root, then ~/ghq.
 	Root string `toml:"root"`
-	// DefaultOwner is opened when gh fleet starts outside Root. Empty opens
+	// DefaultOwner is opened when gh tidy starts outside Root. Empty opens
 	// the owner picker.
 	DefaultOwner string `toml:"default_owner"`
 	// FetchConcurrency is how many repositories F fetches at once.
@@ -128,7 +128,7 @@ func Path() string {
 		h, _ := os.UserHomeDir()
 		dir = filepath.Join(h, ".config")
 	}
-	return filepath.Join(dir, "gh-fleet", "config.toml")
+	return filepath.Join(dir, "gh-tidy", "config.toml")
 }
 
 // Load reads the file at path over the defaults, writing the template there
@@ -235,7 +235,7 @@ func Expand(argv []string, vars map[string]string) []string {
 }
 
 // Template is the file written on first run.
-const Template = `# gh fleet settings. Uncomment a line to change it.
+const Template = `# gh tidy settings. Uncomment a line to change it.
 
 [core]
 # Where clones live, laid out as <host>/<owner>/<repo>. Empty (default) reads

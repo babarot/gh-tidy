@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/babarot/gh-fleet/internal/config"
-	"github.com/babarot/gh-fleet/internal/repo"
+	"github.com/babarot/gh-tidy/internal/config"
+	"github.com/babarot/gh-tidy/internal/repo"
 )
 
 // ago writes t relative to now: 5m ago, 3h ago, 4d ago, then Sep 28, then

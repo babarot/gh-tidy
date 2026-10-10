@@ -7,7 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/babarot/gh-fleet/internal/theme"
+	"github.com/babarot/gh-tidy/internal/theme"
 )
 
 // styles holds every style the TUI renders with, built from one palette. The

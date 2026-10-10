@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/babarot/gh-fleet/internal/gitx"
+	"github.com/babarot/gh-tidy/internal/gitx"
 )
 
 // Where the default branch came from, most trusted first.

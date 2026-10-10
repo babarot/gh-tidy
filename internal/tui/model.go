@@ -16,11 +16,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/babarot/gh-fleet/internal/config"
-	"github.com/babarot/gh-fleet/internal/github"
-	"github.com/babarot/gh-fleet/internal/locate"
-	"github.com/babarot/gh-fleet/internal/repo"
-	"github.com/babarot/gh-fleet/internal/theme"
+	"github.com/babarot/gh-tidy/internal/config"
+	"github.com/babarot/gh-tidy/internal/github"
+	"github.com/babarot/gh-tidy/internal/locate"
+	"github.com/babarot/gh-tidy/internal/repo"
+	"github.com/babarot/gh-tidy/internal/theme"
 )
 
 type screen int
@@ -83,7 +83,7 @@ type Model struct {
 
 	width, height int
 
-	cwd     string // where gh fleet runs; d keeps the worktree holding it
+	cwd     string // where gh tidy runs; d keeps the worktree holding it
 	confirm *confirm
 	ask     *ask
 

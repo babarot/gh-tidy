@@ -14,10 +14,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/babarot/gh-fleet/internal/config"
-	"github.com/babarot/gh-fleet/internal/gitx"
-	"github.com/babarot/gh-fleet/internal/locate"
-	"github.com/babarot/gh-fleet/internal/repo"
+	"github.com/babarot/gh-tidy/internal/config"
+	"github.com/babarot/gh-tidy/internal/gitx"
+	"github.com/babarot/gh-tidy/internal/locate"
+	"github.com/babarot/gh-tidy/internal/repo"
 )
 
 // doneMsg is a repository read again after something ran on it.

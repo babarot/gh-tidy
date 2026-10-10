@@ -12,10 +12,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/babarot/gh-fleet/internal/config"
-	"github.com/babarot/gh-fleet/internal/gittest"
-	"github.com/babarot/gh-fleet/internal/locate"
-	"github.com/babarot/gh-fleet/internal/repo"
+	"github.com/babarot/gh-tidy/internal/config"
+	"github.com/babarot/gh-tidy/internal/gittest"
+	"github.com/babarot/gh-tidy/internal/locate"
+	"github.com/babarot/gh-tidy/internal/repo"
 )
 
 // world is a root with one owner, "me", whose clones are made from bare
@@ -100,7 +100,7 @@ func drive(t *testing.T, m *Model, cmd tea.Cmd) {
 			queue = append(queue, msg...)
 		case tickMsg, statusExpMsg:
 		default:
-			if reflect.TypeOf(msg).PkgPath() != "github.com/babarot/gh-fleet/internal/tui" {
+			if reflect.TypeOf(msg).PkgPath() != "github.com/babarot/gh-tidy/internal/tui" {
 				continue // clipboard, background color requests
 			}
 			_, next := m.Update(msg)

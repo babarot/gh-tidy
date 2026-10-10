@@ -1,4 +1,4 @@
-// Package locate decides whose clones to show from where gh fleet is
+// Package locate decides whose clones to show from where gh tidy is
 // started. Clones are laid out as ghq lays them out, <root>/<host>/<owner>/<repo>;
 // ghq itself is not needed, only its root.
 package locate
@@ -11,8 +11,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/babarot/gh-fleet/internal/gitx"
-	"github.com/babarot/gh-fleet/internal/repo"
+	"github.com/babarot/gh-tidy/internal/gitx"
+	"github.com/babarot/gh-tidy/internal/repo"
 )
 
 // DefaultHost is the host clones are looked up under.

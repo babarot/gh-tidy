@@ -1,9 +1,13 @@
-# gh-fleet
+# gh-tidy
 
-A gh extension that lists one GitHub owner's local clones with what each has to say: how far it is from its upstream and its default branch, what is not committed or not pushed, and its worktrees. From the list you can fetch, pull, clone what is not cloned yet, and remove the worktrees and branches you are done with.
+A gh extension that keeps one GitHub owner's local clones up to date and clear of what you are done with, so they are ready to hand to a coding agent.
+
+A coding agent works from the clone it is given. If the clone is behind `origin/<default>`, the agent starts its work from old code, or reads old code as context and acts or decides on it. In a shell this is `for repo in $repos; do git -C $repo pull --rebase; done`; gh tidy does this, but only fast-forwards, and stops at a clone where pulling would be wrong.
+
+It lists the clones with what stands in the way: how far each is from its upstream and its default branch, what is not committed or not pushed, and its worktrees. `P` pulls every clone that can be pulled safely, `d` removes the worktrees and branches that are merged, and `c` clones what is not cloned yet.
 
 ```
- fleet // babarot   cloned 61  not cloned 31                     38 need attention · 20 stale · sort: attention
+ tidy // babarot    cloned 61  not cloned 31                     38 need attention · 20 stale · sort: attention
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
   REPO                          BRANCH                  STATUS         SYNC     BASE    BRANCHES     FETCHED
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
@@ -18,18 +22,18 @@ A gh extension that lists one GitHub owner's local clones with what each has to 
 ## Install
 
 ```sh
-gh extension install babarot/gh-fleet
+gh extension install babarot/gh-tidy
 ```
 
 ## Usage
 
 ```sh
-gh fleet            # the owner of where you are
-gh fleet babarot    # one owner
-gh fleet ghe.example.com/team
+gh tidy            # the owner of where you are
+gh tidy babarot    # one owner
+gh tidy ghe.example.com/team
 ```
 
-Clones are looked for where [ghq](https://github.com/x-motemen/ghq) puts them, `<root>/<host>/<owner>/<repo>`; the root is `ghq.root` in git config, or `~/ghq`. ghq itself is not needed. Without an owner, gh fleet works it out from the directory it starts in:
+Clones are looked for where [ghq](https://github.com/x-motemen/ghq) puts them, `<root>/<host>/<owner>/<repo>`; the root is `ghq.root` in git config, or `~/ghq`. ghq itself is not needed. Without an owner, gh tidy works it out from the directory it starts in:
 
 | Started in | Opens |
 |---|---|
@@ -51,7 +55,7 @@ A clone is matched to GitHub by its origin, not its directory name, so a clone i
 | BRANCHES | the other branches: `↑N` with commits not pushed, `·N` tracking nothing, `✗N` whose upstream was deleted |
 | FETCHED | when the clone last fetched |
 
-Only what is on your machine is read, so the counts are as of the last fetch. To know when they are out of date without fetching, gh fleet asks GitHub, in one query, where each clone's default branch is now; when GitHub has moved past the clone, SYNC and BASE get a `?` and FETCHED turns yellow. `F` fetches everything.
+Only what is on your machine is read, so the counts are as of the last fetch. To know when they are out of date without fetching, gh tidy asks GitHub, in one query, where each clone's default branch is now; when GitHub has moved past the clone, SYNC and BASE get a `?` and FETCHED turns yellow. `F` fetches everything.
 
 Repositories with nothing to say, and those whose only news is untracked files, are hidden until `a`.
 
@@ -77,18 +81,18 @@ Repositories with nothing to say, and those whose only news is untracked files, 
 
 `d` measures the selected clone against `origin/<default>` and lists what it would remove and what it keeps, with why; nothing is removed until `enter`.
 
-- A worktree goes when its branch is merged, it has no changes, and it was committed to after it was made. A worktree never committed to is kept: its branch sits on the default branch, so it looks merged, but it may be the one you are about to work in. So is the worktree gh fleet runs in.
+- A worktree goes when its branch is merged, it has no changes, and it was committed to after it was made. A worktree never committed to is kept: its branch sits on the default branch, so it looks merged, but it may be the one you are about to work in. So is the worktree gh tidy runs in.
 - A worktree whose directory is gone is pruned.
 - A merged branch checked out nowhere goes.
 - A branch whose upstream was deleted but which is not merged, as after a squash merge, is kept unless `delete_gone = true`.
 
 ## Settings
 
-`~/.config/gh-fleet/config.toml`, written on first run with every setting commented out at its default. A mistake is reported with where it is in the file.
+`~/.config/gh-tidy/config.toml`, written on first run with every setting commented out at its default. A mistake is reported with where it is in the file.
 
 ### Handing work to other tools
 
-gh fleet runs git and gh, and nothing else on its own. Two settings let it hand work to other tools.
+gh tidy runs git and gh, and nothing else on its own. Two settings let it hand work to other tools.
 
 `[[actions]]` binds a key to a command run on the selected clone or worktree:
 

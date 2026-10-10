@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/babarot/gh-fleet/internal/config"
+	"github.com/babarot/gh-tidy/internal/config"
 )
 
 // Operations, by the name [keys] uses.

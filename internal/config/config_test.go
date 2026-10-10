@@ -52,7 +52,7 @@ func TestParseErrors(t *testing.T) {
 }
 
 func TestLoadWritesTemplate(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "gh-fleet", "config.toml")
+	path := filepath.Join(t.TempDir(), "gh-tidy", "config.toml")
 	f, err := Load(path)
 	if err != nil || !reflect.DeepEqual(f, Default()) {
 		t.Fatalf("Load = %+v, %v", f, err)

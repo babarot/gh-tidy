@@ -10,10 +10,10 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/babarot/gh-fleet/internal/config"
-	"github.com/babarot/gh-fleet/internal/gitx"
-	"github.com/babarot/gh-fleet/internal/locate"
-	"github.com/babarot/gh-fleet/internal/repo"
+	"github.com/babarot/gh-tidy/internal/config"
+	"github.com/babarot/gh-tidy/internal/gitx"
+	"github.com/babarot/gh-tidy/internal/locate"
+	"github.com/babarot/gh-tidy/internal/repo"
 )
 
 // View draws the screen.
@@ -90,7 +90,7 @@ func (m *Model) rule() string { return m.st.rule.Render(strings.Repeat("╌", m.
 func (m *Model) header() string {
 	bg := &m.st.surface
 	on := func(s lipgloss.Style) lipgloss.Style { return s.Background(bg.GetBackground()) }
-	left := segs{{" fleet", on(m.st.app)}}
+	left := segs{{" tidy", on(m.st.app)}}
 	var right segs
 	if m.screen == screenPicker {
 		left = append(left, seg{" // " + locate.Abbrev(m.root) + "/" + m.host, on(m.st.tag)})

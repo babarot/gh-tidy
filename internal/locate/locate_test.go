@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/babarot/gh-fleet/internal/gittest"
+	"github.com/babarot/gh-tidy/internal/gittest"
 )
 
 func TestResolve(t *testing.T) {

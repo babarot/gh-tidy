@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/babarot/gh-fleet/internal/config"
-	"github.com/babarot/gh-fleet/internal/gittest"
-	"github.com/babarot/gh-fleet/internal/repo"
+	"github.com/babarot/gh-tidy/internal/config"
+	"github.com/babarot/gh-tidy/internal/gittest"
+	"github.com/babarot/gh-tidy/internal/repo"
 )
 
 // land commits on a new branch in a worktree and fast-forwards main onto
