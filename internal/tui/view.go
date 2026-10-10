@@ -2,13 +2,16 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/babarot/gh-fleet/internal/config"
+	"github.com/babarot/gh-fleet/internal/gitx"
 	"github.com/babarot/gh-fleet/internal/locate"
 	"github.com/babarot/gh-fleet/internal/repo"
 )
@@ -224,16 +227,7 @@ func (m *Model) worktreeLine(x row, sel bool) string {
 	}
 	s := segs{{"  " + tree + " ", m.st.rule}, {"⌥ " + worktreeName(*w), m.st.worktree}}
 	s = s.add(branch, m.st.strong)
-	switch {
-	case w.Prunable:
-		s = s.add("directory gone", m.st.warn)
-	case w.Main && x.r.Dirty()+x.r.Untracked > 0:
-		s = s.add(fmt.Sprintf("%d changed", x.r.Dirty()+x.r.Untracked), m.st.prompt)
-	case w.Dirty > 0:
-		s = s.add(fmt.Sprintf("%d changed", w.Dirty), m.st.prompt)
-	default:
-		s = s.add("clean", m.st.dim)
-	}
+	s = s.join(m.worktreeState(x.r, *w, false))
 	if w.Locked {
 		s = s.add("locked", m.st.muted)
 	}
@@ -255,7 +249,7 @@ func (m *Model) detail() []string {
 	var left, right []segs
 	if m.sel < len(rows) {
 		r := rows[m.sel].r
-		left, right = m.detailLeft(r), m.detailRight(r, rows[m.sel].wt)
+		left, right = m.detailLeft(r), m.detailRight(r, rows[m.sel].wt, inner)
 	}
 	colW := max(10, (m.width-4-3)/2)
 	var body []string
@@ -393,7 +387,45 @@ func (m *Model) detailLeft(r *repo.Repo) []segs {
 	return lines
 }
 
-func (m *Model) detailRight(r *repo.Repo, focus *repo.Worktree) []segs {
+// worktreeState says what a worktree has: changes, commits the default
+// branch does not have yet (or merged, when it has them all), and how far
+// the default branch has moved on. short writes it for the detail pane.
+func (m *Model) worktreeState(r *repo.Repo, w repo.Worktree, short bool) segs {
+	st := m.st
+	var s segs
+	dirty := w.Dirty
+	if w.Main {
+		dirty = r.Dirty() + r.Untracked
+	}
+	switch {
+	case w.Prunable:
+		return s.add("directory gone", st.warn)
+	case dirty > 0 && short:
+		s = s.add(fmt.Sprintf("%d*", dirty), st.prompt)
+	case dirty > 0:
+		s = s.add(fmt.Sprintf("%d changed", dirty), st.prompt)
+	case !short:
+		s = s.add("clean", st.dim)
+	}
+	if w.Measured {
+		switch {
+		case w.Ahead > 0 && short:
+			s = s.add(fmt.Sprintf(">%d", w.Ahead), st.worktree)
+		case w.Ahead > 0:
+			s = s.add(fmt.Sprintf("%d not in %s", w.Ahead, r.Default), st.worktree)
+		default:
+			s = s.add("merged", st.ok)
+		}
+		if w.Behind > 0 {
+			s = s.add(fmt.Sprintf("⇣%d", w.Behind), st.accent)
+		}
+	}
+	return s
+}
+
+// detailRight is the right column of the detail pane, n lines at most: the
+// worktrees, then the other branches with something to say.
+func (m *Model) detailRight(r *repo.Repo, focus *repo.Worktree, n int) []segs {
 	st := m.st
 	var lines []segs
 	lines = append(lines, segs{{"WORKTREES", st.subtle.Bold(true)}, {fmt.Sprintf(" %d", len(r.Worktrees)), st.dim}})
@@ -411,13 +443,7 @@ func (m *Model) detailRight(r *repo.Repo, focus *repo.Worktree) []segs {
 		}
 		s := segs{{mark, st.accent}, {"⌥ " + worktreeName(w), st.worktree}}
 		s = s.add(w.Branch, st.strong)
-		if w.Dirty > 0 {
-			s = s.add(fmt.Sprintf("%d*", w.Dirty), st.prompt)
-		}
-		if w.Prunable {
-			s = s.add("gone", st.warn)
-		}
-		lines = append(lines, s)
+		lines = append(lines, s.join(m.worktreeState(r, w, true)))
 		shown++
 	}
 	if rest := len(r.Linked()) - shown; rest > 0 {
@@ -425,23 +451,52 @@ func (m *Model) detailRight(r *repo.Repo, focus *repo.Worktree) []segs {
 	}
 
 	up, local, gone := r.Unpushed(), r.NoUpstream(), r.GoneUpstream()
-	head := segs{{"BRANCHES", st.subtle.Bold(true)}}
 	var sum segs
 	if len(up) > 0 {
 		sum = sum.add(fmt.Sprintf("↑%d unpushed", len(up)), st.worktree)
 	}
-	if len(local) > 0 {
-		sum = sum.add(fmt.Sprintf("·%d local", len(local)), st.muted)
-	}
 	if len(gone) > 0 {
 		sum = sum.add(fmt.Sprintf("✗%d gone", len(gone)), st.dim)
+	}
+	if len(local) > 0 {
+		sum = sum.add(fmt.Sprintf("·%d local", len(local)), st.muted)
 	}
 	if len(sum) == 0 {
 		sum = segs{{"nothing else to push", st.dim}}
 	}
-	lines = append(lines, append(append(head, seg{" ", st.dim}), sum...))
-	for _, b := range up[:min(2, len(up))] {
-		lines = append(lines, segs{{"  " + b.Name, st.strong}, {fmt.Sprintf(" ahead %d", b.Ahead), st.worktree}})
+	lines = append(lines, append(segs{{"BRANCHES ", st.subtle.Bold(true)}}, sum...))
+
+	// Unpushed first: work that exists nowhere else. Then gone, then local,
+	// each newest first.
+	type entry struct {
+		b   gitx.Branch
+		tag seg
+	}
+	var entries []entry
+	newest := func(bs []gitx.Branch) []gitx.Branch {
+		bs = slices.Clone(bs)
+		slices.SortFunc(bs, func(a, b gitx.Branch) int { return int(b.Date - a.Date) })
+		return bs
+	}
+	for _, b := range newest(up) {
+		entries = append(entries, entry{b, seg{fmt.Sprintf("ahead %d", b.Ahead), st.worktree}})
+	}
+	for _, b := range newest(gone) {
+		entries = append(entries, entry{b, seg{"gone", st.dim}})
+	}
+	for _, b := range newest(local) {
+		entries = append(entries, entry{b, seg{"local", st.muted}})
+	}
+	room := n - len(lines)
+	for i, e := range entries {
+		if i == room-1 && len(entries) > room {
+			lines = append(lines, segs{{fmt.Sprintf("  +%d more", len(entries)-i), st.dim}})
+			break
+		}
+		if i >= room {
+			break
+		}
+		lines = append(lines, segs{{"  " + e.b.Name, st.strong}, {" ", st.dim}, e.tag, {" " + ago(time.Unix(e.b.Date, 0), m.now), st.dim}})
 	}
 	return lines
 }

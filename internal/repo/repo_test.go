@@ -58,6 +58,9 @@ func TestScan(t *testing.T) {
 		{"Untracked", r.Untracked, 1},
 		{"Worktrees", len(r.Worktrees), 2},
 		{"linked worktree dirty", r.Worktrees[1].Dirty, 1},
+		{"linked worktree measured", r.Worktrees[1].Measured, true},
+		{"linked worktree ahead of main", r.Worktrees[1].Ahead, 1},
+		{"linked worktree behind main", r.Worktrees[1].Behind, 2},
 		{"NoUpstream", len(r.NoUpstream()), 2}, // local-only and wt-branch
 		{"LastSubject", r.LastSubject, "feature work"},
 		{"fetched", r.FetchedAt.IsZero(), false},

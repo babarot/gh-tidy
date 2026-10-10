@@ -93,6 +93,17 @@ func (s segs) add(text string, style lipgloss.Style) segs {
 	return append(s, seg{text, style})
 }
 
+// join appends more after a space, when there is anything to append.
+func (s segs) join(more segs) segs {
+	if len(more) == 0 {
+		return s
+	}
+	if len(s) > 0 {
+		s = append(s, seg{" ", lipgloss.NewStyle()})
+	}
+	return append(s, more...)
+}
+
 // render draws s in exactly w cells, cut with … when longer, on bg when
 // it has a background.
 func (s segs) render(w int, bg *lipgloss.Style) string {

@@ -66,6 +66,11 @@ type Worktree struct {
 	gitx.Worktree
 	Main  bool
 	Dirty int // changed and untracked files; -1 when not read (prunable)
+	// Ahead is how many commits the worktree's branch has that the default
+	// branch does not, and Behind the other way; Measured says they were
+	// counted (a branch, and the default branch known).
+	Ahead, Behind int
+	Measured      bool
 }
 
 // Linked returns the worktrees other than the main one.
@@ -261,6 +266,7 @@ func (r *Repo) measureBase(ctx context.Context) {
 	if oid, err := gitx.Run(ctx, r.Path, "rev-parse", "-q", "--verify", "refs/remotes/origin/"+r.Default); err == nil {
 		r.DefaultOid = oid
 	}
+	r.measureWorktrees(ctx)
 	if r.Head == "" || r.Head == r.Default || r.Oid == "" {
 		return
 	}
@@ -273,6 +279,33 @@ func (r *Repo) measureBase(ctx context.Context) {
 			r.BaseBehind = n
 		}
 	}
+}
+
+// measureWorktrees counts each linked worktree's branch against the
+// default branch: origin/<Default>, or the local one without it. It writes a
+// new slice, since a copy of r made to measure in the background shares the
+// old one with the list drawing it.
+func (r *Repo) measureWorktrees(ctx context.Context) {
+	base := "refs/remotes/origin/" + r.Default
+	if r.DefaultOid == "" {
+		base = "refs/heads/" + r.Default
+	}
+	wts := slices.Clone(r.Worktrees)
+	for i, w := range wts {
+		wts[i].Ahead, wts[i].Behind, wts[i].Measured = 0, 0, false
+		if w.Main || w.Branch == "" || w.Prunable {
+			continue
+		}
+		out, err := gitx.Run(ctx, r.Path, "rev-list", "--left-right", "--count", base+"...refs/heads/"+w.Branch)
+		if err != nil {
+			continue
+		}
+		var behind, ahead int
+		if _, err := fmt.Sscanf(out, "%d\t%d", &behind, &ahead); err == nil {
+			wts[i].Ahead, wts[i].Behind, wts[i].Measured = ahead, behind, true
+		}
+	}
+	r.Worktrees = wts
 }
 
 // IsStale reports whether GitHub's default branch, at remoteOid, has moved
