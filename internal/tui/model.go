@@ -85,6 +85,7 @@ type Model struct {
 
 	cwd     string // where gh fleet runs; d keeps the worktree holding it
 	confirm *confirm
+	ask     *ask
 
 	noTimers bool // tests: no ticks, statuses stay
 }
@@ -257,6 +258,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.cloned(msg)
 	case actionMsg:
 		return m, m.actionDone(msg)
+	case goneMsg:
+		m.gone(msg)
 	case planMsg:
 		return m, m.planned(msg)
 	case cleanedMsg:
@@ -468,6 +471,9 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.confirm != nil {
 		return m, m.confirmKey(k)
+	}
+	if m.ask != nil {
+		return m, m.askKey(k)
 	}
 	if m.help {
 		m.help = false

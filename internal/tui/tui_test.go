@@ -350,3 +350,39 @@ func TestCustomAction(t *testing.T) {
 		t.Errorf("no failure in the status:\n%s", plain(m))
 	}
 }
+
+func TestConfirmedActionRemovingClone(t *testing.T) {
+	w := newWorld(t)
+	app := w.clone("app")
+	w.clone("other")
+	trash := filepath.Join(w.base, "trash")
+	os.MkdirAll(trash, 0o755)
+	m := w.model(func(c *config.File) {
+		c.Actions = []config.Action{{Key: "D", Name: "trash", Confirm: true, Run: []string{"mv", "{path}", trash}}}
+	})
+	selectRepo(t, m, "app")
+	press(t, m, "D")
+	s := plain(m)
+	if !strings.Contains(s, "─ trash ─") || !strings.Contains(s, "run mv /") || !strings.Contains(s, "enter run · esc cancel") {
+		t.Fatalf("no dialog:\n%s", s)
+	}
+	press(t, m, "j") // nothing while asking
+	press(t, m, "esc")
+	if _, err := os.Stat(app); err != nil || !strings.Contains(plain(m), "trash: not run") {
+		t.Fatalf("esc ran it, or said nothing:\n%s", plain(m))
+	}
+	selectRepo(t, m, "app")
+	press(t, m, "D")
+	press(t, m, "enter")
+	if _, err := os.Stat(app); !os.IsNotExist(err) {
+		t.Fatal("the action did not run")
+	}
+	for _, r := range m.repos {
+		if r.Name == "app" {
+			t.Errorf("a removed clone is still listed")
+		}
+	}
+	if !strings.Contains(plain(m), "cloned 1") {
+		t.Errorf("header not updated:\n%s", plain(m))
+	}
+}

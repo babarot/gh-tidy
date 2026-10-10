@@ -65,11 +65,18 @@ func (m *Model) render() string {
 		lines = append(lines, m.detail()...)
 	}
 	lines = append(lines, m.status.render(m.width, nil), m.helpLine())
-	if m.confirm != nil {
+	var dialog []string
+	w := min(110, m.width-4)
+	switch {
+	case m.confirm != nil:
+		dialog = m.confirmLines(w)
+	case m.ask != nil:
+		dialog = m.askLines(w)
+	}
+	if dialog != nil {
 		// The dialog covers the list from its first row.
-		w := min(110, m.width-4)
 		pad := strings.Repeat(" ", (m.width-w)/2)
-		for i, l := range m.confirmLines(w) {
+		for i, l := range dialog {
 			if at := 4 + i; at < len(lines)-2 {
 				lines[at] = pad + l
 			}
@@ -585,6 +592,8 @@ func (m *Model) helpLine() string {
 	switch {
 	case m.confirm != nil:
 		ops = [][2]string{{"enter", "remove"}, {"esc", "cancel"}}
+	case m.ask != nil:
+		ops = [][2]string{{"enter", "run"}, {"esc", "cancel"}}
 	case m.filtering:
 		ops = [][2]string{{"enter", "keep filter"}, {"esc", "clear"}}
 	case m.screen == screenPicker:

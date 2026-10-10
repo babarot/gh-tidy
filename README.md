@@ -100,7 +100,15 @@ scope = "worktree"   # "repo" (default) or "worktree"
 run = ["herdr", "worktree", "open", "--path", "{path}"]
 ```
 
-`{path}`, `{repo}` (owner/name), `{owner}`, `{name}`, `{branch}`, `{default}` and `{url}` are filled in; each element of `run` stays one argument. The last line the command prints shows in the status line; `interactive = true` gives it the terminal instead.
+`{path}`, `{repo}` (owner/name), `{owner}`, `{name}`, `{branch}`, `{default}` and `{url}` are filled in; each element of `run` stays one argument. The last line the command prints shows in the status line; `interactive = true` gives it the terminal instead. The clone is read again afterwards, and dropped from the list when the command removed it. `confirm = true` shows the command and asks before running it, for one that removes something:
+
+```toml
+[[actions]]
+key = "D"
+name = "trash"
+confirm = true
+run = ["gomi", "{path}"]
+```
 
 `worktree_remove` is how `d` removes a worktree, for worktrees another tool made and should forget too. The command runs in the clone and must remove the worktree at `{path}`; a script can look up what the tool needs from it:
 

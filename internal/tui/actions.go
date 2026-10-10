@@ -2,12 +2,17 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/babarot/gh-fleet/internal/config"
 	"github.com/babarot/gh-fleet/internal/gitx"
@@ -261,15 +266,70 @@ func (m *Model) startAction(i int) tea.Cmd {
 	if name == "" {
 		name = argv[0]
 	}
-	cmd := exec.CommandContext(m.ctx, argv[0], argv[1:]...)
-	cmd.Dir = dir
-	if a.Interactive {
-		return tea.ExecProcess(cmd, func(err error) tea.Msg { return actionMsg{name: name, path: r.Path, err: err} })
+	run := func() tea.Cmd {
+		cmd := exec.CommandContext(m.ctx, argv[0], argv[1:]...)
+		cmd.Dir = dir
+		if a.Interactive {
+			return tea.ExecProcess(cmd, func(err error) tea.Msg { return actionMsg{name: name, path: r.Path, err: err} })
+		}
+		return tea.Batch(m.setStatus(segs{{name + "…", m.st.accent}}), func() tea.Msg {
+			out, err := cmd.CombinedOutput()
+			return actionMsg{name: name, path: r.Path, out: strings.TrimSpace(string(out)), err: err}
+		})
 	}
-	return tea.Batch(m.setStatus(segs{{name + "…", m.st.accent}}), func() tea.Msg {
-		out, err := cmd.CombinedOutput()
-		return actionMsg{name: name, path: r.Path, out: strings.TrimSpace(string(out)), err: err}
-	})
+	if a.Confirm {
+		m.ask = &ask{title: name, command: argv, dir: dir, run: run}
+		return nil
+	}
+	return run()
+}
+
+// ask is the dialog before an action with confirm = true: only enter runs
+// it and esc or q closes it.
+type ask struct {
+	title   string
+	command []string
+	dir     string
+	run     func() tea.Cmd
+}
+
+func (m *Model) askKey(k string) tea.Cmd {
+	a := m.ask
+	switch k {
+	case "enter":
+		m.ask = nil
+		return a.run()
+	case "esc", "q":
+		m.ask = nil
+		return m.setStatus(segs{{a.title + ": not run", m.st.muted}})
+	}
+	return nil
+}
+
+func (m *Model) askLines(width int) []string {
+	a := m.ask
+	inner := width - 4
+	quoted := make([]string, len(a.command))
+	for i, c := range a.command {
+		quoted[i] = c
+		if c == "" || strings.ContainsAny(c, " \t'\"$`\\") {
+			quoted[i] = "'" + strings.ReplaceAll(c, "'", `'\''`) + "'"
+		}
+	}
+	st := m.st
+	// The whole command, wrapped rather than cut: it is what is about to run.
+	var body []string
+	label := "run "
+	for _, l := range strings.Split(ansi.Wrap(strings.Join(quoted, " "), inner-4, " /"), "\n") {
+		body = append(body, segs{{label, st.subtle}, {l, st.strong}}.render(inner, nil))
+		label = "    "
+	}
+	body = append(body,
+		segs{{"in  ", st.subtle}, {locate.Abbrev(a.dir), st.muted}}.render(inner, nil),
+		"",
+		segs{{"enter", st.key}, {" run", st.muted}, {" · ", st.rule}, {"esc", st.key}, {" cancel", st.muted}}.render(inner, nil),
+	)
+	return frameColored(st, a.title, body, width, st.prompt)
 }
 
 func (m *Model) actionDone(msg actionMsg) tea.Cmd {
@@ -284,7 +344,21 @@ func (m *Model) actionDone(msg actionMsg) tea.Cmd {
 	default:
 		s = segs{{msg.name + ": done", m.st.ok}}
 	}
-	// The command may have changed the clone.
+	// The command may have changed the clone, or removed it.
 	ctx, path := m.ctx, msg.path
-	return tea.Batch(m.setStatus(s), func() tea.Msg { return doneMsg{r: repo.Scan(ctx, path), what: "quiet"} })
+	return tea.Batch(m.setStatus(s), func() tea.Msg {
+		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+			return goneMsg{path}
+		}
+		return doneMsg{r: repo.Scan(ctx, path), what: "quiet"}
+	})
+}
+
+// goneMsg is a clone whose directory an action removed.
+type goneMsg struct{ path string }
+
+func (m *Model) gone(msg goneMsg) {
+	m.repos = slices.DeleteFunc(m.repos, func(r *repo.Repo) bool { return r.Path == msg.path })
+	delete(m.expanded, msg.path)
+	m.clamp()
 }

@@ -107,6 +107,9 @@ type Action struct {
 	// Interactive hands the terminal to the command, for one that asks or
 	// draws; otherwise its output is captured and its exit shown.
 	Interactive bool `toml:"interactive"`
+	// Confirm asks before running it, for a command that removes or
+	// changes something.
+	Confirm bool `toml:"confirm"`
 }
 
 // Default returns the settings used when the file sets nothing.
@@ -313,4 +316,5 @@ const Template = `# gh fleet settings. Uncomment a line to change it.
 # scope = "worktree"   # "repo" (default) or "worktree"
 # run = ["herdr", "worktree", "open", "--path", "{path}"]
 # interactive = false  # true hands the terminal to the command
+# confirm = false      # true asks before running it
 `
