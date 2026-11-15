@@ -2,17 +2,14 @@
 
 gh-tidy keeps one GitHub owner's local clones up to date and clear of finished work, so they are ready to hand to a coding agent. It is a gh extension with a Bubble Tea TUI. The README tells what it does; this file tells how it is built.
 
-## Layout
+## Packages
 
-| Package | Holds |
-|---|---|
-| `internal/gitx` | running git (never taking a lock: `GIT_OPTIONAL_LOCKS=0`) and parsing its porcelain output |
-| `internal/repo` | one clone's state, read from git alone; never fetches |
-| `internal/locate` | the root (`ghq.root`), and what to open from where gh tidy starts |
-| `internal/github` | the two GraphQL queries: the clones' default branches by name, and the owner's list |
-| `internal/cleanup` | what `d` removes and keeps, and removing it |
-| `internal/config` | `config.toml`: defaults, the template written on first run, validation |
-| `internal/tui` | the list, the detail pane, the dialog, keys |
+- The packages, their layers and what each may import are in [docs/architecture.md](docs/architecture.md), checked by `arch_test.go`. A new package, outside module, or use of `net`, `net/http`, `os/exec` or `syscall` goes into the table in `arch_test.go` first; then `go test -run TestArchitectureDoc -update` rewrites the document. See [ADR-001](docs/adr/001-package-layers-enforced-by-a-test.md)
+- Define an interface in the package that uses it. No package variables holding state, and no `slog.SetDefault`
+
+## Decisions
+
+- Record a decision that sets the direction of the code as an ADR in `docs/adr/`, following `.claude/rules/adr.md`
 
 ## Rules
 
