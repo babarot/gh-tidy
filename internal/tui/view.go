@@ -665,22 +665,32 @@ func (m *Model) progress(a model.Activity) []cell {
 	return parts
 }
 
-// hint is a key in the key line and what it does.
+// hint is a key in the key line and what it does; changes says the key
+// changes a clone or GitHub, which a click does not press.
 type hint struct {
 	key, does string
+	changes   bool
 }
+
+// changes are the actions that change a clone, or ask GitHub for what it
+// was not asked: the mouse only moves, opens and folds, so a click on
+// their hints does nothing.
+var changes = map[keymap.Action]bool{"fetch": true, "fetch_all": true, "pull": true, "pull_all": true, "cleanup": true,
+	"cleanup_all": true, "clone": true, "refresh": true, "list": true}
 
 func (m *Model) hints() []hint {
 	if m.popup != nil {
 		return m.popupHints(true)
 	}
 	if m.filtering {
-		return []hint{{m.keys.First("accept"), m.keys.Help("accept")}, {"esc", "clear"}}
+		return []hint{{key: m.keys.First("accept"), does: m.keys.Help("accept")}, {key: "esc", does: "clear"}}
 	}
-	h := func(a keymap.Action) hint { return hint{m.keys.First(a), m.keys.Help(a)} }
+	h := func(a keymap.Action) hint {
+		return hint{key: m.keys.First(a), does: m.keys.Help(a), changes: changes[a]}
+	}
 	other := columns.Lenses[(slices.Index(columns.Lenses, m.lens)+1)%len(columns.Lenses)]
-	lens := hint{m.keys.First("lens"), string(other)}
-	pane := hint{strings.TrimSpace(m.keys.First("preview_grow") + " " + m.keys.First("preview_shrink")), "preview"}
+	lens := hint{key: m.keys.First("lens"), does: string(other)}
+	pane := hint{key: strings.TrimSpace(m.keys.First("preview_grow") + " " + m.keys.First("preview_shrink")), does: "preview"}
 	if m.lens == columns.GitHub {
 		return []hint{lens, h("open_browser"), h("clone"), h("search"), h("choose_owner"), h("help"), h("quit")}
 	}
@@ -700,8 +710,9 @@ func (m *Model) hintLine(y int) drawn {
 			x += 3
 		}
 		cs := []cell{{text: h.key, role: roleAccent, bold: true}, {text: " " + h.does, role: roleMuted}}
-		k := strings.Fields(h.key)[0]
-		m.hits = append(m.hits, hit{y: y, x0: x, x1: x + width(cs), act: func(m *Model) tea.Cmd { return m.key(k) }})
+		if k := strings.Fields(h.key)[0]; !h.changes {
+			m.hits = append(m.hits, hit{y: y, x0: x, x1: x + width(cs), act: func(m *Model) tea.Cmd { return m.key(k) }})
+		}
 		parts = append(parts, cs...)
 		x += width(cs)
 	}
