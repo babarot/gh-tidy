@@ -175,7 +175,7 @@ func Default() File {
 		TUI:    TUI{Theme: theme.Auto, StatusStyle: StatusCount, Hide: []string{HideQuiet, HideUntracked}, Sort: SortAttention, DetailHeight: 8},
 		Columns: Columns{
 			Local:  []string{"repo", "main", "checked_out", "changes", "worktrees", "fetched"},
-			GitHub: []string{"repo", "issues", "prs", "dependabot", "ci", "pushed", "main"},
+			GitHub: []string{"repo", "issues", "prs", "dependabot", "ci", "pushed", "visibility", "main"},
 		},
 		Preview: Preview{Sections: []string{"incoming", "unpushed", "behind_main", "changes", "stash", "worktrees"}},
 		Symbols: Symbols{Unstaged: "*", Staged: "+", Untracked: "%", Stash: "$", Behind: "<", Ahead: ">", Diverged: "<>",
@@ -356,9 +356,9 @@ const Template = `# gh tidy settings. Uncomment a line to change it.
 [columns]
 # The columns of each set, in order. v switches between the sets.
 # local: repo, main, checked_out, changes, worktrees, fetched.
-# github: repo, issues, prs, dependabot, ci, pushed, main.
+# github: repo, issues, prs, dependabot, ci, pushed, visibility, main.
 # local = ["repo", "main", "checked_out", "changes", "worktrees", "fetched"]
-# github = ["repo", "issues", "prs", "dependabot", "ci", "pushed", "main"]
+# github = ["repo", "issues", "prs", "dependabot", "ci", "pushed", "visibility", "main"]
 
 [preview]
 # The parts of the pane below the list, in order: incoming (commits on

@@ -367,9 +367,9 @@ func Facts(x Ctx, it Item, home string) []Fact {
 func pFact(s MainState) Cell {
 	switch {
 	case s.CanUpdate() && s.CheckedOut:
-		return Cell{{Text: "updates " + s.Name, Role: OK}, {Text: " · merge --ff-only where it is checked out", Role: Muted}}
+		return Cell{{Text: "updates " + s.Name, Role: OK}, {Text: " · ff where it is checked out", Role: Muted}}
 	case s.CanUpdate():
-		return Cell{{Text: "updates " + s.Name, Role: OK}, {Text: " · fast-forward, not checked out", Role: Muted}}
+		return Cell{{Text: "updates " + s.Name, Role: OK}, {Text: " · ff, not checked out", Role: Muted}}
 	case s.Blocked != "" && (s.Kind == MainBehind || s.GitHubAhead):
 		return Cell{{Text: "skips it: " + s.Blocked, Role: Prompt}}
 	}

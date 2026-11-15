@@ -1,0 +1,38 @@
+ tidy // ‹ mika ›    local │ github                                                         4 can update · 4 with changes · 1 worktree done
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  REPO                        ISSUES    PRS       DEPENDABOT  CI    PUSHED              MAIN
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  calendar-sync               1         0         2           ✗     3d ago              <1
+  tool-shed                   3         0         1           ✓     4d ago              not cloned
+▎ agent-runner ⌥3             4         2         0           ✓     2h ago              <6
+  trail-notes                 0         1         0           ~     1d ago              <?
+  dotfiles                    0         0         0           ✓     3h ago     private  <2
+  pixel-garden                0         0         0           ✓     20h ago             =
+  weather-cli                 0         0         off         -     9d ago     private  not cloned
+  color-picker                0         0         0           -     15d ago             =
+  scratchpad local only       -         -         -           -     -                   no origin
+
+
+
+
+
+
+
+
+
+
+
+
+ 7 clones · 2 not cloned
+╭─ agent-runner ───────────────────────────────────────────────────────────────────────────────────────────────────────────────── +/- size ╮
+│ OPEN                                                                                │ path     ~/github.com/mika/agent-runner            │
+│   4 issues · 2 pull requests                                                        │ fetched  5h ago                                    │
+│                                                                                     │ p        updates main · ff, not checked out        │
+│                                                                                     │ d        removes 1 worktree · keeps 2 worktrees    │
+│                                                                                     │ default  main from github                          │
+│                                                                                     │                                                    │
+│                                                                                     │                                                    │
+│                                                                                     │                                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+ v local · o open on GitHub · c clone · / filter · O owner · ? keys · q quit

@@ -40,6 +40,8 @@ var layers = []layer{
 	{"internal/engine", 3, []string{"internal/github", "internal/logging", "internal/model", "internal/policy", "internal/store"}, nil, "What gh-tidy knows of owners and clones, and the only one changing it: what to read and when, limits on each kind of outside access, the rate limit budget, each clone's lane for changes; no Bubble Tea"},
 	{"internal/locate", 3, []string{"internal/gitx", "internal/repo"}, nil, "The root, and what to open from where gh tidy starts"},
 	{"internal/cleanup", 3, []string{"internal/config", "internal/gitx", "internal/repo"}, nil, "What d removes and keeps, and removing it"},
+	{"internal/tui", 4, []string{"internal/config", "internal/model", "internal/policy", "internal/theme", "internal/tui/columns", "internal/tui/keymap"},
+		[]string{"charm.land/bubbletea/v2", "charm.land/lipgloss/v2", "github.com/charmbracelet/x/ansi"}, "The screen: one owner's clones and repositories in a list, the preview of the row selected, the popups; what is known is the engine's"},
 	{"internal/legacy/tui", 4, []string{"internal/cleanup", "internal/config", "internal/github", "internal/gitx", "internal/locate", "internal/repo", "internal/theme", "internal/tui/keymap"},
 		[]string{"charm.land/bubbletea/v2", "charm.land/lipgloss/v2", "github.com/charmbracelet/x/ansi"}, "The terminal UI being replaced; removed with the code only it uses"},
 	{"", 5, []string{"internal/logging", "internal/config", "internal/locate", "internal/legacy/tui", "internal/repo", "internal/version"}, []string{"charm.land/bubbletea/v2"}, "Flags, config and starting the TUI"},

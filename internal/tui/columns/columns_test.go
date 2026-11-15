@@ -258,7 +258,7 @@ func TestSections(t *testing.T) {
 	for _, f := range Facts(ctx(true), it, "/src") {
 		labels = append(labels, f.Label+" "+text(f.Value))
 	}
-	if !slices.Contains(labels, "path ~/me/app") || !slices.Contains(labels, "p updates main · fast-forward, not checked out") {
+	if !slices.Contains(labels, "path ~/me/app") || !slices.Contains(labels, "p updates main · ff, not checked out") {
 		t.Errorf("facts: %q", labels)
 	}
 }
