@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -165,10 +166,12 @@ func (e *Engine) Activity() model.Activity {
 	a.Counts = slices.Clone(a.Counts)
 	a.Done = slices.Clone(a.Done)
 	a.Running = nil
-	for _, x := range t.live {
-		a.Running = append(a.Running, x)
+	// In the order queued where two started at once, so that the screen
+	// does not reorder them from one frame to the next.
+	for _, id := range slices.Sorted(maps.Keys(t.live)) {
+		a.Running = append(a.Running, t.live[id])
 	}
-	slices.SortFunc(a.Running, func(x, y model.Task) int { return x.Start.Compare(y.Start) })
+	slices.SortStableFunc(a.Running, func(x, y model.Task) int { return x.Start.Compare(y.Start) })
 	a.Rate.Used, a.Rate.Saved, a.Rate.UnaskedUsed, a.Rate.UnaskedSaved = t.used[0], t.saved[0], t.used[1], t.saved[1]
 	a.Rate.Asking, a.Rate.LastAsked = t.asking > 0, t.lastAt
 	t.mu.Unlock()

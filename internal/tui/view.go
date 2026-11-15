@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -15,18 +17,43 @@ import (
 	"github.com/babarot/gh-tidy/internal/tui/statusline"
 )
 
-// The rows above the list (header, rules and column titles) and the
-// width of the facts on the preview's right.
+// The width of the facts on the preview's right, and the lines around the
+// list: the header, the column titles, the count, the preview's borders,
+// the status line and the key line.
 const (
-	listTop    = 4
 	factsWidth = 50
 	factsFrom  = 110 // narrower than this, the pane shows no facts
 	allRepo    = 6   // what the repository column widens by in all, for the owner
+	around     = 7
 )
 
-// listHeight is how many lines the list shows.
+// The activity box: how long it stays after the run ends, how many tasks
+// it shows, and how many lines of the list it leaves at the least; a
+// shorter screen shows the work on the status line instead. The rate
+// limit stays rateFor after the last request to GitHub's API.
+const (
+	foldAfter = 3 * time.Second
+	boxTasks  = 3
+	minList   = 3
+	rateFor   = 10 * time.Second
+)
+
+// filterRows is 1 while the filter line shows, above the list.
+func (m *Model) filterRows() int {
+	if m.filtering || m.filter != "" {
+		return 1
+	}
+	return 0
+}
+
+// listTop is the screen line the list starts on, under the header, the
+// filter and the column titles.
+func (m *Model) listTop() int { return 2 + m.filterRows() }
+
+// listHeight is how many lines the list shows: what the activity box,
+// as last drawn, leaves.
 func (m *Model) listHeight() int {
-	return max(1, m.height-m.ph-9)
+	return max(1, m.height-m.ph-around-m.filterRows()-m.boxRows)
 }
 
 // scroll keeps the cursor on the screen.
@@ -69,11 +96,22 @@ func (m *Model) render() string {
 func (m *Model) screen() []drawn {
 	m.hits = m.hits[:0]
 	w := m.width
+	a := m.eng.Activity()
+	box, rateIn := m.activityBox(a)
+	if m.height-m.ph-around-m.filterRows()-len(box) < minList {
+		box, rateIn = nil, false
+	}
+	if len(box) != m.boxRows {
+		m.boxRows = len(box)
+		m.scroll()
+	}
 	var ls []drawn
 	ls = append(ls, m.header())
-	rule := drawn{parts: []cell{{text: strings.Repeat("╌", w), role: roleBorder}}}
+	if m.filterRows() > 0 {
+		ls = append(ls, m.filterLine())
+	}
 	cols, ws := m.layout()
-	ls = append(ls, rule, m.titles(cols, ws), rule)
+	ls = append(ls, m.titles(cols, ws))
 	h := m.listHeight()
 	for i := range h {
 		j := m.offset + i
@@ -85,7 +123,8 @@ func (m *Model) screen() []drawn {
 	}
 	ls = append(ls, m.summary())
 	ls = append(ls, m.preview(len(ls))...)
-	ls = append(ls, m.statusLine(), m.hintLine(len(ls)+1))
+	ls = append(ls, box...)
+	ls = append(ls, m.statusLine(a, len(box) > 0, rateIn), m.hintLine(len(ls)+1))
 	return ls
 }
 
@@ -239,15 +278,17 @@ func (m *Model) row(l line, sel bool, cs []columns.Column, ws []int) drawn {
 	return drawn{parts: cut(parts, m.width), bg: sel}
 }
 
-// summary counts the rows, or shows the filter being typed.
-func (m *Model) summary() drawn {
-	if m.filtering || m.filter != "" {
-		parts := []cell{{text: " / ", role: roleAccent}, {text: m.filter, role: rolePrompt}}
-		if m.filtering {
-			parts = append(parts, cell{text: "▏", role: roleAccent})
-		}
-		return drawn{parts: cut(parts, m.width)}
+// filterLine shows the filter, being typed or kept.
+func (m *Model) filterLine() drawn {
+	parts := []cell{{text: " / ", role: roleAccent}, {text: m.filter, role: rolePrompt}}
+	if m.filtering {
+		parts = append(parts, cell{text: "▏", role: roleAccent})
 	}
+	return drawn{parts: cut(parts, m.width)}
+}
+
+// summary counts the rows.
+func (m *Model) summary() drawn {
 	clones, remotes := 0, 0
 	for _, r := range m.snap.Rows {
 		switch {
@@ -391,19 +432,197 @@ func (m *Model) preview(top int) []drawn {
 	return out
 }
 
-// statusLine says what was said last, or else what is being done: the
-// spinner, the first kind of work not done with its count and its bar,
-// and the counts of the others.
-func (m *Model) statusLine() drawn {
-	parts := []cell{{text: " "}}
+// statusLine says what was said last, or else, when the activity box is
+// not shown, what is being done: the spinner, the first kind of work not
+// done with its count and its bar, and the counts of the others. On the
+// right is the rate limit, when it is shown and the box's head has no
+// room for it.
+func (m *Model) statusLine(a model.Activity, boxed, rateIn bool) drawn {
+	left := []cell{{text: " "}}
 	if msg, ok := m.line.Current(m.now()); ok {
-		parts = append(parts, cell{text: msg.Text, role: kindRole[msg.Kind]})
-		return drawn{parts: cut(parts, m.width)}
+		left = append(left, cell{text: msg.Text, role: kindRole[msg.Kind]})
+	} else if a.Busy() && !boxed {
+		left = append(left, m.progress(a)...)
 	}
-	if a := m.eng.Activity(); a.Busy() {
-		parts = append(parts, m.progress(a)...)
+	var right []cell
+	if m.rateShown(a) && !rateIn {
+		right = append(m.rate(a, false), cell{text: " "})
 	}
-	return drawn{parts: cut(parts, m.width)}
+	gap := m.width - width(left) - width(right)
+	if gap < 1 {
+		return drawn{parts: cut(left, m.width)}
+	}
+	return drawn{parts: append(append(left, cell{text: strings.Repeat(" ", gap)}), right...)}
+}
+
+// boxShown reports whether the activity box shows: while a run goes on,
+// and for a while after.
+func (m *Model) boxShown(a model.Activity) bool {
+	return a.Busy() || (!a.Ended.IsZero() && m.now().Sub(a.Ended) < foldAfter)
+}
+
+// rateShown reports whether the rate limit shows: while gh tidy asks
+// GitHub's API, and for a while after.
+func (m *Model) rateShown(a model.Activity) bool {
+	r := a.Rate
+	return r.Known && r.Limit > 0 && (r.Asking || (!r.LastAsked.IsZero() && m.now().Sub(r.LastAsked) < rateFor))
+}
+
+// rate is what GitHub's rate limit has left, the lower of REST's and
+// GraphQL's, and what the load asked for spent and saved; compact leaves
+// out when it resets.
+func (m *Model) rate(a model.Activity, compact bool) []cell {
+	r := a.Rate
+	role := roleSubtle
+	if r.Remaining*10 < r.Limit {
+		role = roleWarn
+	}
+	dot := cell{text: " · ", role: roleBorder}
+	parts := []cell{{text: "rate limit ", role: roleMuted}, {text: thousands(r.Remaining) + "/" + thousands(r.Limit), role: role}}
+	if d := r.Reset.Sub(m.now()); !compact && d > 0 {
+		parts = append(parts, cell{text: fmt.Sprintf(" resets in %dm", int((d+time.Minute-1)/time.Minute)), role: roleDim})
+	}
+	parts = append(parts, cell{text: "  │ ", role: roleBorder}, cell{text: "this load ", role: roleMuted},
+		cell{text: fmt.Sprintf("%d used", r.Used), role: roleText}, dot, cell{text: fmt.Sprintf("%d saved", r.Saved), role: roleOK})
+	if r.UnaskedUsed+r.UnaskedSaved > 0 {
+		parts = append(parts, dot, cell{text: fmt.Sprintf("unasked %d used", r.UnaskedUsed), role: roleDim})
+	}
+	return parts
+}
+
+// pastVerbs say what a run did, once it ended.
+var pastVerbs = map[string]string{"Reading": "Read", "Fetching": "Fetched", "Updating": "Updated", "Cleaning up": "Cleaned up", "Cloning": "Cloned"}
+
+// taskKinds name each kind of task in the box, and taskDoing say what one
+// running does.
+var (
+	taskKinds = map[string]string{"clone": "clone", "github": "github", "fetch": "fetch", "update": "update", "cleanup": "cleanup", "create": "new"}
+	taskDoing = map[string]string{"clone": "reading", "github": "asking GitHub", "fetch": "fetching", "update": "updating main",
+		"cleanup": "cleaning up", "create": "cloning"}
+)
+
+// activityBox is the work of the run, after docker compose's: a head
+// with the counts, the rate limit and the time, the workers when w asked
+// for them, and the last tasks, the running ones first. It is nil when
+// the box does not show; rateIn says the rate limit is in its head.
+func (m *Model) activityBox(a model.Activity) (box []drawn, rateIn bool) {
+	if !m.boxShown(a) {
+		return nil, false
+	}
+	w, now := m.width, m.now()
+	busy := a.Busy()
+	verb := a.Verb
+	if !busy {
+		verb = cmp.Or(pastVerbs[verb], verb)
+	}
+	var counts []string
+	for _, c := range a.Counts {
+		if c.Name == "GitHub" {
+			counts = append(counts, fmt.Sprintf("GitHub %d/%d", c.Done, c.Total))
+		} else {
+			counts = append(counts, fmt.Sprintf("%d/%d %s", c.Done, c.Total, c.Name))
+		}
+	}
+	head := []cell{{text: " [+] ", role: roleAccent, bold: true}, {text: strings.TrimSpace(verb+" "+a.What) + " ", role: roleStrong, bold: true},
+		{text: strings.Join(counts, " · "), role: roleMuted}}
+	if n := len(a.Running) - boxTasks; n > 0 {
+		head = append(head, cell{text: fmt.Sprintf("  +%d running", n), role: roleAccent})
+	}
+	end := now
+	if !busy {
+		end = a.Ended
+	}
+	took := []cell{{text: "  " + seconds(end.Sub(a.Started)) + " ", role: roleDim}}
+	var rate []cell
+	if m.rateShown(a) {
+		rate, rateIn = m.rate(a, true), true
+	}
+	gap := w - width(head) - width(rate) - width(took)
+	if gap < 1 && rateIn {
+		rate, rateIn = nil, false
+		gap = w - width(head) - width(took)
+	}
+	if gap < 1 {
+		box = append(box, drawn{parts: cut(head, w)})
+	} else {
+		box = append(box, drawn{parts: slices.Concat(head, []cell{{text: strings.Repeat(" ", gap)}}, rate, took)})
+	}
+	if m.workers && busy {
+		box = append(box, drawn{parts: cut(append([]cell{{text: "     workers  ", role: roleDim}}, workersLine(a)...), w)})
+	}
+	shown := a.Running
+	if len(shown) > boxTasks {
+		shown = shown[len(shown)-boxTasks:]
+	}
+	if n := boxTasks - len(shown); n > 0 {
+		shown = append(slices.Clone(a.Done[max(0, len(a.Done)-n):]), shown...)
+	}
+	for range boxTasks - len(shown) {
+		box = append(box, drawn{parts: cut(nil, w)})
+	}
+	for _, t := range shown {
+		box = append(box, m.taskLine(t, now))
+	}
+	return box, rateIn
+}
+
+// taskLine is one task in the activity box: how it is, its kind, its
+// name, what it does or how it went, and how long it took.
+func (m *Model) taskLine(t model.Task, now time.Time) drawn {
+	icon := cell{text: " " + statusline.Spinner(now) + " ", role: roleAccent}
+	status := cell{text: taskDoing[t.Kind], role: roleAccent}
+	end := now
+	switch {
+	case t.End.IsZero():
+	case t.Failed:
+		icon, status, end = cell{text: " ✗ ", role: roleWarn}, cell{text: t.Note, role: roleWarn}, t.End
+	default:
+		icon, status, end = cell{text: " ✔ ", role: roleOK}, cell{text: cmp.Or(t.Note, "done"), role: roleMuted}, t.End
+	}
+	kind := cut([]cell{{text: cmp.Or(taskKinds[t.Kind], t.Kind), role: roleDim}}, 8)
+	name := cut([]cell{{text: t.Name, role: roleText}}, 30)
+	left := cut(slices.Concat([]cell{icon}, kind, name, []cell{status}), max(0, m.width-8))
+	took := fmt.Sprintf("%7s ", seconds(end.Sub(t.Start)))
+	return drawn{parts: cut(append(left, cell{text: took, role: roleDim}), m.width)}
+}
+
+// workersLine counts the work of each kind of outside access running,
+// out of its limit, and the work waiting.
+func workersLine(a model.Activity) []cell {
+	var parts []cell
+	for i, x := range a.Workers {
+		if i > 0 {
+			parts = append(parts, cell{text: " · ", role: roleBorder})
+		}
+		role := roleDim
+		switch {
+		case x.Running >= x.Limit:
+			role = rolePrompt
+		case x.Running > 0:
+			role = roleAccent
+		}
+		parts = append(parts, cell{text: x.Name + " ", role: roleDim}, cell{text: fmt.Sprintf("%d/%d", x.Running, x.Limit), role: role})
+	}
+	role := roleDim
+	if a.Queued > 0 {
+		role = roleMuted
+	}
+	return append(parts, cell{text: " · ", role: roleBorder}, cell{text: fmt.Sprintf("%d queued", a.Queued), role: role})
+}
+
+// seconds writes a duration as seconds with a tenth.
+func seconds(d time.Duration) string { return fmt.Sprintf("%.1fs", max(0, d).Seconds()) }
+
+// thousands writes n with commas.
+func thousands(n int) string {
+	s := strconv.Itoa(n)
+	if n < 0 {
+		return "-" + thousands(-n)
+	}
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s
 }
 
 // kindRole is the color of a message of each kind.

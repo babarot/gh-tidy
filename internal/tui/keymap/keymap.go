@@ -74,6 +74,8 @@ var Defaults = []Def{
 	{"refresh", ScopeList, []string{"r"}, "read again"},
 	// Reads the list of an owner gh tidy does not read on its own.
 	{"list", ScopeList, []string{"L"}, "read the list"},
+	// Shows how many of each kind of work run, under the activity box.
+	{"workers", ScopeList, []string{"w"}, "workers"},
 	{"open_browser", ScopeList, []string{"o"}, "open on GitHub"},
 	{"reveal", ScopeList, []string{"R"}, "reveal in Finder"},
 	{"copy_path", ScopeList, []string{"y"}, "copy path"},

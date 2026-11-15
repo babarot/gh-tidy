@@ -140,6 +140,10 @@ type Model struct {
 	// spinning says a frame of the spinner is due: it turns while work
 	// goes on.
 	spinning bool
+	// boxRows is how many lines the activity box took when last drawn;
+	// workers says w asked for the workers' line in it.
+	boxRows int
+	workers bool
 
 	width, height int
 	dark          bool
@@ -216,9 +220,10 @@ type statusDoneMsg struct{ id int }
 // frameMsg turns the spinner.
 type frameMsg struct{}
 
-// spin asks for the spinner's next frame while work goes on.
+// spin asks for the spinner's next frame while work goes on, and while
+// the activity box or the rate limit waits to fold.
 func (m *Model) spin() tea.Cmd {
-	if m.noTimers || m.spinning || !m.eng.Activity().Busy() {
+	if a := m.eng.Activity(); m.noTimers || m.spinning || (!a.Busy() && !m.boxShown(a) && !m.rateShown(a)) {
 		return nil
 	}
 	m.spinning = true
@@ -391,6 +396,12 @@ func (m *Model) key(k string) tea.Cmd {
 		m.open(m.ownerPopup())
 	case on("search"):
 		m.filtering = true
+	case on("workers"):
+		m.workers = !m.workers
+		if m.workers {
+			return m.say(statusline.Info, "workers shown while gh tidy works")
+		}
+		return m.say(statusline.Info, "workers hidden")
 	case on("preview_grow"):
 		m.setPreview(m.ph + 1)
 	case on("preview_shrink"):

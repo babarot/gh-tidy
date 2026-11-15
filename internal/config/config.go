@@ -381,6 +381,7 @@ const Template = `# gh tidy settings. Uncomment a line to change it.
 # clone = "c"
 # refresh = "r"
 # list = "L"
+# workers = "w"
 # open_browser = "o"
 # reveal = "R"
 # copy_path = "y"
