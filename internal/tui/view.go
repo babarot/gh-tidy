@@ -12,6 +12,7 @@ import (
 	"github.com/babarot/gh-tidy/internal/model"
 	"github.com/babarot/gh-tidy/internal/tui/columns"
 	"github.com/babarot/gh-tidy/internal/tui/keymap"
+	"github.com/babarot/gh-tidy/internal/tui/statusline"
 )
 
 // The rows above the list (header, rules and column titles) and the
@@ -390,30 +391,58 @@ func (m *Model) preview(top int) []drawn {
 	return out
 }
 
-// statusLine says what is being done, or what was said last.
+// statusLine says what was said last, or else what is being done: the
+// spinner, the first kind of work not done with its count and its bar,
+// and the counts of the others.
 func (m *Model) statusLine() drawn {
-	if m.status != nil {
-		return drawn{parts: cut(append([]cell{{text: " "}}, fromSegs(m.status)...), m.width)}
-	}
-	doing := map[string]int{}
-	var kinds []string
-	for _, r := range m.snap.Rows {
-		if d := r.Op.Doing; d != "" {
-			if doing[d] == 0 {
-				kinds = append(kinds, d)
-			}
-			doing[d]++
-		}
-	}
-	slices.Sort(kinds)
 	parts := []cell{{text: " "}}
-	for i, k := range kinds {
-		if i > 0 {
-			parts = append(parts, cell{text: " · ", role: roleBorder})
-		}
-		parts = append(parts, cell{text: fmt.Sprintf("%s %d", k, doing[k]), role: roleAccent})
+	if msg, ok := m.line.Current(m.now()); ok {
+		parts = append(parts, cell{text: msg.Text, role: kindRole[msg.Kind]})
+		return drawn{parts: cut(parts, m.width)}
+	}
+	if a := m.eng.Activity(); a.Busy() {
+		parts = append(parts, m.progress(a)...)
 	}
 	return drawn{parts: cut(parts, m.width)}
+}
+
+// kindRole is the color of a message of each kind.
+var kindRole = map[statusline.Kind]columns.Role{
+	statusline.Info: roleMuted, statusline.Working: roleAccent, statusline.Done: roleOK,
+	statusline.Refused: rolePrompt, statusline.Failed: roleWarn,
+}
+
+// countWords say what a count of each kind of work does.
+var countWords = map[string]string{"clones": "reading clones", "GitHub": "reading GitHub", "fetched": "fetching", "updated": "updating",
+	"cleaned": "cleaning up", "cloned": "cloning"}
+
+// progressBar is how many cells the bar takes.
+const progressBar = 10
+
+// progress is the spinner and the counts of a run going on.
+func (m *Model) progress(a model.Activity) []cell {
+	var open []model.Count
+	for _, c := range a.Counts {
+		if c.Done < c.Total {
+			open = append(open, c)
+		}
+	}
+	parts := []cell{{text: statusline.Spinner(m.now()) + " ", role: roleAccent}}
+	if len(open) == 0 {
+		return append(parts, cell{text: strings.ToLower(a.Verb), role: roleAccent})
+	}
+	first := open[0]
+	words := countWords[first.Name]
+	if words == "" {
+		words = first.Name
+	}
+	full := statusline.Bar(first.Done, first.Total, progressBar)
+	parts = append(parts, cell{text: fmt.Sprintf("%s %d/%d ", words, first.Done, first.Total), role: roleAccent},
+		cell{text: strings.Repeat("▰", full), role: roleAccent}, cell{text: strings.Repeat("▱", progressBar-full), role: roleBorder})
+	for _, c := range open[1:] {
+		parts = append(parts, cell{text: fmt.Sprintf(" · %s %d/%d", c.Name, c.Done, c.Total), role: roleMuted})
+	}
+	return parts
 }
 
 // hint is a key in the key line and what it does.

@@ -20,6 +20,7 @@ import (
 	"github.com/babarot/gh-tidy/internal/theme"
 	"github.com/babarot/gh-tidy/internal/tui/columns"
 	"github.com/babarot/gh-tidy/internal/tui/keymap"
+	"github.com/babarot/gh-tidy/internal/tui/statusline"
 )
 
 // Engine is what the screen needs of the engine.
@@ -42,6 +43,7 @@ type Engine interface {
 	Hold(path, doing string) bool
 	Release(path string)
 	Writing() int
+	Activity() model.Activity
 }
 
 // All is the owner that stands for every owner, first among the owners.
@@ -83,9 +85,6 @@ const (
 
 // tickEvery is how often the engine is told to read what went stale.
 const tickEvery = 30 * time.Second
-
-// statusFor is how long a message stays on the status line.
-const statusFor = 5 * time.Second
 
 // Model is the screen.
 type Model struct {
@@ -137,8 +136,10 @@ type Model struct {
 	// quitting waits for the changes in flight before quitting.
 	quitting bool
 
-	status   []seg
-	statusID int
+	line statusline.Line
+	// spinning says a frame of the spinner is due: it turns while work
+	// goes on.
+	spinning bool
 
 	width, height int
 	dark          bool
@@ -211,6 +212,18 @@ type tickMsg struct{}
 
 // statusDoneMsg takes a message off the status line.
 type statusDoneMsg struct{ id int }
+
+// frameMsg turns the spinner.
+type frameMsg struct{}
+
+// spin asks for the spinner's next frame while work goes on.
+func (m *Model) spin() tea.Cmd {
+	if m.noTimers || m.spinning || !m.eng.Activity().Busy() {
+		return nil
+	}
+	m.spinning = true
+	return tea.Tick(statusline.FrameEvery, func(time.Time) tea.Msg { return frameMsg{} })
+}
 
 func (m *Model) waitChange() tea.Cmd {
 	ch := m.eng.Changes()
@@ -287,16 +300,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.quitting && m.eng.Writing() == 0 {
 			return m, tea.Quit
 		}
-		return m, m.waitChange()
+		return m, tea.Batch(m.waitChange(), m.spin())
 	case tickMsg:
 		m.eng.Tick()
 		return m, m.tick()
 	case statusDoneMsg:
-		if msg.id == m.statusID {
-			m.status = nil
-		}
+		m.line.Expire(msg.id)
+	case frameMsg:
+		m.spinning = false
+		return m, m.spin()
 	case sayMsg:
-		return m, m.say(msg.s)
+		return m, m.say(msg.kind, msg.text)
 	case planMsg:
 		cmd := m.planned(msg)
 		return m, cmd
@@ -315,14 +329,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // say puts a message on the status line for a while.
-func (m *Model) say(s ...seg) tea.Cmd {
-	m.statusID++
-	m.status = s
+func (m *Model) say(k statusline.Kind, text string) tea.Cmd {
+	id := m.line.Say(k, text, m.now())
 	if m.noTimers {
 		return nil
 	}
-	id := m.statusID
-	return tea.Tick(statusFor, func(time.Time) tea.Msg { return statusDoneMsg{id} })
+	return tea.Tick(statusline.For, func(time.Time) tea.Msg { return statusDoneMsg{id} })
 }
 
 // key acts on a key press: the fixed keys, then the popup, the filter
@@ -345,7 +357,7 @@ func (m *Model) key(k string) tea.Cmd {
 		case m.hasResults():
 			m.eng.ClearResults()
 		default:
-			return m.say(seg{"press " + m.keys.First("quit") + " to quit", roleMuted})
+			return m.say(statusline.Info, "press "+m.keys.First("quit")+" to quit")
 		}
 		return nil
 	}
@@ -402,9 +414,7 @@ func (m *Model) quit() tea.Cmd {
 		return tea.Quit
 	}
 	m.quitting = true
-	m.statusID++
-	m.status = []seg{{fmt.Sprintf("quitting once %d change%s end%s", n, plural(n), map[bool]string{true: "s", false: ""}[n == 1]), roleAccent},
-		{" · " + keymap.Interrupt + " quits now", roleMuted}}
+	m.line.Hold(statusline.Working, fmt.Sprintf("quitting once %d change%s end%s · %s quits now", n, plural(n), map[bool]string{true: "s", false: ""}[n == 1], keymap.Interrupt))
 	return nil
 }
 

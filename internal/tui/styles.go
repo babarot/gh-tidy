@@ -28,12 +28,6 @@ const (
 	roleBorder   = columns.Border
 )
 
-// seg is a part of a line: text with the role of its color.
-type seg struct {
-	text string
-	role columns.Role
-}
-
 // styles are the colors of one palette, by role.
 type styles struct {
 	fg      map[columns.Role]color.Color
@@ -72,14 +66,6 @@ func fromCell(c columns.Cell) []cell {
 	out := make([]cell, len(c))
 	for i, s := range c {
 		out[i] = cell{text: s.Text, role: s.Role, bold: s.Bold, underline: s.Underline}
-	}
-	return out
-}
-
-func fromSegs(ss []seg) []cell {
-	out := make([]cell, len(ss))
-	for i, s := range ss {
-		out[i] = cell{text: s.text, role: s.role}
 	}
 	return out
 }
