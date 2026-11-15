@@ -1,11 +1,16 @@
 name: Check
 
 # make check: what must pass before a change lands in main
+# On main, Release runs this before it releases.
 on:
-  push:
-    branches: [main]
   pull_request:
+    # What tagpr's pull request changes, released only once this passes on
+    # main
+    paths-ignore:
+      - CHANGELOG.md
+      - internal/version/version.go
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   check:

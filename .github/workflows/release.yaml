@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}
+
+jobs:
+  check:
+    uses: ./.github/workflows/check.yaml
+    permissions:
+      contents: read
+
+  # Nothing is released, nor the pull request of the next release made,
+  # from a main that fails the checks
+  tagpr:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # A merge that landed while the checks ran, a release pull request
+      # among them, is not in this commit; the run for the newer main runs
+      # tagpr after its own checks pass
+      - name: Check that main has not moved on
+        id: head
+        run: |
+          main=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$main" = "$GITHUB_SHA" ]; then
+            echo "latest=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "::notice::main is at $main, not $GITHUB_SHA; leaving tagpr to the newer run"
+          fi
+      - name: Run tagpr
+        if: steps.head.outputs.latest == 'true'
+        uses: Songmu/tagpr@b3fb89424646b06c8aa460f50307c60b6a541425 # v1.17.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        id: run-tagpr
+    outputs:
+      tag: ${{ steps.run-tagpr.outputs.tag }}
+
+  goreleaser:
+    if: needs.tagpr.outputs.tag != ''
+    needs: tagpr
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
+        with:
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
