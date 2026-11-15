@@ -25,10 +25,7 @@ type tracker struct {
 
 	// asked says a read was asked for (an owner opened, r, L) and the run
 	// it is in has not ended: what reads spend then is that load's.
-	asked bool
-	// next says a read was asked for while nothing ran: the next run is
-	// that load.
-	next   bool
+	asked  bool
 	last   time.Time // when the last task ended
 	used   [2]int    // asked, unasked
 	saved  [2]int
@@ -49,7 +46,7 @@ func (t *tracker) idled() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.active() && t.open == 0 {
-		t.run.Ended = t.last
+		t.run.Ended = t.now()
 		t.asked = false
 	}
 }
@@ -76,10 +73,7 @@ func (t *tracker) add(group string, weight int, kind, name, who string) *tracked
 	if !t.active() {
 		t.run = model.Activity{Verb: verbs[kind], What: who, Started: t.now()}
 		clear(t.live)
-		t.asked, t.next = t.next, false
-		if !t.asked {
-			t.used[1], t.saved[1] = 0, 0
-		}
+		t.asked = false
 	}
 	t.open++
 	i := slices.IndexFunc(t.run.Counts, func(c model.Count) bool { return c.Name == group })
@@ -135,15 +129,18 @@ func (k *tracked) end(note string, failed bool) {
 	t.last = now
 }
 
-// load says a read was asked for: what reads spend from now until the run
-// ends is that load's, counted from zero.
-func (t *tracker) load() {
+// load says a read of who was asked for: what reads spend from now until
+// the run ends is that load's, and what gh tidy reads on its own after is
+// counted from zero too. It starts a run when none goes on; the caller
+// holds the pools busy while it queues, so that a load that queues
+// nothing still ends.
+func (t *tracker) load(who string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.used[0], t.saved[0] = 0, 0
+	t.used, t.saved = [2]int{}, [2]int{}
 	if !t.active() {
-		t.next = true
-		return
+		t.run = model.Activity{Verb: "Reading", What: who, Started: t.now()}
+		clear(t.live)
 	}
 	t.asked = true
 }
@@ -185,4 +182,12 @@ func (e *Engine) Activity() model.Activity {
 		a.Queued += queued
 	}
 	return a
+}
+
+// busy holds the pools busy while work is queued from outside them, so
+// that a task ending at once does not end the run before the rest is in;
+// it returns what lets go.
+func (e *Engine) busy() func() {
+	e.idle.add(1)
+	return func() { e.idle.add(-1) }
 }

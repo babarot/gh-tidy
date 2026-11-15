@@ -324,6 +324,10 @@ func (e *Engine) ctxOf(o *owner) context.Context {
 func (e *Engine) readList(o *owner, gen int, alive func() bool) {
 	e.mu.Lock()
 	kind, login, prev, asked := o.kind, o.login, o.pages, o.asked
+	// r asks for the list too, as far as gh tidy reads it at all: not
+	// the list of an owner that is not the user's, which only L reads.
+	forced := o.refreshList
+	o.refreshList = false
 	skip := o.listing != 0 || !o.listAt.IsZero() && e.now().Sub(o.listAt) < listFresh && !o.fromCache
 	if kind == github.OwnerUser && !asked {
 		if o.list == model.ListUnknown {
@@ -351,7 +355,10 @@ func (e *Engine) readList(o *owner, gen int, alive func() bool) {
 	prio, pages := prioRest, maxListPages
 	if asked {
 		prio, pages = prioAsked, askedListPages
+	} else if forced {
+		prio = prioAsked
 	}
+	asked = asked || forced
 	e.begin(o, "list")
 	e.apiPool.add(prio, alive, func() {
 		defer done()
@@ -460,6 +467,7 @@ func (e *Engine) putList(o *owner, l github.Listing) {
 // and, when they ask, of repositories not cloned. The rows on the screen go
 // first. Several clones of one repository are read once.
 func (e *Engine) readHeavy(o *owner) {
+	defer e.busy()()
 	e.mu.Lock()
 	if o.login == All || e.owners[e.shown] != o {
 		e.mu.Unlock()
@@ -774,6 +782,7 @@ func (e *Engine) readAhead(o *owner) {
 // back by the budget: the screen calls it on its clock, since the engine
 // keeps none.
 func (e *Engine) Tick() {
+	defer e.busy()()
 	e.mu.Lock()
 	o := e.owners[e.shown]
 	if o == nil || o.login == All {

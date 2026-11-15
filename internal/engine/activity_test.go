@@ -93,8 +93,29 @@ func TestRateCountsLoadsApart(t *testing.T) {
 	}
 	e.ReadList()
 	idle(t, e)
-	if r := e.Activity().Rate; r.Saved != 1 || r.Used != 0 {
-		t.Errorf("L: the load starts from zero and saves the page: %+v", r)
+	if r := e.Activity().Rate; r.Saved != 1 || r.Used != 0 || r.UnaskedSaved != 0 {
+		t.Errorf("L: the load and what is read unasked after start from zero: %+v", r)
+	}
+	// Two unasked reads after the load add up.
+	w.clock.add(listFresh + time.Minute)
+	e.Tick()
+	idle(t, e)
+	w.clock.add(listFresh + time.Minute)
+	e.Tick()
+	idle(t, e)
+	if r := e.Activity().Rate; r.UnaskedSaved != 2 {
+		t.Errorf("unasked reads since the load: %+v", r)
+	}
+}
+
+// A load that queues nothing still ends its run.
+func TestALoadOfNothingEnds(t *testing.T) {
+	w := newWorld(t)
+	e := w.engine()
+	e.Open("nobody")
+	idle(t, e)
+	if a := e.Activity(); a.Busy() || a.Started.IsZero() {
+		t.Errorf("run = %+v", a)
 	}
 }
 

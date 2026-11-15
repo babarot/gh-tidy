@@ -172,6 +172,7 @@ func (e *Engine) rescan(_ context.Context, path string) model.Clone {
 // refused because a change is in flight in them. Each clone's lane is
 // taken when asked, so that what is refused is said at once.
 func (e *Engine) Fetch(keys []model.CloneKey) (busy []model.CloneKey) {
+	defer e.busy()()
 	for _, k := range keys {
 		if !e.lane(k, "waiting to fetch") {
 			busy = append(busy, k)
@@ -206,6 +207,7 @@ func (e *Engine) Fetch(keys []model.CloneKey) (busy []model.CloneKey) {
 // being worked on. What is skipped says why. It returns the clones it
 // refused because a change is in flight in them.
 func (e *Engine) Advance(keys []model.CloneKey) (busy []model.CloneKey) {
+	defer e.busy()()
 	for _, k := range keys {
 		if !e.lane(k, "waiting to update") {
 			busy = append(busy, k)
@@ -281,6 +283,7 @@ func (e *Engine) PlanCleanup(key model.CloneKey, opts policy.Cleanup, cwd string
 // confirm is left alone, and said so. It returns the clones it refused
 // because a change is in flight in them.
 func (e *Engine) Cleanup(plans map[model.CloneKey]policy.Plan, opts policy.Cleanup, cwd string) (busy []model.CloneKey) {
+	defer e.busy()()
 	for k, confirmed := range plans {
 		if !e.lane(k, "waiting to clean up") {
 			busy = append(busy, k)
@@ -411,9 +414,10 @@ func (e *Engine) ReadList() {
 	if o.list == model.ListPartial {
 		o.list, o.listWhy = model.ListUnknown, ""
 	}
-	gen := o.gen
+	gen, login := o.gen, o.login
 	e.mu.Unlock()
-	e.track.load()
+	defer e.busy()()
+	e.track.load(login)
 	e.notify()
 	e.readList(o, gen, e.alive(o, gen))
 }
@@ -534,8 +538,11 @@ func (e *Engine) Refresh() {
 	}
 	o.listAt = time.Time{}
 	o.refresh = o.login != All
+	o.refreshList = o.login != All
+	login := o.login
 	e.mu.Unlock()
-	e.track.load()
+	defer e.busy()()
+	e.track.load(login)
 	e.notify()
 	if o.login == All {
 		e.readAll(o)
