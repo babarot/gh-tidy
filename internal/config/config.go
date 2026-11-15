@@ -90,7 +90,8 @@ type Preview struct {
 
 // Symbols are the marks the list writes, after zsh-mini-prompt by
 // default, so that they read as the user's prompt does. Each must be as
-// many cells wide as it has characters, or the columns would not line up.
+// many cells wide as it has characters, or the columns would not line up;
+// an empty one writes nothing (starship writes nothing for up to date).
 type Symbols struct {
 	Unstaged    string `toml:"unstaged"`
 	Staged      string `toml:"staged"`
@@ -265,8 +266,6 @@ func (f File) validate() error {
 	for _, kv := range f.Symbols.Each() {
 		name, v := kv[0], kv[1]
 		switch {
-		case v == "":
-			bad("[symbols] %s is empty", name)
 		case strings.ContainsFunc(v, func(r rune) bool { return unicode.IsSpace(r) || !unicode.IsPrint(r) }):
 			bad("[symbols] %s %q has a space or a character that is not printed", name, v)
 		case ansi.StringWidth(v) != len([]rune(v)):

@@ -103,6 +103,10 @@ type Row struct {
 	Listed Read[Remote] // from the owner's list
 	Heavy  Read[Heavy]  // asked for by name
 	Ahead  Read[Ahead]
+	// Facts are what judging the clone's linked worktrees needs: which
+	// branches its default branch has, and which were worked on. Read only
+	// for a clone with linked worktrees.
+	Facts Read[CleanupFacts]
 
 	// Op is what is being done to the clone, or what was done, until the
 	// user puts the results away. Not kept between starts.

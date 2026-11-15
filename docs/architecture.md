@@ -14,6 +14,7 @@ gh-tidy is split into packages by layer. A package imports only packages of lowe
 | 1 | `internal/policy` | Deciding what to do with a clone from facts: moving its default branch, what d removes, how a worktree is judged, attention | `internal/model` | - |
 | 1 | `internal/config` | Reading the config file and reporting its mistakes | `internal/theme` | `github.com/charmbracelet/x/ansi`, `github.com/pelletier/go-toml/v2` |
 | 1 | `internal/tui/keymap` | Actions by name and their keys, after [keys]; the TUI writes no key in its code | - | - |
+| 2 | `internal/tui/columns` | The columns of the list and the sections of the preview pane, each an entry of a table that writes it from a copy of an owner | `internal/config`, `internal/model`, `internal/policy` | - |
 | 2 | `internal/repo` | One clone's state, read from git alone | `internal/gitx` | - |
 | 2 | `internal/local` | A clone's state and the facts about it, read from git, and the changes made to it with git | `internal/gitx`, `internal/model` | - |
 | 2 | `internal/store` | The files kept between starts: each owner's table as last read (the cache) and the user's choices (the state) | `internal/model` | - |
