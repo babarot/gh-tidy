@@ -450,3 +450,26 @@ func TestCleanupFactsWithoutDefault(t *testing.T) {
 		t.Errorf("err = %v, want ErrNoDefault", err)
 	}
 }
+
+func TestRemoteAhead(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	here := w.oid(w.clone, "origin/main")
+	if a := RemoteAhead(ctx, w.clone, "main", here); a.Ahead || a.Local != here {
+		t.Errorf("same commit: %+v", a)
+	}
+	w.push(1)
+	there := w.oid(w.pusher, "HEAD")
+	if a := RemoteAhead(ctx, w.clone, "main", there); !a.Ahead {
+		t.Errorf("a commit the clone has not fetched: %+v", a)
+	}
+	gittest.Git(t, w.clone, "fetch", "-q")
+	if a := RemoteAhead(ctx, w.clone, "main", there); a.Ahead {
+		t.Errorf("after the fetch: %+v", a)
+	}
+	// GitHub read before the fetch, at the older commit: the clone has
+	// moved past it, which is not GitHub being ahead.
+	if a := RemoteAhead(ctx, w.clone, "main", here); a.Ahead {
+		t.Errorf("GitHub's older commit read before a fetch: %+v", a)
+	}
+}

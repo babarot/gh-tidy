@@ -177,3 +177,23 @@ func PruneWorktrees(ctx context.Context, path string) error {
 	_, err := gitx.Run(ctx, path, "worktree", "prune")
 	return err
 }
+
+// RemoteAhead decides whether GitHub's default branch, at remoteOid, has
+// commits the clone at path has not fetched: remoteOid is not in the clone,
+// or is not an ancestor of its origin/<name>. Equal commits cost no git
+// process. A commit GitHub has that the clone lacks makes git's ancestry
+// check fail with 128 rather than 1; either way it is ahead.
+func RemoteAhead(ctx context.Context, path, name, remoteOid string) model.Ahead {
+	local, _ := gitx.Run(ctx, path, "rev-parse", "-q", "--verify", "refs/remotes/origin/"+name)
+	a := model.Ahead{Remote: remoteOid, Local: local}
+	switch {
+	case remoteOid == "":
+	case remoteOid == local:
+	case local == "":
+		a.Ahead = true
+	default:
+		_, err := gitx.Run(ctx, path, "merge-base", "--is-ancestor", remoteOid, local)
+		a.Ahead = err != nil
+	}
+	return a
+}
