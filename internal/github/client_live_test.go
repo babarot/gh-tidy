@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -111,11 +112,11 @@ func TestLiveOrg(t *testing.T) {
 		t.Fatal(err)
 	}
 	kind := v.KindOf(org)
-	t.Logf("token's organizations: %d; %s is a member organization: %v", len(v.Orgs), "the organization", kind == OwnerOrg)
+	t.Logf("token's organizations: %d (some left out: %v); the organization is a member organization: %v", len(v.Orgs), v.OrgsIncomplete, kind == OwnerOrg)
 	start := time.Now()
 	l, err := c.List(ctx, org, kind, Pages{}, 20)
 	if err != nil {
-		t.Fatalf("list: %v", err)
+		t.Fatalf("list failed: %s", errorShape(err))
 	}
 	private := 0
 	for _, r := range l.Repos {
@@ -137,7 +138,7 @@ func TestLiveOrg(t *testing.T) {
 	start = time.Now()
 	got, rate, err := c.Heavy(ctx, slugs, Want{Default: true, CI: true, Counts: true, Alerts: true})
 	if err != nil {
-		t.Fatalf("heavy: %v", err)
+		t.Fatalf("heavy failed as a whole: %s", errorShape(err))
 	}
 	found, off, denied, counted, errs := 0, 0, 0, 0, 0
 	for _, h := range got {
@@ -156,4 +157,22 @@ func TestLiveOrg(t *testing.T) {
 		}
 	}
 	t.Logf("heavy, %d repositories: %s, cost %d; found %d; Dependabot counted %d, off %d, not readable %d; other errors %d", len(slugs), time.Since(start), rate.Cost, found, counted, off, denied, errs)
+}
+
+// errorShape says what kind of error err is without its message, which
+// may name a repository.
+func errorShape(err error) string {
+	var rl *RateLimitError
+	var se *StatusError
+	switch {
+	case errors.As(err, &rl):
+		return fmt.Sprintf("rate limit (primary %v)", rl.Primary)
+	case errors.Is(err, ErrTimeout):
+		return "timeout"
+	case errors.As(err, &se):
+		return fmt.Sprintf("status %d, SSO header %v", se.Status, se.SSO != "")
+	case errors.Is(err, ErrNoOwner):
+		return "no such owner"
+	}
+	return fmt.Sprintf("%T", err)
 }

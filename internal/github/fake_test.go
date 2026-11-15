@@ -35,6 +35,7 @@ type fake struct {
 	failWhole           bool            // GraphQL answers data null and an error with no path
 	dropAlias           map[string]bool // aliases left out of the data with no error
 	viewerFails         bool
+	orgsFail            bool // the login comes back, the organizations with an error
 	queries             []string
 	remaining           int
 	requests            int
@@ -172,6 +173,10 @@ func (f *fake) graphql(w http.ResponseWriter, r *http.Request) {
 	}
 	if f.failWhole {
 		_, _ = io.WriteString(w, `{"data":null,"errors":[{"message":"Something went wrong while executing your query."}]}`)
+		return
+	}
+	if strings.Contains(req.Query, "viewer {") && f.orgsFail {
+		_, _ = io.WriteString(w, `{"data":{"viewer":{"login":"me","organizations":null}},"errors":[{"type":"FORBIDDEN","path":["viewer","organizations"],"message":"SAML enforcement"}]}`)
 		return
 	}
 	if strings.Contains(req.Query, "viewer {") && f.viewerFails {

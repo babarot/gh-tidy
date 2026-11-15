@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/babarot/gh-tidy/internal/logging"
 	"github.com/babarot/gh-tidy/internal/model"
 )
 
@@ -232,9 +233,14 @@ func (r restRepo) listed(host string) ListedRepo {
 }
 
 // Viewer is who gh is signed in as, and the organizations it belongs to.
+// OrgsIncomplete says GitHub left some organizations out (an error beside
+// the login, as for one whose SSO the token is not authorized for): an
+// organization missing from Orgs then reads as another user's, whose list
+// is partial.
 type Viewer struct {
-	Login string
-	Orgs  []string
+	Login          string
+	Orgs           []string
+	OrgsIncomplete bool
 }
 
 // Viewer reads the account and its organizations (one GraphQL query).
@@ -251,7 +257,7 @@ func (c *Client) Viewer(ctx context.Context) (Viewer, Rate, error) {
 		return Viewer{}, rate, err
 	}
 	// Without the viewer, every owner would read as another user's.
-	if len(errs) > 0 || d.Viewer.Login == "" {
+	if d.Viewer.Login == "" {
 		msg := "GitHub did not say who is signed in"
 		if len(errs) > 0 {
 			msg += ": " + errs[0].Message
@@ -259,7 +265,10 @@ func (c *Client) Viewer(ctx context.Context) (Viewer, Rate, error) {
 		return Viewer{}, rate, errors.New(msg)
 	}
 	rate.Cost = d.RateLimit.Cost
-	v := Viewer{Login: d.Viewer.Login}
+	v := Viewer{Login: d.Viewer.Login, OrgsIncomplete: len(errs) > 0}
+	if v.OrgsIncomplete {
+		c.log.Info("github viewer: some organizations left out", logging.KeyReason, errs[0].Type)
+	}
 	for _, o := range d.Viewer.Organizations.Nodes {
 		v.Orgs = append(v.Orgs, o.Login)
 	}

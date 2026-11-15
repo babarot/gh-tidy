@@ -305,3 +305,12 @@ func TestViewerThatCannotBeReadIsAnError(t *testing.T) {
 		t.Error("a viewer GitHub would not give came back without an error")
 	}
 }
+
+func TestViewerWithOrganizationsLeftOut(t *testing.T) {
+	f := newFake()
+	f.orgsFail = true
+	v, _, err := f.client(t).Viewer(context.Background())
+	if err != nil || v.Login != "me" || !v.OrgsIncomplete || v.KindOf("me") != OwnerViewer {
+		t.Errorf("viewer = %+v, %v", v, err)
+	}
+}
