@@ -30,6 +30,11 @@ type Local interface {
 	// SetDefault measures c against name, GitHub's default branch.
 	SetDefault(ctx context.Context, c model.Clone, name string) model.Clone
 	RemoteAhead(ctx context.Context, path, name, remoteOid string) model.Ahead
+	// WorktreeFacts reads what judging c's linked worktrees needs.
+	WorktreeFacts(ctx context.Context, c model.Clone) (model.CleanupFacts, error)
+	// Detail reads what the preview shows of c, or of its worktree at
+	// path when worktree is not empty.
+	Detail(ctx context.Context, c model.Clone, worktree string) model.Detail
 }
 
 // GitHub is what the engine needs of GitHub.
@@ -108,6 +113,16 @@ type Engine struct {
 	// change starts and ends, so that a read begun before is dropped.
 	lanes map[model.CloneKey]string
 	epoch map[model.CloneKey]int64
+	// details are what the preview shows of the rows asked for, and
+	// detailing those being read.
+	details   map[detailKey]model.Detail
+	detailing map[detailKey]bool
+}
+
+// detailKey is a clone, or one of its linked worktrees.
+type detailKey struct {
+	clone model.CloneKey
+	tree  string
 }
 
 // owner is what the engine holds of one owner.
@@ -151,6 +166,7 @@ func New(o Options) *Engine {
 	}
 	e := &Engine{root: o.Root, host: o.GitHub.Host(), local: o.Local, change: o.Change, gh: o.GitHub, store: o.Store, log: log, now: now,
 		lanes: map[model.CloneKey]string{}, epoch: map[model.CloneKey]int64{},
+		details: map[detailKey]model.Detail{}, detailing: map[detailKey]bool{},
 		localPool: newPool(runtime.NumCPU(), idle), netPool: newPool(networkAtOnce, idle), apiPool: newPool(apiAtOnce, idle),
 		idle: idle, owners: map[string]*owner{}, visible: map[string]bool{}, changed: make(chan struct{}, 1)}
 	e.budget = newBudget(now, log)

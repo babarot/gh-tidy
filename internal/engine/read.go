@@ -155,12 +155,12 @@ func (e *Engine) scanAll(o *owner, paths []string, alive func() bool, done func(
 			}
 		}
 		e.localPool.add(prio, alive, func() {
-			c := e.scan(p)
+			s := e.scan(p)
 			e.mu.Lock()
 			// A change started or ended since the read started: what the
 			// change reads afterwards is newer.
 			if e.epoch[key] == epoch && e.lanes[key] == "" {
-				e.putClone(o, c)
+				e.putClone(o, s)
 			}
 			e.mu.Unlock()
 			finish()
@@ -170,10 +170,10 @@ func (e *Engine) scanAll(o *owner, paths []string, alive func() bool, done func(
 
 // scan reads the clone at path, measured against GitHub's default branch
 // when GitHub was read: origin/HEAD may be stale, or missing.
-func (e *Engine) scan(path string) model.Clone {
+func (e *Engine) scan(path string) scanned {
 	c := e.local.Scan(e.ctx, path)
 	if c.Err != "" {
-		return c
+		return scanned{clone: c}
 	}
 	e.mu.Lock()
 	def := ""
@@ -195,14 +195,29 @@ func (e *Engine) scan(path string) model.Clone {
 	if def != "" && (def != c.Default || c.DefaultSource != model.DefaultFromGitHub) {
 		c = e.local.SetDefault(e.ctx, c, def)
 	}
-	return c
+	s := scanned{clone: c}
+	if len(c.Linked()) > 0 {
+		s.facts, s.factsErr = e.local.WorktreeFacts(e.ctx, c)
+		s.hasFacts = true
+	}
+	return s
+}
+
+// scanned is a clone read, with what judging its linked worktrees needs
+// when it has any.
+type scanned struct {
+	clone    model.Clone
+	facts    model.CleanupFacts
+	factsErr error
+	hasFacts bool
 }
 
 // putClone puts a clone read into o, joining it with the row of its
 // repository from the list. A read that failed keeps what was read before.
 // Called with e.mu held.
-func (e *Engine) putClone(o *owner, c model.Clone) {
+func (e *Engine) putClone(o *owner, s scanned) {
 	now := e.now()
+	c := s.clone
 	r := o.rows[string(c.Key)]
 	if r == nil {
 		r = &model.Row{Clone: c.Key}
@@ -214,6 +229,15 @@ func (e *Engine) putClone(o *owner, c model.Clone) {
 		return
 	}
 	r.Local.Set(c, now)
+	switch {
+	case !s.hasFacts:
+		r.Facts = model.Read[model.CleanupFacts]{}
+	case s.factsErr != nil:
+		r.Facts.Fail(s.factsErr.Error(), now)
+	default:
+		r.Facts.Set(s.facts, now)
+	}
+	e.forgetDetails(c.Key)
 	switch {
 	case r.Origin == "" && r.Remote == "":
 		r.Origin, r.Remote = c.Remote, c.Remote

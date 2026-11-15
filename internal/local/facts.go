@@ -73,6 +73,27 @@ func AdvanceFacts(ctx context.Context, path, name string, source model.DefaultSo
 // CleanupFacts reads what deciding what d removes from c needs. Read it
 // right before the decision, in the clone's lane.
 func CleanupFacts(ctx context.Context, c model.Clone) (model.CleanupFacts, error) {
+	names := make([]string, len(c.Branches))
+	for i, b := range c.Branches {
+		names[i] = b.Name
+	}
+	return cleanupFacts(ctx, c, names)
+}
+
+// WorktreeFacts reads what judging the clone's linked worktrees needs:
+// the branches merged, and whether the branches the worktrees hold were
+// worked on. It asks less of git than CleanupFacts, for the list.
+func WorktreeFacts(ctx context.Context, c model.Clone) (model.CleanupFacts, error) {
+	var names []string
+	for _, w := range c.Linked() {
+		if b := w.Holds(); b != "" {
+			names = append(names, b)
+		}
+	}
+	return cleanupFacts(ctx, c, names)
+}
+
+func cleanupFacts(ctx context.Context, c model.Clone, branches []string) (model.CleanupFacts, error) {
 	f := model.CleanupFacts{Merged: map[string]bool{}, WorkedOn: map[string]bool{}}
 	if c.Default == "" {
 		return f, ErrNoDefault
@@ -94,8 +115,8 @@ func CleanupFacts(ctx context.Context, c model.Clone) (model.CleanupFacts, error
 			f.Merged[b] = true
 		}
 	}
-	for _, b := range c.Branches {
-		f.WorkedOn[b.Name] = workedOn(ctx, c.Path, b.Name)
+	for _, b := range branches {
+		f.WorkedOn[b] = workedOn(ctx, c.Path, b)
 	}
 	return f, nil
 }

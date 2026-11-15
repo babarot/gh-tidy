@@ -23,6 +23,8 @@ type fakeLocal struct {
 	scans  int
 	hold   map[string]chan struct{} // scans of these paths wait for their channel
 	held   chan struct{}            // closed when a scan starts waiting
+
+	factReads, detailReads int
 }
 
 func (f *fakeLocal) add(owner, name, slug string, edit func(*model.Clone)) {
@@ -89,6 +91,22 @@ func (f *fakeLocal) Scan(_ context.Context, path string) model.Clone {
 func (f *fakeLocal) SetDefault(_ context.Context, c model.Clone, name string) model.Clone {
 	c.Default, c.DefaultSource = name, model.DefaultFromGitHub
 	return c
+}
+
+func (f *fakeLocal) WorktreeFacts(_ context.Context, c model.Clone) (model.CleanupFacts, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.factReads++
+	return model.CleanupFacts{Base: "origin/main", Merged: map[string]bool{c.Default: true}}, nil
+}
+
+// Detail answers with the clone's head as the subject of its one commit,
+// so that a test can tell which read it got.
+func (f *fakeLocal) Detail(_ context.Context, c model.Clone, tree string) model.Detail {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.detailReads++
+	return model.Detail{Unpushed: []model.Commit{{Subject: c.Head + tree}}}
 }
 
 func (f *fakeLocal) RemoteAhead(_ context.Context, path, _, oid string) model.Ahead {
@@ -743,5 +761,55 @@ func TestACloneIsMeasuredOnGitHubsDefaultAsSoonAsItIsKnown(t *testing.T) {
 	idle(t, e)
 	if r := rowOf(e.Owner(), "/src/github.com/me/app"); r.Local.Value.Default != "trunk" {
 		t.Errorf("clone default = %q after the first reading", r.Local.Value.Default)
+	}
+}
+
+func TestWorktreeFactsAreReadWithTheClone(t *testing.T) {
+	w := newWorld(t)
+	w.local.add("me", "app", "me/app", func(c *model.Clone) {
+		c.Worktrees = []model.Worktree{{Path: "/src/github.com/me/app", Main: true}, {Path: "/wt/x", Branch: "x"}}
+	})
+	w.local.add("me", "plain", "me/plain", nil)
+	e := w.engine()
+	e.Open("me")
+	idle(t, e)
+	if r := rowOf(e.Owner(), "/src/github.com/me/app"); !r.Facts.Has || !r.Facts.Value.Merged["main"] {
+		t.Errorf("facts = %+v", r.Facts)
+	}
+	if r := rowOf(e.Owner(), "/src/github.com/me/plain"); r.Facts.Has {
+		t.Error("facts read for a clone without linked worktrees")
+	}
+	if w.local.factReads != 1 {
+		t.Errorf("fact reads = %d", w.local.factReads)
+	}
+}
+
+func TestDetailIsReadWhenAskedAndForgottenWhenTheCloneChanges(t *testing.T) {
+	w := newWorld(t)
+	w.local.add("me", "app", "me/app", func(c *model.Clone) { c.Head = "one" })
+	e := w.engine()
+	e.Open("me")
+	idle(t, e)
+	key := model.CloneKey("/src/github.com/me/app")
+	if _, ok := e.Detail(key, ""); ok {
+		t.Fatal("held before it was read")
+	}
+	e.Detail(key, "") // asked again while it is read: one read
+	idle(t, e)
+	d, ok := e.Detail(key, "")
+	if !ok || d.Unpushed[0].Subject != "one" || w.local.detailReads != 1 {
+		t.Fatalf("detail = %+v, %v, %d reads", d, ok, w.local.detailReads)
+	}
+	w.local.add("me", "app", "me/app", func(c *model.Clone) { c.Head = "two" })
+	e.rescan(context.Background(), string(key))
+	if _, ok := e.Detail(key, ""); ok {
+		t.Fatal("held after the clone was read again")
+	}
+	idle(t, e)
+	if d, _ := e.Detail(key, ""); d.Unpushed[0].Subject != "two" {
+		t.Errorf("detail after = %+v", d)
+	}
+	if _, ok := e.Detail("/src/github.com/me/none", ""); ok {
+		t.Error("a detail of a clone not known")
 	}
 }

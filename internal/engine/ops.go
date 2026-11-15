@@ -131,15 +131,15 @@ func (e *Engine) clone(key model.CloneKey) (model.Clone, bool) {
 // it into every owner holding it or whose directory it sits in: a read of
 // it dropped while the change held the lane is made up for here.
 func (e *Engine) rescan(_ context.Context, path string) model.Clone {
-	c := e.scan(path)
+	s := e.scan(path)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for _, o := range e.owners {
-		if o.rows[string(c.Key)] != nil || e.inOwnerDir(path, o.login) {
-			e.putClone(o, c)
+		if o.rows[string(s.clone.Key)] != nil || e.inOwnerDir(path, o.login) {
+			e.putClone(o, s)
 		}
 	}
-	return c
+	return s.clone
 }
 
 // free returns the keys whose lanes are free, and those taken: a change
