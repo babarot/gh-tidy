@@ -322,8 +322,8 @@ func (m *Model) preview(top int) []drawn {
 	if ok {
 		p = m.paneOf(l)
 	}
-	if k := l.key(); ok && k != m.pkey {
-		m.pkey, m.pscroll = k, 0
+	if ok && l.key() != m.pkey {
+		m.pkey, m.pscroll = l.key(), 0
 	}
 	inner := w - 4
 	lw := inner

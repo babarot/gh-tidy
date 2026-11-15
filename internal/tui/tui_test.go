@@ -363,6 +363,9 @@ func TestOwners(t *testing.T) {
 	if m.owner != "acme" {
 		t.Errorf("chose %q", m.owner)
 	}
+	if s := screen(m); !strings.Contains(s, "0 clones") {
+		t.Errorf("an owner with nothing:\n%s", s)
+	}
 	press(w, m, "<")
 	if m.owner != "all" {
 		t.Errorf("after <: %s", m.owner)

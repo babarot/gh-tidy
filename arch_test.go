@@ -44,6 +44,9 @@ var layers = []layer{
 		[]string{"charm.land/bubbletea/v2", "charm.land/lipgloss/v2", "github.com/charmbracelet/x/ansi"}, "The screen: one owner's clones and repositories in a list, the preview of the row selected, the popups; what is known is the engine's"},
 	{"internal/legacy/tui", 4, []string{"internal/cleanup", "internal/config", "internal/github", "internal/gitx", "internal/locate", "internal/repo", "internal/theme", "internal/tui/keymap"},
 		[]string{"charm.land/bubbletea/v2", "charm.land/lipgloss/v2", "github.com/charmbracelet/x/ansi"}, "The terminal UI being replaced; removed with the code only it uses"},
+	{"internal/app", 5, []string{"internal/config", "internal/engine", "internal/github", "internal/local", "internal/locate", "internal/logging", "internal/model", "internal/store", "internal/tui", "internal/version"},
+		[]string{"charm.land/bubbletea/v2"}, "Putting gh-tidy together: flags, settings, the engine built from the concrete packages, the owner to open, the screen"},
+	{"cmd/tidy-next", 6, []string{"internal/app"}, nil, "The new screen while it is built, beside the current gh-tidy"},
 	{"", 5, []string{"internal/logging", "internal/config", "internal/locate", "internal/legacy/tui", "internal/repo", "internal/version"}, []string{"charm.land/bubbletea/v2"}, "Flags, config and starting the TUI"},
 }
 
