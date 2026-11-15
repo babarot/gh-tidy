@@ -89,7 +89,8 @@ func Run(cmd string, args []string, stderr io.Writer) error {
 		return err
 	}
 	st := store.Store{CacheDir: xdg("XDG_CACHE_HOME", ".cache"), StateDir: xdg("XDG_STATE_HOME", filepath.Join(".local", "state"))}
-	eng := engine.New(engine.Options{Root: root, Local: disk{}, GitHub: client, Store: st, Logger: log})
+	eng := engine.New(engine.Options{Root: root, Local: disk{}, Change: changer{remove: cfg.Cleanup.WorktreeRemove}, Cloner: cloner{},
+		GitHub: client, Store: st, Logger: log})
 	if err := eng.Start(ctx); err != nil {
 		log.Warn("who is signed in is not known: every owner is read as another user's", logging.KeyReason, err.Error())
 	}
@@ -104,7 +105,7 @@ func Run(cmd string, args []string, stderr io.Writer) error {
 	log.Info("start", logging.KeyVersion, version.Version, logging.KeyOwner, host+"/"+owner)
 
 	m, err := tui.New(tui.Options{
-		Engine: eng, Config: cfg, Owners: owners(root, host, viewer, cfg.Owners), Owner: owner, Select: sel,
+		Engine: eng, Commands: programs{}, Cwd: cwd(), Config: cfg, Owners: owners(root, host, viewer, cfg.Owners), Owner: owner, Select: sel,
 		Lens: state.Lens, PreviewHeight: state.PreviewHeight, Home: home(),
 		Save: func(owner, lens string, ph int) {
 			if state.LastOwner == nil {
@@ -182,28 +183,6 @@ func owners(root, host string, v github.Viewer, set config.Owners) []string {
 	return out
 }
 
-// disk is the clones on disk, read with git, as the engine needs them.
-type disk struct{}
-
-func (disk) Owners(dir string) ([]string, error) { return local.Owners(dir) }
-func (disk) Find(dir string) ([]string, error)   { return local.Find(dir) }
-func (disk) Scan(ctx context.Context, path string) model.Clone {
-	return local.Scan(ctx, path)
-}
-func (disk) SetDefault(ctx context.Context, c model.Clone, name string) model.Clone {
-	local.SetDefault(ctx, &c, name)
-	return c
-}
-func (disk) RemoteAhead(ctx context.Context, path, name, oid string) model.Ahead {
-	return local.RemoteAhead(ctx, path, name, oid)
-}
-func (disk) WorktreeFacts(ctx context.Context, c model.Clone) (model.CleanupFacts, error) {
-	return local.WorktreeFacts(ctx, c)
-}
-func (disk) Detail(ctx context.Context, c model.Clone, tree string) model.Detail {
-	return local.Detail(ctx, c, tree)
-}
-
 // xdg is the program's directory under the XDG directory env names, or
 // under fallback in the home directory.
 func xdg(env, fallback string) string {
@@ -212,6 +191,14 @@ func xdg(env, fallback string) string {
 		dir = filepath.Join(home(), fallback)
 	}
 	return filepath.Join(dir, Name)
+}
+
+func cwd() string {
+	d, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return d
 }
 
 func home() string {

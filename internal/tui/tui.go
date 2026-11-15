@@ -16,6 +16,7 @@ import (
 
 	"github.com/babarot/gh-tidy/internal/config"
 	"github.com/babarot/gh-tidy/internal/model"
+	"github.com/babarot/gh-tidy/internal/policy"
 	"github.com/babarot/gh-tidy/internal/theme"
 	"github.com/babarot/gh-tidy/internal/tui/columns"
 	"github.com/babarot/gh-tidy/internal/tui/keymap"
@@ -29,6 +30,15 @@ type Engine interface {
 	Changes() <-chan struct{}
 	Detail(clone model.CloneKey, tree string) (model.Detail, bool)
 	Tick()
+
+	Fetch(keys []model.CloneKey) (busy []model.CloneKey)
+	Advance(keys []model.CloneKey) (busy []model.CloneKey)
+	PlanCleanup(key model.CloneKey, opts policy.Cleanup, cwd string) (policy.Plan, error)
+	Cleanup(plans map[model.CloneKey]policy.Plan, opts policy.Cleanup, cwd string) (busy []model.CloneKey)
+	ClearResults()
+	Clone(key model.RemoteKey) (string, error)
+	ReadList()
+	Reread(path string)
 }
 
 // All is the owner that stands for every owner, first among the owners.
@@ -36,8 +46,11 @@ const All = "all"
 
 // Options build the screen.
 type Options struct {
-	Engine Engine
-	Config config.File
+	Engine   Engine
+	Commands Commands
+	Config   config.File
+	// Cwd is where gh tidy runs: d keeps the worktree holding it.
+	Cwd string
 	// Owners are the owners offered, besides all, in the order shown.
 	Owners []string
 	// Owner is the owner opened first, and Select the row the cursor
@@ -74,6 +87,10 @@ const statusFor = 5 * time.Second
 // Model is the screen.
 type Model struct {
 	eng      Engine
+	cmds     Commands
+	cwd      string
+	actions  []config.Action
+	cleanup  config.Cleanup
 	keys     keymap.Map
 	sym      config.Symbols
 	cols     map[columns.Lens][]columns.Column
@@ -139,6 +156,15 @@ func New(o Options) (*Model, error) {
 	if len(bad) > 0 {
 		errs = append(errs, fmt.Errorf("[preview] sections: %s not among %s", strings.Join(bad, ", "), strings.Join(columns.SectionNames(), ", ")))
 	}
+	for _, a := range o.Config.Actions {
+		for _, s := range []keymap.Scope{keymap.ScopeGlobal, keymap.ScopeNav, keymap.ScopeList} {
+			for _, act := range keys.Actions(s) {
+				if keys.Matches(act, a.Key) {
+					errs = append(errs, fmt.Errorf("[[actions]] %q: %q is also %s's key", a.Name, a.Key, act))
+				}
+			}
+		}
+	}
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
@@ -146,7 +172,7 @@ func New(o Options) (*Model, error) {
 	if now == nil {
 		now = time.Now
 	}
-	m := &Model{eng: o.Engine, keys: keys, sym: o.Config.Symbols, cols: cols, sections: secs, themeArg: o.Config.TUI.Theme,
+	m := &Model{eng: o.Engine, cmds: o.Commands, cwd: o.Cwd, actions: o.Config.Actions, cleanup: o.Config.Cleanup, keys: keys, sym: o.Config.Symbols, cols: cols, sections: secs, themeArg: o.Config.TUI.Theme,
 		save: o.Save, home: o.Home, now: now, noTimers: o.NoTimers,
 		owners: append([]string{All}, o.Owners...), owner: o.Owner, lens: columns.Local, cursor: o.Select,
 		order: map[string]int{}, expanded: map[string]bool{}, folds: map[string]bool{}, pfold: map[string]bool{},
@@ -255,6 +281,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.id == m.statusID {
 			m.status = nil
 		}
+	case sayMsg:
+		return m, m.say(msg.s)
+	case planMsg:
+		cmd := m.planned(msg)
+		return m, cmd
+	case actionDoneMsg:
+		return m, m.actionDone(msg)
 	case tea.KeyPressMsg:
 		cmd := m.key(msg.String())
 		m.sync()
@@ -295,6 +328,8 @@ func (m *Model) key(k string) tea.Cmd {
 		case m.filter != "":
 			m.filter = ""
 			m.relayout()
+		case m.hasResults():
+			m.eng.ClearResults()
 		default:
 			return m.say(seg{"press " + m.keys.First("quit") + " to quit", roleMuted})
 		}
@@ -339,14 +374,23 @@ func (m *Model) key(k string) tea.Cmd {
 	case on("preview_up"):
 		m.pscroll = max(0, m.pscroll-1)
 	default:
-		for _, a := range m.keys.Actions(keymap.ScopeList) {
-			if on(a) {
-				return m.say(seg{m.keys.Help(a) + ": not in this build yet", roleMuted})
-			}
-		}
+		cmd, _ := m.operate(k)
+		return cmd
 	}
 	return nil
 }
+
+// hasResults reports whether rows show what was done to them.
+func (m *Model) hasResults() bool {
+	for _, r := range m.snap.Rows {
+		if r.Op.Doing == "" && r.Op.Result != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func keymapAction(a string) keymap.Action { return keymap.Action(a) }
 
 // filterKey types into the filter: enter keeps it, esc clears it.
 func (m *Model) filterKey(k string) tea.Cmd {

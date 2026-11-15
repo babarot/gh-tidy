@@ -27,6 +27,9 @@ type popup struct {
 	body []drawn
 	top  int
 
+	// confirm runs what the popup asks about, on the confirm keys.
+	confirm func(m *Model) tea.Cmd
+
 	hints []hint
 	// rows are where the popup is on the screen, for the mouse: the first
 	// line of its items or body, and its left edge.
@@ -57,6 +60,14 @@ func (m *Model) ownerPopup() *popup {
 		}
 	}
 	return p
+}
+
+// confirmPopup asks before a change: the confirm keys run it, esc does not.
+func (m *Model) confirmPopup(title string, body []drawn, run func(*Model) tea.Cmd) *popup {
+	body = append(body, drawn{}, drawn{parts: []cell{{text: m.keys.First("confirm"), role: roleAccent, bold: true}, {text: " " + m.keys.Help("confirm"), role: rolePrompt},
+		{text: " · ", role: roleBorder}, {text: "esc", role: roleAccent, bold: true}, {text: " cancel", role: roleMuted}}})
+	return &popup{title: title, width: 100, body: body, confirm: run,
+		hints: []hint{{m.keys.First("confirm"), m.keys.Help("confirm")}, {"esc", "cancel"}}}
 }
 
 func (m *Model) helpPopup() *popup {
@@ -93,6 +104,10 @@ func (m *Model) popupKey(k string) tea.Cmd {
 		}
 		m.popup = nil
 		return nil
+	}
+	if p.confirm != nil && on("confirm") {
+		m.popup = nil
+		return p.confirm(m)
 	}
 	if p.body != nil {
 		switch {

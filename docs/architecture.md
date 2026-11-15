@@ -15,6 +15,7 @@ gh-tidy is split into packages by layer. A package imports only packages of lowe
 | 1 | `internal/config` | Reading the config file and reporting its mistakes | `internal/theme` | `github.com/charmbracelet/x/ansi`, `github.com/pelletier/go-toml/v2` |
 | 1 | `internal/tui/keymap` | Actions by name and their keys, after [keys]; the TUI writes no key in its code | - | - |
 | 2 | `internal/tui/columns` | The columns of the list and the sections of the preview pane, each an entry of a table that writes it from a copy of an owner | `internal/config`, `internal/model`, `internal/policy` | - |
+| 2 | `internal/command` | Running the programs other than git: gh to clone, the user's actions and worktree_remove, opening a URL, revealing a file, copying text | - | - |
 | 2 | `internal/repo` | One clone's state, read from git alone | `internal/gitx` | - |
 | 2 | `internal/local` | A clone's state and the facts about it, read from git, and the changes made to it with git | `internal/gitx`, `internal/model` | - |
 | 2 | `internal/store` | The files kept between starts: each owner's table as last read (the cache) and the user's choices (the state) | `internal/model` | - |
@@ -24,7 +25,7 @@ gh-tidy is split into packages by layer. A package imports only packages of lowe
 | 3 | `internal/cleanup` | What d removes and keeps, and removing it | `internal/config`, `internal/gitx`, `internal/repo` | - |
 | 4 | `internal/tui` | The screen: one owner's clones and repositories in a list, the preview of the row selected, the popups; what is known is the engine's | `internal/config`, `internal/model`, `internal/policy`, `internal/theme`, `internal/tui/columns`, `internal/tui/keymap` | `charm.land/bubbletea/v2`, `charm.land/lipgloss/v2`, `github.com/charmbracelet/x/ansi` |
 | 4 | `internal/legacy/tui` | The terminal UI being replaced; removed with the code only it uses | `internal/cleanup`, `internal/config`, `internal/github`, `internal/gitx`, `internal/locate`, `internal/repo`, `internal/theme`, `internal/tui/keymap` | `charm.land/bubbletea/v2`, `charm.land/lipgloss/v2`, `github.com/charmbracelet/x/ansi` |
-| 5 | `internal/app` | Putting gh-tidy together: flags, settings, the engine built from the concrete packages, the owner to open, the screen | `internal/config`, `internal/engine`, `internal/github`, `internal/local`, `internal/locate`, `internal/logging`, `internal/model`, `internal/store`, `internal/tui`, `internal/version` | `charm.land/bubbletea/v2` |
+| 5 | `internal/app` | Putting gh-tidy together: flags, settings, the engine built from the concrete packages, the owner to open, the screen | `internal/command`, `internal/config`, `internal/engine`, `internal/github`, `internal/local`, `internal/locate`, `internal/logging`, `internal/model`, `internal/store`, `internal/tui`, `internal/version` | `charm.land/bubbletea/v2` |
 | 6 | `cmd/tidy-next` | The new screen while it is built, beside the current gh-tidy | `internal/app` | - |
 | 5 | `main` | Flags, config and starting the TUI | `internal/logging`, `internal/config`, `internal/locate`, `internal/legacy/tui`, `internal/repo`, `internal/version` | `charm.land/bubbletea/v2` |
 
@@ -36,7 +37,7 @@ Standard library packages that reach outside the process:
 | `net/http` | `internal/github` |
 | `net/rpc` | - |
 | `net/smtp` | - |
-| `os/exec` | `internal/cleanup`, `internal/gittest`, `internal/gitx`, `internal/legacy/tui` |
+| `os/exec` | `internal/cleanup`, `internal/command`, `internal/gittest`, `internal/gitx`, `internal/legacy/tui` |
 | `syscall` | - |
 <!-- layers:end -->
 

@@ -159,11 +159,72 @@ func clone(name string, f func(*model.Clone)) model.Clone {
 }
 
 type world struct {
-	t     *testing.T
-	local *fakeLocal
-	gh    *fakeGitHub
-	eng   *engine.Engine
+	t      *testing.T
+	local  *fakeLocal
+	gh     *fakeGitHub
+	change *fakeChange
+	cmds   *fakeCommands
+	eng    *engine.Engine
 }
+
+// fakeChange records the changes asked of git and gh, and makes them.
+type fakeChange struct {
+	mu    sync.Mutex
+	local *fakeLocal
+	calls []string
+}
+
+func (f *fakeChange) record(s string) { f.mu.Lock(); f.calls = append(f.calls, s); f.mu.Unlock() }
+func (f *fakeChange) seen() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.calls)
+}
+func (f *fakeChange) Fetch(_ context.Context, path string) error {
+	f.record("fetch " + filepath.Base(path))
+	return nil
+}
+func (f *fakeChange) AdvanceFacts(_ context.Context, path, name string, src model.DefaultSource) model.AdvanceFacts {
+	return model.AdvanceFacts{Default: name, DefaultSource: src, LocalExists: true, RemoteExists: true, Upstream: "origin/" + name, Behind: 2, FastForward: true}
+}
+func (f *fakeChange) FastForwardRef(_ context.Context, path, name string) error {
+	f.record("ff " + filepath.Base(path))
+	return nil
+}
+func (f *fakeChange) MergeFastForward(context.Context, string, string) error { return nil }
+func (f *fakeChange) CleanupFacts(_ context.Context, c model.Clone) (model.CleanupFacts, error) {
+	return f.local.WorktreeFacts(context.Background(), c)
+}
+func (f *fakeChange) WorktreeDirty(context.Context, string) (int, error) { return 0, nil }
+func (f *fakeChange) RemoveWorktree(_ context.Context, path, wt, branch string) error {
+	f.record("remove " + wt)
+	return nil
+}
+func (f *fakeChange) BranchExists(context.Context, string, string) bool                { return false }
+func (f *fakeChange) DeleteMergedBranch(context.Context, string, string, string) error { return nil }
+func (f *fakeChange) DeleteBranch(context.Context, string, string) error               { return nil }
+func (f *fakeChange) PruneWorktrees(context.Context, string) error                     { return nil }
+func (f *fakeChange) Clone(_ context.Context, host, slug, dir string) error {
+	f.record("clone " + slug + " " + dir)
+	f.local.add(clone(filepath.Base(dir), nil), nil)
+	return nil
+}
+
+// fakeCommands records the programs the screen would run.
+type fakeCommands struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+func (f *fakeCommands) record(s string) { f.mu.Lock(); f.calls = append(f.calls, s); f.mu.Unlock() }
+func (f *fakeCommands) Run(_ context.Context, dir string, argv []string) (string, error) {
+	f.record("run " + dir + " " + strings.Join(argv, " "))
+	return "ok\nall done", nil
+}
+func (f *fakeCommands) Interactive(dir string, argv []string) tea.ExecCommand { return nil }
+func (f *fakeCommands) OpenURL(u string) error                                { f.record("open " + u); return nil }
+func (f *fakeCommands) Reveal(p string) error                                 { f.record("reveal " + p); return nil }
+func (f *fakeCommands) Copy(t string) error                                   { f.record("copy " + t); return nil }
 
 func newWorld(t *testing.T) *world {
 	w := &world{t: t, local: &fakeLocal{clones: map[string]model.Clone{}, facts: map[string]model.CleanupFacts{}},
@@ -230,7 +291,10 @@ func newWorld(t *testing.T) *world {
 	w.gh.lists["mika"] = github.Listing{Repos: listed, Completeness: github.Complete,
 		Pages: github.Pages{ETags: []string{"e1"}, Ended: true, Completeness: github.Complete}}
 	w.gh.lists["acme"] = github.Listing{Completeness: github.Complete, Pages: github.Pages{ETags: []string{"e2"}, Ended: true, Completeness: github.Complete}}
-	w.eng = engine.New(engine.Options{Root: root, Local: w.local, GitHub: w.gh, Now: func() time.Time { return now }})
+	w.change = &fakeChange{local: w.local}
+	w.cmds = &fakeCommands{}
+	w.eng = engine.New(engine.Options{Root: root, Local: w.local, GitHub: w.gh, Change: w.change, Cloner: w.change,
+		Now: func() time.Time { return now }})
 	if err := w.eng.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +302,7 @@ func newWorld(t *testing.T) *world {
 }
 
 func (w *world) model(edit func(*Options)) *Model {
-	o := Options{Engine: w.eng, Config: config.Default(), Owners: []string{"acme", "mika"}, Owner: "mika",
+	o := Options{Engine: w.eng, Commands: w.cmds, Config: config.Default(), Owners: []string{"acme", "mika"}, Owner: "mika",
 		Home: "/src", Now: func() time.Time { return now }, NoTimers: true}
 	if edit != nil {
 		edit(&o)
@@ -282,8 +346,29 @@ func press(w *world, m *Model, keys ...string) {
 			r := []rune(k)[0]
 			msg = tea.KeyPressMsg{Code: r, Text: k}
 		}
-		m.Update(msg)
+		_, cmd := m.Update(msg)
+		w.run(m, cmd)
 		w.settle(m)
+	}
+}
+
+// run runs cmd and what it leads to, feeding the screen's own messages
+// back; the timers are off, so every command returns.
+func (w *world) run(m *Model, cmd tea.Cmd) {
+	queue := []tea.Cmd{cmd}
+	for len(queue) > 0 {
+		c := queue[0]
+		queue = queue[1:]
+		if c == nil {
+			continue
+		}
+		switch msg := c().(type) {
+		case tea.BatchMsg:
+			queue = append(queue, msg...)
+		case sayMsg, planMsg, actionDoneMsg:
+			_, next := m.Update(msg)
+			queue = append(queue, next)
+		}
 	}
 }
 
@@ -459,4 +544,125 @@ func TestTheQuietHeadStaysWhileRowsHold(t *testing.T) {
 	if !strings.Contains(screen(m), "▾ nothing to do") {
 		t.Errorf("the head went away:\n%s", screen(m))
 	}
+}
+
+func (w *world) to(m *Model, key string) {
+	w.t.Helper()
+	for i, l := range m.lines {
+		if l.key() == key {
+			m.moveTo(i)
+			return
+		}
+	}
+	w.t.Fatalf("no row %s", key)
+}
+
+const runner = "/src/github.com/mika/agent-runner"
+
+func TestFetchAndClearResults(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	w.to(m, runner)
+	press(w, m, "f")
+	row := func() string {
+		for l := range strings.SplitSeq(screen(m), "\n") {
+			if strings.Contains(l, "agent-runner ⌥") {
+				return l
+			}
+		}
+		return ""
+	}
+	if !slices.Contains(w.change.seen(), "fetch agent-runner") || !strings.Contains(row(), " fetched ") {
+		t.Fatalf("calls %v\n%s", w.change.seen(), screen(m))
+	}
+	press(w, m, "esc")
+	if strings.Contains(row(), " fetched ") {
+		t.Errorf("esc did not put the results away: %s", row())
+	}
+}
+
+func TestUpdateAllAsksFirst(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	press(w, m, "P")
+	if m.popup == nil || !strings.Contains(strings.Join(popupText(m), "\n"), "can update") {
+		t.Fatalf("no confirm:\n%s", strings.Join(popupText(m), "\n"))
+	}
+	press(w, m, "esc")
+	if len(w.change.seen()) != 0 {
+		t.Fatalf("esc ran it: %v", w.change.seen())
+	}
+	press(w, m, "P", "y")
+	if n := len(slices.DeleteFunc(w.change.seen(), func(s string) bool { return !strings.HasPrefix(s, "ff ") })); n != 6 {
+		t.Errorf("%d fast-forwards: %v", n, w.change.seen())
+	}
+}
+
+func TestCleanupShowsThePlan(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	w.to(m, runner)
+	press(w, m, "d")
+	text := strings.Join(popupText(m), "\n")
+	if !strings.Contains(text, "remove ⌥ /wt/landed") || !strings.Contains(text, "keep") {
+		t.Fatalf("plan:\n%s", text)
+	}
+	press(w, m, "y")
+	if !slices.Contains(w.change.seen(), "remove /wt/landed") || slices.Contains(w.change.seen(), "remove /wt/try-ui") {
+		t.Errorf("calls %v", w.change.seen())
+	}
+}
+
+func TestCloneOpenCopyAndActions(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(func(o *Options) {
+		o.Config.Actions = []config.Action{{Key: "H", Name: "hello", Run: []string{"echo", "{repo}", "{branch}"}, Confirm: true}}
+	})
+	for i, l := range m.lines {
+		if l.head == headNotCloned {
+			m.moveTo(i)
+		}
+	}
+	press(w, m, "enter")
+	w.to(m, "github.com/mika/tool-shed")
+	press(w, m, "c")
+	if !slices.Contains(w.change.seen(), "clone mika/tool-shed /src/github.com/mika/tool-shed") {
+		t.Fatalf("calls %v", w.change.seen())
+	}
+	if !strings.Contains(screen(m), "cloned") {
+		t.Errorf("not cloned:\n%s", screen(m))
+	}
+	w.to(m, runner)
+	press(w, m, "o", "y", "H")
+	if m.popup == nil || !strings.Contains(strings.Join(popupText(m), "\n"), "echo mika/agent-runner retry-backoff") {
+		t.Fatalf("action confirm:\n%s", strings.Join(popupText(m), "\n"))
+	}
+	press(w, m, "enter")
+	want := []string{"open https://github.com/mika/agent-runner", "copy " + runner, "run " + runner + " echo mika/agent-runner retry-backoff"}
+	if got := w.cmds.calls; !slices.Equal(got, want) {
+		t.Errorf("commands %q, want %q", got, want)
+	}
+	if !strings.Contains(screen(m), "hello: all done") {
+		t.Errorf("no result:\n%s", screen(m))
+	}
+}
+
+func TestAnActionOnAKeyTaken(t *testing.T) {
+	w := newWorld(t)
+	cfg := config.Default()
+	cfg.Actions = []config.Action{{Key: "f", Name: "x", Run: []string{"x"}}}
+	if _, err := New(Options{Engine: w.eng, Config: cfg}); err == nil || !strings.Contains(err.Error(), "fetch") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func popupText(m *Model) []string {
+	if m.popup == nil {
+		return nil
+	}
+	var out []string
+	for _, l := range m.popupLines() {
+		out = append(out, plain(l))
+	}
+	return out
 }

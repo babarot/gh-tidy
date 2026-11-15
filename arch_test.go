@@ -33,6 +33,7 @@ var layers = []layer{
 	{"internal/config", 1, []string{"internal/theme"}, []string{"github.com/charmbracelet/x/ansi", "github.com/pelletier/go-toml/v2"}, "Reading the config file and reporting its mistakes"},
 	{"internal/tui/keymap", 1, nil, nil, "Actions by name and their keys, after [keys]; the TUI writes no key in its code"},
 	{"internal/tui/columns", 2, []string{"internal/config", "internal/model", "internal/policy"}, nil, "The columns of the list and the sections of the preview pane, each an entry of a table that writes it from a copy of an owner"},
+	{"internal/command", 2, nil, nil, "Running the programs other than git: gh to clone, the user's actions and worktree_remove, opening a URL, revealing a file, copying text"},
 	{"internal/repo", 2, []string{"internal/gitx"}, nil, "One clone's state, read from git alone"},
 	{"internal/local", 2, []string{"internal/gitx", "internal/model"}, nil, "A clone's state and the facts about it, read from git, and the changes made to it with git"},
 	{"internal/store", 2, []string{"internal/model"}, nil, "The files kept between starts: each owner's table as last read (the cache) and the user's choices (the state)"},
@@ -44,7 +45,7 @@ var layers = []layer{
 		[]string{"charm.land/bubbletea/v2", "charm.land/lipgloss/v2", "github.com/charmbracelet/x/ansi"}, "The screen: one owner's clones and repositories in a list, the preview of the row selected, the popups; what is known is the engine's"},
 	{"internal/legacy/tui", 4, []string{"internal/cleanup", "internal/config", "internal/github", "internal/gitx", "internal/locate", "internal/repo", "internal/theme", "internal/tui/keymap"},
 		[]string{"charm.land/bubbletea/v2", "charm.land/lipgloss/v2", "github.com/charmbracelet/x/ansi"}, "The terminal UI being replaced; removed with the code only it uses"},
-	{"internal/app", 5, []string{"internal/config", "internal/engine", "internal/github", "internal/local", "internal/locate", "internal/logging", "internal/model", "internal/store", "internal/tui", "internal/version"},
+	{"internal/app", 5, []string{"internal/command", "internal/config", "internal/engine", "internal/github", "internal/local", "internal/locate", "internal/logging", "internal/model", "internal/store", "internal/tui", "internal/version"},
 		[]string{"charm.land/bubbletea/v2"}, "Putting gh-tidy together: flags, settings, the engine built from the concrete packages, the owner to open, the screen"},
 	{"cmd/tidy-next", 6, []string{"internal/app"}, nil, "The new screen while it is built, beside the current gh-tidy"},
 	{"", 5, []string{"internal/logging", "internal/config", "internal/locate", "internal/legacy/tui", "internal/repo", "internal/version"}, []string{"charm.land/bubbletea/v2"}, "Flags, config and starting the TUI"},
@@ -70,7 +71,7 @@ var reach = map[string][]string{
 	"net/http": {"internal/github"},
 	"net/rpc":  {},
 	"net/smtp": {},
-	"os/exec":  {"internal/cleanup", "internal/gittest", "internal/gitx", "internal/legacy/tui"},
+	"os/exec":  {"internal/cleanup", "internal/command", "internal/gittest", "internal/gitx", "internal/legacy/tui"},
 	"syscall":  {},
 }
 
