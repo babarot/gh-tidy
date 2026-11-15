@@ -80,22 +80,28 @@ func Main(r *model.Row) MainState {
 	default:
 		s.Kind = MainCurrent
 	}
+	// What p decides, from what is read: p fetches, reads the facts again
+	// and decides again, so this only says what it would do now. Behind
+	// is at least one, so that what would keep out commits GitHub has
+	// and the clone has not fetched is said too.
+	f := model.AdvanceFacts{Default: c.Default, DefaultSource: c.DefaultSource, LocalExists: true, Upstream: b.Upstream,
+		RemoteExists: c.DefaultOid != "", Behind: max(b.Behind, 1), FastForward: b.Ahead == 0}
 	for _, w := range c.Worktrees {
 		if w.Holds() != c.Default {
 			continue
 		}
-		s.CheckedOut = true
-		switch {
-		case w.Prunable:
-			s.Blocked = "held by a worktree that is gone"
-		case w.InProgress != "":
-			s.Blocked = fmt.Sprintf("a %s is stopped half way on %s", w.InProgress, c.Default)
-		case w.Dirty > 0:
-			s.Blocked = fmt.Sprintf("%d uncommitted change%s on %s", w.Dirty, plural(w.Dirty), c.Default)
+		f.Holders++
+		if w.Prunable {
+			f.HeldByMissing = true
+			continue
+		}
+		if f.CheckedOut == "" {
+			f.CheckedOut, f.Dirty, f.InProgress = w.Path, w.Tracked, w.InProgress
 		}
 	}
-	if !c.DefaultSource.Trusted() {
-		s.Blocked = c.Default + " is a guess: run git remote set-head origin -a"
+	s.CheckedOut = f.CheckedOut != ""
+	if a := policy.DecideAdvance(f); a.Action == policy.AdvanceSkip {
+		s.Blocked = a.Why
 	}
 	return s
 }

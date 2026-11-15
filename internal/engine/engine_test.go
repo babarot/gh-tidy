@@ -25,6 +25,7 @@ type fakeLocal struct {
 	held   chan struct{}            // closed when a scan starts waiting
 
 	factReads, detailReads int
+	detailHold             chan struct{} // when set, Detail waits for it
 }
 
 func (f *fakeLocal) add(owner, name, slug string, edit func(*model.Clone)) {
@@ -103,6 +104,12 @@ func (f *fakeLocal) WorktreeFacts(_ context.Context, c model.Clone) (model.Clean
 // Detail answers with the clone's head as the subject of its one commit,
 // so that a test can tell which read it got.
 func (f *fakeLocal) Detail(_ context.Context, c model.Clone, tree string) model.Detail {
+	f.mu.Lock()
+	hold := f.detailHold
+	f.mu.Unlock()
+	if hold != nil {
+		<-hold
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.detailReads++
@@ -770,6 +777,9 @@ func TestWorktreeFactsAreReadWithTheClone(t *testing.T) {
 		c.Worktrees = []model.Worktree{{Path: "/src/github.com/me/app", Main: true}, {Path: "/wt/x", Branch: "x"}}
 	})
 	w.local.add("me", "plain", "me/plain", nil)
+	w.local.add("me", "loose", "me/loose", func(c *model.Clone) {
+		c.Branches = []model.Branch{{Name: "main", Upstream: "origin/main"}, {Name: "done-pr", Upstream: "origin/done-pr", Gone: true}}
+	})
 	e := w.engine()
 	e.Open("me")
 	idle(t, e)
@@ -779,7 +789,10 @@ func TestWorktreeFactsAreReadWithTheClone(t *testing.T) {
 	if r := rowOf(e.Owner(), "/src/github.com/me/plain"); r.Facts.Has {
 		t.Error("facts read for a clone without linked worktrees")
 	}
-	if w.local.factReads != 1 {
+	if r := rowOf(e.Owner(), "/src/github.com/me/loose"); !r.Facts.Has {
+		t.Error("facts not read for a clone with a branch whose upstream is gone")
+	}
+	if w.local.factReads != 2 {
 		t.Errorf("fact reads = %d", w.local.factReads)
 	}
 }
@@ -811,5 +824,30 @@ func TestDetailIsReadWhenAskedAndForgottenWhenTheCloneChanges(t *testing.T) {
 	}
 	if _, ok := e.Detail("/src/github.com/me/none", ""); ok {
 		t.Error("a detail of a clone not known")
+	}
+}
+
+func TestADetailOfAnOlderCopyOfTheCloneIsDropped(t *testing.T) {
+	w := newWorld(t)
+	w.local.add("me", "app", "me/app", func(c *model.Clone) { c.Head = "old" })
+	e := w.engine()
+	e.Open("me")
+	idle(t, e)
+	key := model.CloneKey("/src/github.com/me/app")
+	hold := make(chan struct{})
+	w.local.mu.Lock()
+	w.local.detailHold = hold
+	w.local.mu.Unlock()
+	e.Detail(key, "") // read from the copy with head old, and waits
+	w.local.add("me", "app", "me/app", func(c *model.Clone) { c.Head = "new" })
+	e.rescan(context.Background(), string(key))
+	close(hold)
+	idle(t, e)
+	if d, ok := e.Detail(key, ""); ok {
+		t.Errorf("a detail of the older copy was kept: %+v", d)
+	}
+	idle(t, e)
+	if d, _ := e.Detail(key, ""); d.Unpushed[0].Subject != "new" {
+		t.Errorf("detail = %+v", d)
 	}
 }

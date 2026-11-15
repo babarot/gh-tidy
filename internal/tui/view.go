@@ -431,7 +431,7 @@ func (m *Model) hints() []hint {
 	h := func(a keymap.Action) hint { return hint{m.keys.First(a), m.keys.Help(a)} }
 	other := columns.Lenses[(slices.Index(columns.Lenses, m.lens)+1)%len(columns.Lenses)]
 	lens := hint{m.keys.First("lens"), string(other)}
-	pane := hint{m.keys.First("preview_grow") + " " + m.keys.First("preview_shrink"), "preview"}
+	pane := hint{strings.TrimSpace(m.keys.First("preview_grow") + " " + m.keys.First("preview_shrink")), "preview"}
 	if m.lens == columns.GitHub {
 		return []hint{lens, h("open_browser"), h("clone"), h("search"), h("choose_owner"), h("help"), h("quit")}
 	}

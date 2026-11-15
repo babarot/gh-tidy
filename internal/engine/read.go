@@ -196,11 +196,31 @@ func (e *Engine) scan(path string) scanned {
 		c = e.local.SetDefault(e.ctx, c, def)
 	}
 	s := scanned{clone: c}
-	if len(c.Linked()) > 0 {
+	if needsFacts(c) {
 		s.facts, s.factsErr = e.local.WorktreeFacts(e.ctx, c)
 		s.hasFacts = true
 	}
 	return s
+}
+
+// needsFacts reports whether the list needs to know which of c's branches
+// are merged: to judge its linked worktrees, or to tell whether a branch
+// in no worktree, never pushed or with its upstream deleted, holds work
+// found nowhere else.
+func needsFacts(c model.Clone) bool {
+	if len(c.Linked()) > 0 {
+		return true
+	}
+	held := map[string]bool{}
+	for _, w := range c.Worktrees {
+		held[w.Holds()] = true
+	}
+	for _, b := range c.Branches {
+		if b.Name != c.Default && !held[b.Name] && (b.Upstream == "" || b.Gone) {
+			return true
+		}
+	}
+	return false
 }
 
 // scanned is a clone read, with what judging its linked worktrees needs
@@ -229,6 +249,7 @@ func (e *Engine) putClone(o *owner, s scanned) {
 		return
 	}
 	r.Local.Set(c, now)
+	e.reads[c.Key]++
 	switch {
 	case !s.hasFacts:
 		r.Facts = model.Read[model.CleanupFacts]{}

@@ -86,6 +86,9 @@ type Worktree struct {
 	// Dirty is the number of changed and untracked files; -1 when not read
 	// (a prunable worktree).
 	Dirty int
+	// Tracked is the number of changes to tracked files alone, which is
+	// what keeps a fast-forward out; -1 when not read.
+	Tracked int
 	// InProgress is an operation stopped half way in it: "rebase", "merge",
 	// "cherry-pick", "revert" or "bisect"; empty when none.
 	InProgress string

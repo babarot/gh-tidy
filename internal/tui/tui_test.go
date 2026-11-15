@@ -435,3 +435,28 @@ func TestBadSettings(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+func TestPaneKeysTurnedOff(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(func(o *Options) {
+		o.Config.Keys = map[string]any{"preview_grow": []any{}, "preview_shrink": []any{}}
+	})
+	if s := screen(m); strings.Contains(s, " preview") {
+		t.Errorf("a hint without keys:\n%s", s)
+	}
+}
+
+func TestTheQuietHeadStaysWhileRowsHold(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	m.folds[headQuiet] = false
+	m.relayout()
+	// Rows hold their places while something is read.
+	m.snap.Reading = "reading GitHub"
+	m.order = map[string]int{}
+	m.relayout()
+	m.relayout()
+	if !strings.Contains(screen(m), "▾ nothing to do") {
+		t.Errorf("the head went away:\n%s", screen(m))
+	}
+}

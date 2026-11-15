@@ -117,6 +117,9 @@ type Engine struct {
 	// detailing those being read.
 	details   map[detailKey]model.Detail
 	detailing map[detailKey]bool
+	// reads counts the reads of each clone put, so that a detail read
+	// from an older copy of the clone is dropped.
+	reads map[model.CloneKey]int64
 }
 
 // detailKey is a clone, or one of its linked worktrees.
@@ -166,7 +169,7 @@ func New(o Options) *Engine {
 	}
 	e := &Engine{root: o.Root, host: o.GitHub.Host(), local: o.Local, change: o.Change, gh: o.GitHub, store: o.Store, log: log, now: now,
 		lanes: map[model.CloneKey]string{}, epoch: map[model.CloneKey]int64{},
-		details: map[detailKey]model.Detail{}, detailing: map[detailKey]bool{},
+		details: map[detailKey]model.Detail{}, detailing: map[detailKey]bool{}, reads: map[model.CloneKey]int64{},
 		localPool: newPool(runtime.NumCPU(), idle), netPool: newPool(networkAtOnce, idle), apiPool: newPool(apiAtOnce, idle),
 		idle: idle, owners: map[string]*owner{}, visible: map[string]bool{}, changed: make(chan struct{}, 1)}
 	e.budget = newBudget(now, log)

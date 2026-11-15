@@ -112,12 +112,22 @@ func Scan(ctx context.Context, path string) model.Clone {
 			return
 		}
 		for i, w := range gitx.ParseWorktrees(out) {
-			wt := model.Worktree{Path: w.Path, Head: w.Head, Branch: w.Branch, Main: i == 0, Prunable: w.Prunable, Locked: w.Locked, Dirty: -1}
+			wt := model.Worktree{Path: w.Path, Head: w.Head, Branch: w.Branch, Main: i == 0, Prunable: w.Prunable, Locked: w.Locked, Dirty: -1, Tracked: -1}
 			if !w.Prunable {
 				if i == 0 {
-					wt.Dirty = c.Dirty() + c.Untracked
+					wt.Dirty, wt.Tracked = c.Dirty()+c.Untracked, c.Dirty()
 				} else if s, err := gitx.Run(ctx, w.Path, "status", "--porcelain", "-z"); err == nil {
-					wt.Dirty = strings.Count(s, "\x00")
+					wt.Dirty, wt.Tracked = 0, 0
+					for e := range strings.SplitSeq(s, "\x00") {
+						switch {
+						case e == "":
+						case strings.HasPrefix(e, "??"):
+							wt.Dirty++
+						case len(e) > 3:
+							wt.Dirty++
+							wt.Tracked++
+						}
+					}
 				}
 			}
 			c.Worktrees = append(c.Worktrees, wt)

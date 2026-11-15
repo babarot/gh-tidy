@@ -243,9 +243,14 @@ func (m *Model) relayout() {
 		m.order = map[string]int{}
 	}
 	m.lines = m.buildLines()
+	// The rows above the first head keep their places; those in a section
+	// stay in it.
 	if hold && len(m.order) == 0 {
 		for i, l := range m.lines {
-			if l.kind != columns.KindHead && l.kind != columns.KindWorktree {
+			if l.kind == columns.KindHead {
+				break
+			}
+			if l.kind != columns.KindWorktree {
 				m.order[l.key()] = i + 1
 			}
 		}

@@ -16,11 +16,12 @@ const keepDetails = 16
 func (e *Engine) Detail(clone model.CloneKey, tree string) (model.Detail, bool) {
 	k := detailKey{clone, tree}
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	if d, ok := e.details[k]; ok {
+		e.mu.Unlock()
 		return d, true
 	}
 	if e.detailing[k] {
+		e.mu.Unlock()
 		return model.Detail{}, false
 	}
 	var c model.Clone
@@ -32,16 +33,21 @@ func (e *Engine) Detail(clone model.CloneKey, tree string) (model.Detail, bool) 
 		}
 	}
 	if !found {
+		e.mu.Unlock()
 		return model.Detail{}, false
 	}
 	e.detailing[k] = true
-	epoch := e.epoch[clone]
+	epoch, reads := e.epoch[clone], e.reads[clone]
+	// Queued after letting go of e.mu: the pool asks tasks whether they
+	// are alive under its own lock, and they take e.mu.
+	e.mu.Unlock()
 	e.localPool.add(prioAsked, func() bool { return true }, func() {
 		d := e.local.Detail(e.ctx, c, tree)
 		e.mu.Lock()
 		delete(e.detailing, k)
-		// A change started or ended meanwhile: read it again when asked.
-		if e.epoch[clone] == epoch {
+		// A change started or ended meanwhile, or the clone was read again:
+		// the detail is of an older copy, read again when asked.
+		if e.epoch[clone] == epoch && e.reads[clone] == reads {
 			if len(e.details) >= keepDetails {
 				clear(e.details)
 			}

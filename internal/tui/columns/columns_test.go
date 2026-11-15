@@ -91,9 +91,26 @@ func TestMainCell(t *testing.T) {
 }
 
 func TestCanUpdate(t *testing.T) {
-	r := row(func(c *model.Clone) { c.Branches[0].Behind = 2; c.Worktrees[0].Dirty = 1 })
+	r := row(func(c *model.Clone) { c.Branches[0].Behind = 2; c.Worktrees[0].Dirty, c.Worktrees[0].Tracked = 1, 1 })
 	if s := Main(r); s.CanUpdate() || !strings.Contains(s.Blocked, "uncommitted") {
 		t.Errorf("dirty main: %+v", s)
+	}
+	// Untracked files do not keep a fast-forward out.
+	r = row(func(c *model.Clone) { c.Branches[0].Behind = 2; c.Worktrees[0].Dirty = 2 })
+	if s := Main(r); !s.CanUpdate() {
+		t.Errorf("untracked only: %+v", s)
+	}
+	// Two worktrees holding main, or one that cannot be read, keep it out.
+	r = row(func(c *model.Clone) {
+		c.Branches[0].Behind = 2
+		c.Worktrees = append(c.Worktrees, model.Worktree{Path: "/wt/m", Branch: "main"})
+	})
+	if Main(r).CanUpdate() {
+		t.Error("main held twice updates")
+	}
+	r = row(func(c *model.Clone) { c.Branches[0].Behind = 2; c.Worktrees[0].Tracked = -1 })
+	if Main(r).CanUpdate() {
+		t.Error("an unreadable holder updates")
 	}
 	r = row(func(c *model.Clone) { c.Branches[0].Behind = 2; c.DefaultSource = model.DefaultFromGuess })
 	if Main(r).CanUpdate() {
