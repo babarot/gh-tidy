@@ -13,7 +13,7 @@ gh-tidy keeps one GitHub owner's local clones up to date and clear of finished w
 
 ## Rules
 
-- Change nothing on the machine or on GitHub unless the user asks with a key (`f` `F` `p` `P` `d` `D` `c` and the actions); the mouse only moves, opens and folds. GitHub is read unasked only within the engine's budget (ADR-005), and only what the columns and sections shown need.
+- Change nothing on the machine or on GitHub unless the user asks with a key (`f` `F` `p` `P` `d` `D` `c` `L` and the actions); the mouse only moves, opens and folds. GitHub is read unasked only within the engine's budget (ADR-005), and only what the columns and sections shown need.
 - Asking GitHub for `defaultBranchRef` while listing an owner's repositories, even its `name` alone, takes 25 seconds for 400 repositories instead of 6 (measured on 2026-11-14). Keep it in the lookup by name, batched with aliases, not in the list.
 - Match clones to GitHub by the origin URL, never by the directory name.
 - `d` never forces anything onto the user's work: a worktree with changes, one never committed to, the one gh tidy runs in and a branch not merged into `origin/<default>` stay unless a setting says otherwise. Re-check that a branch is merged right before deleting it.
