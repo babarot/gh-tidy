@@ -49,6 +49,9 @@ type fakeNode struct {
 	prs       int
 	alerts    int
 	alertsOff bool
+	// perm is the token's role; empty is ADMIN. A role that cannot read
+	// the alerts gets a count of 0 and turned on, as GitHub answers.
+	perm string
 }
 
 func newFake() *fake {
@@ -228,9 +231,19 @@ func (f *fake) graphql(w http.ResponseWriter, r *http.Request) {
 			v["issues"] = map[string]int{"totalCount": n.issues}
 			v["pullRequests"] = map[string]int{"totalCount": n.prs}
 		}
+		if strings.Contains(fields, "viewerPermission") {
+			perm := n.perm
+			if perm == "" {
+				perm = "ADMIN"
+			}
+			v["viewerPermission"] = perm
+		}
 		if strings.Contains(fields, "vulnerabilityAlerts") {
 			v["hasVulnerabilityAlertsEnabled"] = !n.alertsOff
-			if f.denied[slug] {
+			if n.perm == "READ" || n.perm == "TRIAGE" {
+				v["hasVulnerabilityAlertsEnabled"] = true
+				v["vulnerabilityAlerts"] = map[string]int{"totalCount": n.alerts}
+			} else if f.denied[slug] {
 				v["vulnerabilityAlerts"] = nil
 				errs = append(errs, map[string]any{"type": "FORBIDDEN", "path": []string{alias, "vulnerabilityAlerts"}, "message": "Resource not accessible by integration"})
 			} else {

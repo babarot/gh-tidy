@@ -92,6 +92,16 @@ func TestLiveHeavy(t *testing.T) {
 		}
 	}
 	t.Logf("Dependabot alerts: %d counted, %d off", counted, off)
+
+	// A public repository of another owner: GitHub counts its alerts as 0,
+	// with no error, to a token that may not read them.
+	got, _, err := c.Heavy(ctx, []string{"cli/cli"}, Want{Alerts: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got[0].Found || !got[0].AlertsDenied {
+		t.Errorf("another owner's alerts = %+v, want not readable", got[0])
+	}
 	if _, err := c.List(ctx, "no-such-owner-for-tidy-test", OwnerUser, Pages{}, 1); !errors.Is(err, ErrNoOwner) {
 		t.Errorf("a missing owner: %v", err)
 	}

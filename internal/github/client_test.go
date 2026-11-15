@@ -118,8 +118,10 @@ func TestHeavy(t *testing.T) {
 	f.nodes["me/no-alerts"] = fakeNode{pushed: pushed, def: "main", oid: "1", alertsOff: true}
 	f.nodes["org/secret"] = fakeNode{pushed: pushed, def: "main", oid: "2"}
 	f.denied["org/secret"] = true
+	f.nodes["other/public"] = fakeNode{pushed: pushed, def: "main", oid: "3", perm: "READ"}
+	f.nodes["other/shared"] = fakeNode{pushed: pushed, def: "main", oid: "4", perm: "READ", alerts: 1}
 	c := f.client(t)
-	got, rate, err := c.Heavy(context.Background(), []string{"me/app", "me/old-name", "me/gone", "me/no-alerts", "org/secret"}, Want{Default: true, CI: true, Counts: true, Alerts: true})
+	got, rate, err := c.Heavy(context.Background(), []string{"me/app", "me/old-name", "me/gone", "me/no-alerts", "org/secret", "other/public", "other/shared"}, Want{Default: true, CI: true, Counts: true, Alerts: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,6 +143,14 @@ func TestHeavy(t *testing.T) {
 	}
 	if !secret.AlertsDenied || secret.AlertsOff || secret.Err != "" {
 		t.Errorf("alerts denied = %+v", secret)
+	}
+	// A role that cannot read the alerts gets 0 with no error: not
+	// readable. Alerts counted were read, whatever the role.
+	if public := got[5]; !public.AlertsDenied || public.Alerts != 0 {
+		t.Errorf("0 alerts from a read role = %+v", public)
+	}
+	if shared := got[6]; shared.AlertsDenied || shared.Alerts != 1 {
+		t.Errorf("alerts given to a read role = %+v", shared)
 	}
 }
 

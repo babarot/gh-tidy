@@ -62,7 +62,9 @@ func (c *Client) Heavy(ctx context.Context, slugs []string, want Want) ([]HeavyR
 		fields = append(fields, "issues(states: OPEN) { totalCount }", "pullRequests(states: OPEN) { totalCount }")
 	}
 	if want.Alerts {
-		fields = append(fields, "hasVulnerabilityAlertsEnabled", "vulnerabilityAlerts(states: OPEN) { totalCount }")
+		// viewerPermission tells 0 alerts from alerts the token may not
+		// read: GraphQL answers both with a count of 0, and no error.
+		fields = append(fields, "viewerPermission", "hasVulnerabilityAlertsEnabled", "vulnerabilityAlerts(states: OPEN) { totalCount }")
 	}
 	var q strings.Builder
 	q.WriteString("query {")
@@ -137,10 +139,16 @@ func (c *Client) Heavy(ctx context.Context, slugs []string, want Want) ([]HeavyR
 		h.Issues, h.PRs = n.Issues.TotalCount, n.PullRequests.TotalCount
 		if want.Alerts && !h.AlertsDenied {
 			switch {
-			case n.HasVulnerabilityAlertsEnabled != nil && !*n.HasVulnerabilityAlertsEnabled:
-				h.AlertsOff = true
 			case n.VulnerabilityAlerts == nil:
 				h.AlertsDenied = true // null without an error: not readable either
+			case n.VulnerabilityAlerts.TotalCount == 0 && !readsAlerts(n.ViewerPermission):
+				// Measured on 2026-11-15: a token that may not read the
+				// alerts gets a count of 0, and turned on, with no error.
+				// Alerts counted are alerts read, whatever the role; 0
+				// from a role that cannot read them says nothing.
+				h.AlertsDenied = true
+			case n.HasVulnerabilityAlertsEnabled != nil && !*n.HasVulnerabilityAlertsEnabled:
+				h.AlertsOff = true
 			default:
 				h.Alerts = n.VulnerabilityAlerts.TotalCount
 			}
@@ -161,8 +169,21 @@ type node2 struct {
 	}
 	Issues                        struct{ TotalCount int }
 	PullRequests                  struct{ TotalCount int }
+	ViewerPermission              string
 	HasVulnerabilityAlertsEnabled *bool
 	VulnerabilityAlerts           *struct{ TotalCount int }
+}
+
+// readsAlerts reports whether a role on a repository reads its Dependabot
+// alerts: write, maintain and admin do, as do organization owners, who
+// are admins of every repository. Others read them only when an admin
+// gives them access, which the role does not say.
+func readsAlerts(permission string) bool {
+	switch permission {
+	case "WRITE", "MAINTAIN", "ADMIN":
+		return true
+	}
+	return false
 }
 
 // quote writes s as a GraphQL string.

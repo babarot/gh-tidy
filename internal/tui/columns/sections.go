@@ -452,7 +452,7 @@ func GitHubParts(x Ctx, it Item) []Part {
 	if h.Fields.Has(model.NeedAlerts) {
 		switch {
 		case h.AlertsDenied:
-			ps = append(ps, Part{Head: head("DEPENDABOT n/a", Dim, ""), Lines: []Cell{{{Text: "  this token may not read them (admin or security manager)", Role: Muted}}}})
+			ps = append(ps, Part{Head: head("DEPENDABOT n/a", Dim, ""), Lines: []Cell{{{Text: "  this token may not read them: they are for write, maintain and admin access, or whom an admin gives them to", Role: Muted}}}})
 		case h.AlertsOff:
 			ps = append(ps, Part{Head: head("DEPENDABOT off", Muted, ""), Lines: []Cell{{{Text: "  Dependabot alerts are not turned on for this repository, so nothing is checked", Role: Muted}}}})
 		case h.Alerts > 0:
