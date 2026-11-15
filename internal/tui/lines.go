@@ -255,16 +255,23 @@ func (m *Model) relayout() {
 			}
 		}
 	}
-	// The row is gone, or folded away: the cursor stays where it was on
-	// the screen.
+	found := false
 	for i, l := range m.lines {
 		if l.key() == m.cursor {
-			m.sel = i
+			m.sel, found = i, true
 			break
 		}
 	}
+	// Until the user moves, the cursor waits on the first row for the row
+	// it was asked to start on, which may not be read yet. After, a row
+	// gone or folded away leaves the cursor where it was on the screen.
+	if !found && !m.moved {
+		m.sel = 0
+	}
 	if len(m.lines) > 0 {
 		m.sel = min(m.sel, len(m.lines)-1)
-		m.cursor = m.lines[m.sel].key()
+		if found || m.moved {
+			m.cursor = m.lines[m.sel].key()
+		}
 	}
 }

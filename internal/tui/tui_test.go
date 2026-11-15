@@ -666,3 +666,21 @@ func popupText(m *Model) []string {
 	}
 	return out
 }
+
+func TestTheCursorWaitsForTheRowsBeingRead(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(func(o *Options) { o.Select = "/src/github.com/mika/dotfiles" })
+	if l, _ := m.selected(); l.key() != "/src/github.com/mika/dotfiles" {
+		t.Errorf("started on %s", l.key())
+	}
+	// Before anything is read only a head shows; the first clone read
+	// comes above it, and the cursor goes with the top.
+	m2 := w.model(nil)
+	m2.snap = model.Owner{List: model.ListPartial}
+	m2.relayout()
+	m2.snap = w.eng.Owner()
+	m2.relayout()
+	if m2.sel != 0 {
+		t.Errorf("the cursor stayed on line %d", m2.sel)
+	}
+}

@@ -110,6 +110,7 @@ type Model struct {
 	lines  []line
 	order  map[string]int
 	cursor string
+	moved  bool // the user moved the cursor since the owner was opened
 	sel    int
 	offset int
 
@@ -421,7 +422,7 @@ func (m *Model) moveTo(i int) {
 		return
 	}
 	m.sel = max(0, min(i, len(m.lines)-1))
-	m.cursor = m.lines[m.sel].key()
+	m.cursor, m.moved = m.lines[m.sel].key(), true
 }
 
 // toggle opens or closes the worktrees of the clone selected, or the
@@ -455,6 +456,10 @@ func (m *Model) setLens(l columns.Lens) {
 	if l == m.lens {
 		return
 	}
+	// The cursor stays on the repository it is on.
+	if sel, ok := m.selected(); ok {
+		m.cursor, m.moved = sel.key(), true
+	}
 	m.lens = l
 	m.order = map[string]int{}
 	m.relayout()
@@ -474,7 +479,7 @@ func (m *Model) openOwner(o string) {
 	m.owner = o
 	m.order = map[string]int{}
 	m.filter, m.filtering = "", false
-	m.sel, m.offset, m.cursor = 0, 0, ""
+	m.sel, m.offset, m.cursor, m.moved = 0, 0, "", false
 	m.eng.Open(o)
 	m.refresh()
 	m.keep()
