@@ -119,6 +119,8 @@ func (f *fakeLocal) Detail(_ context.Context, c model.Clone, tree string) model.
 type fakeGitHub struct {
 	lists map[string]github.Listing
 	heavy map[string]github.HeavyRepo
+	mu    sync.Mutex
+	asked int // repositories asked for by name
 }
 
 func (f *fakeGitHub) Host() string { return "github.com" }
@@ -132,6 +134,9 @@ func (f *fakeGitHub) List(_ context.Context, owner string, _ github.OwnerKind, _
 }
 
 func (f *fakeGitHub) Heavy(_ context.Context, slugs []string, _ github.Want) ([]github.HeavyRepo, github.Rate, error) {
+	f.mu.Lock()
+	f.asked += len(slugs)
+	f.mu.Unlock()
 	var out []github.HeavyRepo
 	for _, s := range slugs {
 		k := model.NewRemoteKey("github.com", s)
@@ -176,6 +181,7 @@ type fakeChange struct {
 	mu    sync.Mutex
 	local *fakeLocal
 	calls []string
+	block chan struct{} // when set, Fetch waits for it
 }
 
 func (f *fakeChange) record(s string) { f.mu.Lock(); f.calls = append(f.calls, s); f.mu.Unlock() }
@@ -185,6 +191,12 @@ func (f *fakeChange) seen() []string {
 	return slices.Clone(f.calls)
 }
 func (f *fakeChange) Fetch(_ context.Context, path string) error {
+	f.mu.Lock()
+	block := f.block
+	f.mu.Unlock()
+	if block != nil {
+		<-block
+	}
 	f.record("fetch " + filepath.Base(path))
 	return nil
 }
@@ -1040,8 +1052,34 @@ func TestAnEmptyListTakesKeys(t *testing.T) {
 func TestRefreshKey(t *testing.T) {
 	w := newWorld(t)
 	m := w.model(nil)
+	w.gh.mu.Lock()
+	before := w.gh.asked
+	w.gh.mu.Unlock()
 	press(w, m, "r")
-	if !strings.Contains(screen(m), "reading mika again") {
-		t.Errorf("r said nothing:\n%s", screen(m))
+	w.gh.mu.Lock()
+	defer w.gh.mu.Unlock()
+	if w.gh.asked == before {
+		t.Error("r did not read GitHub's fields again")
+	}
+}
+
+// While work goes on, the status line shows the spinner, the count and
+// the bar; nothing is said over it.
+func TestTheStatusLineShowsProgress(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	block := make(chan struct{})
+	w.change.mu.Lock()
+	w.change.block = block
+	w.change.mu.Unlock()
+	m.Update(tea.KeyPressMsg{Code: 'F', Text: "F"})
+	status := plain(m.statusLine())
+	if !strings.Contains(status, "fetching 0/6") || !strings.Contains(status, "▱") {
+		t.Errorf("status line while fetching: %q", status)
+	}
+	close(block)
+	w.settle(m)
+	if status := strings.TrimSpace(plain(m.statusLine())); status != "" {
+		t.Errorf("status line after: %q", status)
 	}
 }

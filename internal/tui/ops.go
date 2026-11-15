@@ -11,6 +11,7 @@ import (
 	"github.com/babarot/gh-tidy/internal/model"
 	"github.com/babarot/gh-tidy/internal/policy"
 	"github.com/babarot/gh-tidy/internal/tui/columns"
+	"github.com/babarot/gh-tidy/internal/tui/statusline"
 )
 
 // Commands are the programs other than git the screen runs: the user's
@@ -70,7 +71,7 @@ func (m *Model) busySaid(what string, busy []model.CloneKey) tea.Cmd {
 	if len(busy) == 0 {
 		return nil
 	}
-	return m.say(seg{fmt.Sprintf("%s: %d busy with another change, left alone", what, len(busy)), rolePrompt})
+	return m.say(statusline.Refused, fmt.Sprintf("%s: %d busy with another change, left alone", what, len(busy)))
 }
 
 func (m *Model) cleanupOpts(bulk bool) policy.Cleanup {
@@ -85,16 +86,17 @@ func (m *Model) operate(k string) (tea.Cmd, bool) {
 	case on("fetch"):
 		r, ok := m.target()
 		if !ok {
-			return m.say(seg{"select a clone to fetch", roleMuted}), true
+			return m.say(statusline.Info, "select a clone to fetch"), true
 		}
 		return m.busySaid("fetch", m.eng.Fetch([]model.CloneKey{r.Clone})), true
 	case on("fetch_all"):
 		ks := m.clones(hasOrigin)
-		return tea.Batch(m.say(seg{fmt.Sprintf("fetching %d clones", len(ks)), roleAccent}), m.busySaid("fetch", m.eng.Fetch(ks))), true
+		// The status line shows the fetches as they go: nothing to say.
+		return m.busySaid("fetch", m.eng.Fetch(ks)), true
 	case on("pull"):
 		r, ok := m.target()
 		if !ok {
-			return m.say(seg{"select a clone to update", roleMuted}), true
+			return m.say(statusline.Info, "select a clone to update"), true
 		}
 		return m.busySaid("update", m.eng.Advance([]model.CloneKey{r.Clone})), true
 	case on("pull_all"):
@@ -103,7 +105,7 @@ func (m *Model) operate(k string) (tea.Cmd, bool) {
 	case on("cleanup"):
 		r, ok := m.target()
 		if !ok {
-			return m.say(seg{"select a clone to clean up", roleMuted}), true
+			return m.say(statusline.Info, "select a clone to clean up"), true
 		}
 		return m.plan([]*model.Row{r}, false), true
 	case on("cleanup_all"):
@@ -115,32 +117,31 @@ func (m *Model) operate(k string) (tea.Cmd, bool) {
 			}
 		}
 		if len(rs) == 0 {
-			return m.say(seg{"no clone has worktrees", roleMuted}), true
+			return m.say(statusline.Info, "no clone has worktrees"), true
 		}
 		return m.plan(rs, true), true
 	case on("clone"):
 		l, ok := m.selected()
 		if !ok || l.kind != columns.KindRemote {
-			return m.say(seg{"select a repository not cloned to clone it", roleMuted}), true
+			return m.say(statusline.Info, "select a repository not cloned to clone it"), true
 		}
-		dir, err := m.eng.Clone(l.row.Remote)
-		if err != nil {
-			return m.say(seg{err.Error(), roleWarn}), true
+		if _, err := m.eng.Clone(l.row.Remote); err != nil {
+			return m.say(statusline.Failed, err.Error()), true
 		}
-		return m.say(seg{"cloning into " + m.short(dir), roleAccent}), true
+		return nil, true
 	case on("refresh"):
 		m.eng.Refresh()
-		return m.say(seg{"reading " + m.owner + " again", roleAccent}), true
+		return nil, true
 	case on("list"):
 		if m.snap.All {
-			return m.say(seg{"choose one owner to read its list", roleMuted}), true
+			return m.say(statusline.Info, "choose one owner to read its list"), true
 		}
 		m.eng.ReadList()
-		return m.say(seg{"reading the list of " + m.owner, roleAccent}), true
+		return nil, true
 	case on("open_browser"):
 		u := m.url()
 		if u == "" {
-			return m.say(seg{"not on GitHub", roleMuted}), true
+			return m.say(statusline.Info, "not on GitHub"), true
 		}
 		return m.outside(func() error { return m.cmds.OpenURL(u) }), true
 	case on("copy_path"):
@@ -148,13 +149,13 @@ func (m *Model) operate(k string) (tea.Cmd, bool) {
 		if p == "" {
 			return nil, true
 		}
-		return tea.Batch(tea.SetClipboard(p), m.outside(func() error { return m.cmds.Copy(p) }), m.say(seg{"copied " + m.short(p), roleOK})), true
+		return tea.Batch(tea.SetClipboard(p), m.outside(func() error { return m.cmds.Copy(p) }), m.say(statusline.Done, "copied "+m.short(p))), true
 	case on("copy_url"):
 		u := m.url()
 		if u == "" {
-			return m.say(seg{"not on GitHub", roleMuted}), true
+			return m.say(statusline.Info, "not on GitHub"), true
 		}
-		return tea.Batch(tea.SetClipboard(u), m.outside(func() error { return m.cmds.Copy(u) }), m.say(seg{"copied " + u, roleOK})), true
+		return tea.Batch(tea.SetClipboard(u), m.outside(func() error { return m.cmds.Copy(u) }), m.say(statusline.Done, "copied "+u)), true
 	case on("reveal"):
 		p := m.path()
 		if p == "" {
@@ -174,14 +175,17 @@ func (m *Model) operate(k string) (tea.Cmd, bool) {
 func (m *Model) outside(f func() error) tea.Cmd {
 	return func() tea.Msg {
 		if err := f(); err != nil {
-			return sayMsg{seg{err.Error(), roleWarn}}
+			return sayMsg{statusline.Failed, err.Error()}
 		}
 		return nil
 	}
 }
 
 // sayMsg puts a message on the status line from a command.
-type sayMsg struct{ s seg }
+type sayMsg struct {
+	kind statusline.Kind
+	text string
+}
 
 func (m *Model) short(p string) string {
 	if m.home != "" && strings.HasPrefix(p, m.home+"/") {
@@ -240,7 +244,7 @@ func (m *Model) updateAllPopup() *popup {
 		{parts: []cell{{text: "each is decided again after its fetch", role: roleMuted}}},
 	}
 	return m.confirmPopup("update all", body, func(m *Model) tea.Cmd {
-		return tea.Batch(m.say(seg{fmt.Sprintf("updating %d clones", len(ks)), roleAccent}), m.busySaid("update", m.eng.Advance(ks)))
+		return m.busySaid("update", m.eng.Advance(ks))
 	})
 }
 
@@ -256,7 +260,7 @@ func (m *Model) plan(rs []*model.Row, bulk bool) tea.Cmd {
 	eng, cwd := m.eng, m.cwd
 	m.planSeq++
 	seq, owner := m.planSeq, m.owner
-	return tea.Batch(m.say(seg{"reading what to clean up…", roleAccent}), func() tea.Msg {
+	return tea.Batch(m.say(statusline.Working, "reading what to clean up…"), func() tea.Msg {
 		plans := map[model.CloneKey]policy.Plan{}
 		for _, k := range keys {
 			p, err := eng.PlanCleanup(k, opts, cwd)
@@ -285,12 +289,12 @@ func (m *Model) planned(msg planMsg) tea.Cmd {
 		return nil
 	}
 	if msg.err != nil {
-		return m.say(seg{"clean up: " + msg.err.Error(), roleWarn})
+		return m.say(statusline.Failed, "clean up: "+msg.err.Error())
 	}
 	if len(msg.plans) == 0 {
-		return m.say(seg{"nothing to clean up", roleMuted})
+		return m.say(statusline.Info, "nothing to clean up")
 	}
-	m.status = nil
+	m.line.Clear()
 	var body []drawn
 	worktrees, branches := 0, 0
 	for k, p := range msg.plans {
@@ -361,7 +365,7 @@ func (m *Model) action(i int) tea.Cmd {
 	a := m.actions[i]
 	l, ok := m.selected()
 	if !ok || l.row == nil || l.row.Clone == "" || !l.row.Local.Has {
-		return m.say(seg{a.Name + ": select a clone", roleMuted})
+		return m.say(statusline.Info, a.Name+": select a clone")
 	}
 	var tree *model.Worktree
 	if a.Scope == config.ScopeWorktree && l.kind == columns.KindWorktree {
@@ -378,7 +382,7 @@ func (m *Model) action(i int) tea.Cmd {
 		// The action may change the clone: it takes the clone's lane, as a
 		// change of gh tidy's own does.
 		if !m.eng.Hold(clone, name) {
-			return m.say(seg{name + ": busy with another change", rolePrompt})
+			return m.say(statusline.Refused, name+": busy with another change")
 		}
 		if a.Interactive {
 			return tea.Exec(m.cmds.Interactive(dir, argv), func(err error) tea.Msg {
@@ -386,7 +390,7 @@ func (m *Model) action(i int) tea.Cmd {
 			})
 		}
 		cmds := m.cmds
-		return tea.Batch(m.say(seg{name + "…", roleAccent}), func() tea.Msg {
+		return tea.Batch(m.say(statusline.Working, name+"…"), func() tea.Msg {
 			out, err := cmds.Run(context.Background(), dir, argv)
 			return actionDoneMsg{name: name, path: clone, out: out, err: err}
 		})
@@ -409,11 +413,11 @@ func (m *Model) actionDone(msg actionDoneMsg) tea.Cmd {
 	}
 	switch {
 	case msg.err != nil:
-		return m.say(seg{msg.name + ": " + msg.err.Error(), roleWarn})
+		return m.say(statusline.Failed, msg.name+": "+msg.err.Error())
 	case last != "":
-		return m.say(seg{msg.name + ": " + last, roleOK})
+		return m.say(statusline.Done, msg.name+": "+last)
 	}
-	return m.say(seg{msg.name + ": done", roleOK})
+	return m.say(statusline.Done, msg.name+": done")
 }
 
 // quote writes argv as a shell would read it back.
