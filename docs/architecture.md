@@ -12,7 +12,7 @@ gh-tidy is split into packages by layer. A package imports only packages of lowe
 | 0 | `internal/gittest` | Real git repositories in a test's temporary directory; imported by tests only | - | - |
 | 1 | `internal/gitx` | Running git without taking a lock, and parsing its porcelain output | - | - |
 | 1 | `internal/policy` | Deciding what to do with a clone from facts: moving its default branch, what d removes, how a worktree is judged, attention | `internal/model` | - |
-| 1 | `internal/config` | Reading the config file and reporting its mistakes | `internal/theme` | `github.com/pelletier/go-toml/v2` |
+| 1 | `internal/config` | Reading the config file and reporting its mistakes | `internal/theme` | `github.com/charmbracelet/x/ansi`, `github.com/pelletier/go-toml/v2` |
 | 2 | `internal/repo` | One clone's state, read from git alone | `internal/gitx` | - |
 | 2 | `internal/local` | A clone's state and the facts about it, read from git, and the changes made to it with git | `internal/gitx`, `internal/model` | - |
 | 2 | `internal/store` | The files kept between starts: each owner's table as last read (the cache) and the user's choices (the state) | `internal/model` | - |

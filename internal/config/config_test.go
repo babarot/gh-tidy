@@ -40,6 +40,10 @@ func TestParseErrors(t *testing.T) {
 		{"bad value", "[tui]\nstatus_style = \"dots\"\n", `status_style "dots"`},
 		{"bad hide", "[tui]\nhide = [\"clean\"]\n", `hide "clean"`},
 		{"remove without path", "[cleanup]\nworktree_remove = [\"rm\"]\n", "{path}"},
+		{"bad owner", "[owners]\nadd = [\"a/b/c\"]\n", `"a/b/c"`},
+		{"no columns", "[columns]\nlocal = []\n", "[columns]"},
+		{"wide symbol", "[symbols]\nstash = \"💰\"\n", "stash"},
+		{"empty symbol", "[symbols]\nahead = \"\"\n", "ahead is empty"},
 		{"action without run", "[[actions]]\nkey = \"H\"\nname = \"h\"\n", "#1 (h): run"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

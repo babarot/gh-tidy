@@ -30,7 +30,7 @@ var layers = []layer{
 	{"internal/gittest", 0, nil, nil, "Real git repositories in a test's temporary directory; imported by tests only"},
 	{"internal/gitx", 1, nil, nil, "Running git without taking a lock, and parsing its porcelain output"},
 	{"internal/policy", 1, []string{"internal/model"}, nil, "Deciding what to do with a clone from facts: moving its default branch, what d removes, how a worktree is judged, attention"},
-	{"internal/config", 1, []string{"internal/theme"}, []string{"github.com/pelletier/go-toml/v2"}, "Reading the config file and reporting its mistakes"},
+	{"internal/config", 1, []string{"internal/theme"}, []string{"github.com/charmbracelet/x/ansi", "github.com/pelletier/go-toml/v2"}, "Reading the config file and reporting its mistakes"},
 	{"internal/repo", 2, []string{"internal/gitx"}, nil, "One clone's state, read from git alone"},
 	{"internal/local", 2, []string{"internal/gitx", "internal/model"}, nil, "A clone's state and the facts about it, read from git, and the changes made to it with git"},
 	{"internal/store", 2, []string{"internal/model"}, nil, "The files kept between starts: each owner's table as last read (the cache) and the user's choices (the state)"},

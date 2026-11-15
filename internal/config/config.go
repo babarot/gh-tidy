@@ -13,7 +13,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"unicode"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/babarot/gh-tidy/internal/theme"
@@ -54,10 +56,62 @@ var Placeholders = []string{"{path}", "{repo}", "{owner}", "{name}", "{branch}",
 // File is the config file.
 type File struct {
 	Core    Core           `toml:"core"`
+	Owners  Owners         `toml:"owners"`
 	TUI     TUI            `toml:"tui"`
+	Columns Columns        `toml:"columns"`
+	Preview Preview        `toml:"preview"`
+	Symbols Symbols        `toml:"symbols"`
 	Cleanup Cleanup        `toml:"cleanup"`
 	Keys    map[string]any `toml:"keys"`
 	Actions []Action       `toml:"actions"`
+}
+
+// Owners changes the owners offered: the viewer, the viewer's
+// organizations and the owners with clones under the root.
+type Owners struct {
+	// Add offers these owners too, as "owner" or "host/owner".
+	Add []string `toml:"add"`
+	// Hide leaves these owners out, written the same way.
+	Hide []string `toml:"hide"`
+}
+
+// Columns are the columns of each set, by name, in order. The names are
+// checked against the columns the TUI has.
+type Columns struct {
+	Local  []string `toml:"local"`
+	GitHub []string `toml:"github"`
+}
+
+// Preview is what the pane below the list shows of the selected row.
+type Preview struct {
+	// Sections are the parts of the pane, by name, in order.
+	Sections []string `toml:"sections"`
+}
+
+// Symbols are the marks the list writes, after zsh-mini-prompt by
+// default, so that they read as the user's prompt does. Each must be as
+// many cells wide as it has characters, or the columns would not line up.
+type Symbols struct {
+	Unstaged    string `toml:"unstaged"`
+	Staged      string `toml:"staged"`
+	Untracked   string `toml:"untracked"`
+	Stash       string `toml:"stash"`
+	Behind      string `toml:"behind"`
+	Ahead       string `toml:"ahead"`
+	Diverged    string `toml:"diverged"`
+	Synced      string `toml:"synced"`
+	BehindMain  string `toml:"behind_main"`
+	GitHubAhead string `toml:"github_ahead"`
+	Worktree    string `toml:"worktree"`
+	// Counts writes how many after a mark (*3), or the mark alone (*).
+	Counts bool `toml:"counts"`
+}
+
+// Each returns the marks with their names in the file, for checking them.
+func (s Symbols) Each() [][2]string {
+	return [][2]string{{"unstaged", s.Unstaged}, {"staged", s.Staged}, {"untracked", s.Untracked}, {"stash", s.Stash},
+		{"behind", s.Behind}, {"ahead", s.Ahead}, {"diverged", s.Diverged}, {"synced", s.Synced},
+		{"behind_main", s.BehindMain}, {"github_ahead", s.GitHubAhead}, {"worktree", s.Worktree}}
 }
 
 // Core is where clones are and how they are read.
@@ -115,8 +169,16 @@ type Action struct {
 // Default returns the settings used when the file sets nothing.
 func Default() File {
 	return File{
-		Core:    Core{FetchConcurrency: 8, StaleCheck: true},
-		TUI:     TUI{Theme: theme.Auto, StatusStyle: StatusCount, Hide: []string{HideQuiet, HideUntracked}, Sort: SortAttention, DetailHeight: 8},
+		Core:   Core{FetchConcurrency: 8, StaleCheck: true},
+		Owners: Owners{Add: []string{}, Hide: []string{}},
+		TUI:    TUI{Theme: theme.Auto, StatusStyle: StatusCount, Hide: []string{HideQuiet, HideUntracked}, Sort: SortAttention, DetailHeight: 8},
+		Columns: Columns{
+			Local:  []string{"repo", "main", "checked_out", "changes", "worktrees", "fetched"},
+			GitHub: []string{"repo", "issues", "prs", "dependabot", "ci", "pushed", "main"},
+		},
+		Preview: Preview{Sections: []string{"incoming", "unpushed", "behind_main", "changes", "stash", "worktrees"}},
+		Symbols: Symbols{Unstaged: "*", Staged: "+", Untracked: "%", Stash: "$", Behind: "<", Ahead: ">", Diverged: "<>",
+			Synced: "=", BehindMain: "⇣", GitHubAhead: "?", Worktree: "⌥", Counts: true},
 		Cleanup: Cleanup{Protect: []string{}, WorktreeRemove: []string{"git", "worktree", "remove", "{path}"}},
 	}
 }
@@ -192,6 +254,25 @@ func (f File) validate() error {
 	if f.Core.FetchConcurrency < 1 {
 		bad("[core] fetch_concurrency must be at least 1, not %d", f.Core.FetchConcurrency)
 	}
+	for _, o := range slices.Concat(f.Owners.Add, f.Owners.Hide) {
+		if n := strings.Count(o, "/"); o == "" || n > 1 || strings.HasPrefix(o, "/") || strings.HasSuffix(o, "/") {
+			bad("[owners] %q is not \"owner\" or \"host/owner\"", o)
+		}
+	}
+	if len(f.Columns.Local) == 0 || len(f.Columns.GitHub) == 0 {
+		bad("[columns] local and github must each name a column")
+	}
+	for _, kv := range f.Symbols.Each() {
+		name, v := kv[0], kv[1]
+		switch {
+		case v == "":
+			bad("[symbols] %s is empty", name)
+		case strings.ContainsFunc(v, func(r rune) bool { return unicode.IsSpace(r) || !unicode.IsPrint(r) }):
+			bad("[symbols] %s %q has a space or a character that is not printed", name, v)
+		case ansi.StringWidth(v) != len([]rune(v)):
+			bad("[symbols] %s %q has a character two cells wide, which would put the columns out of line", name, v)
+		}
+	}
 	if len(f.Cleanup.WorktreeRemove) == 0 {
 		bad("[cleanup] worktree_remove must name a command")
 	} else if !slices.Contains(f.Cleanup.WorktreeRemove, "{path}") {
@@ -249,6 +330,13 @@ const Template = `# gh tidy settings. Uncomment a line to change it.
 # It also lists the repositories not cloned yet.
 # stale_check = true
 
+[owners]
+# The owners offered are the viewer, the viewer's organizations and the
+# owners with clones under root. Offer these too, as "owner" or "host/owner".
+# add = []
+# Leave these out, written the same way.
+# hide = []
+
 [tui]
 # Color scheme: "auto" (default) picks catppuccin-mocha on a dark terminal and
 # catppuccin-latte on a light one. Also: tokyo-night, dracula, nord,
@@ -265,6 +353,37 @@ const Template = `# gh tidy settings. Uncomment a line to change it.
 # sort = "attention"
 # Height of the detail pane below the list, in lines (at least 5).
 # detail_height = 8
+
+[columns]
+# The columns of each set, in order. v switches between the sets.
+# local: repo, main, checked_out, changes, worktrees, fetched.
+# github: repo, issues, prs, dependabot, ci, pushed, main.
+# local = ["repo", "main", "checked_out", "changes", "worktrees", "fetched"]
+# github = ["repo", "issues", "prs", "dependabot", "ci", "pushed", "main"]
+
+[preview]
+# The parts of the pane below the list, in order: incoming (commits on
+# origin's default branch that p brings in), unpushed, behind_main (commits
+# on the default branch the checked out branch lacks), changes (the files
+# changed), stash and worktrees. A part with nothing to show is left out.
+# sections = ["incoming", "unpushed", "behind_main", "changes", "stash", "worktrees"]
+
+[symbols]
+# The marks the list writes, after zsh-mini-prompt. Change them to match
+# your prompt; each must be one cell wide per character.
+# unstaged = "*"
+# staged = "+"
+# untracked = "%"
+# stash = "$"
+# behind = "<"
+# ahead = ">"
+# diverged = "<>"
+# synced = "="
+# behind_main = "⇣"
+# github_ahead = "?"
+# worktree = "⌥"
+# Write how many after a mark (*3); false writes the mark alone (*).
+# counts = true
 
 [cleanup]
 # Branches d never deletes, besides the default branch and the current one.
