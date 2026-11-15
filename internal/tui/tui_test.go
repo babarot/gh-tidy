@@ -1182,3 +1182,37 @@ func TestTheRateLimit(t *testing.T) {
 		t.Errorf("under a tenth left: role %v", got)
 	}
 }
+
+// A click on a key in the key line presses it, unless the key changes a
+// clone or asks GitHub: the mouse only moves, opens and folds. A click
+// that switches the columns may read what they show, as a key would.
+func TestClicksOnTheKeyLineChangeNothing(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	for _, lens := range columns.Lenses {
+		m.setLens(lens)
+		m.screen()
+		y := m.height - 1
+		var xs []int
+		for _, h := range m.hits {
+			if h.y == y {
+				xs = append(xs, h.x0)
+			}
+		}
+		if len(xs) == 0 {
+			t.Fatalf("%s: no key on the key line takes a click", lens)
+		}
+		for x := range m.width {
+			_, cmd := m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: x, Y: y})
+			w.run(m, cmd)
+			w.settle(m)
+			if m.popup != nil && m.popup.question != nil {
+				t.Errorf("%s: a click at %d asks to change something", lens, x)
+			}
+			m.popup = nil
+		}
+	}
+	if calls := w.change.seen(); len(calls) > 0 {
+		t.Errorf("clicks changed clones: %q", calls)
+	}
+}

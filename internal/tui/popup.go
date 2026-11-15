@@ -175,7 +175,7 @@ func (m *Model) popupHints(writes bool) []hint {
 	var hs []hint
 	add := func(a keymap.Action, write bool) {
 		if k := m.keys.First(a); k != "" && (write || !writes) {
-			hs = append(hs, hint{k, m.keys.Help(a)})
+			hs = append(hs, hint{key: k, does: m.keys.Help(a)})
 		}
 	}
 	switch {
@@ -184,14 +184,14 @@ func (m *Model) popupHints(writes bool) []hint {
 	case p.list != nil:
 		add("choose", false)
 		if p.list.filter && !writes {
-			hs = append(hs, hint{"type", "narrow"})
+			hs = append(hs, hint{key: "type", does: "narrow"})
 		}
 	}
 	back := "close"
 	if p.question != nil {
 		back = "cancel"
 	}
-	return append(hs, hint{keymap.Back, back})
+	return append(hs, hint{key: keymap.Back, does: back})
 }
 
 // popupFoot are the lines under what the popup holds, which do not
