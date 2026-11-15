@@ -24,6 +24,7 @@ import (
 // on purpose.
 var layers = []layer{
 	{"internal/version", 0, nil, nil, "The release version"},
+	{"internal/logging", 0, nil, nil, "The slog logger, the log file and its attribute keys"},
 	{"internal/theme", 0, nil, nil, "The color schemes, named by what the TUI uses each color for"},
 	{"internal/gittest", 0, nil, nil, "Real git repositories in a test's temporary directory; imported by tests only"},
 	{"internal/gitx", 1, nil, nil, "Running git without taking a lock, and parsing its porcelain output"},
@@ -34,7 +35,7 @@ var layers = []layer{
 	{"internal/cleanup", 3, []string{"internal/config", "internal/gitx", "internal/repo"}, nil, "What d removes and keeps, and removing it"},
 	{"internal/tui", 4, []string{"internal/cleanup", "internal/config", "internal/github", "internal/gitx", "internal/locate", "internal/repo", "internal/theme"},
 		[]string{"charm.land/bubbletea/v2", "charm.land/lipgloss/v2", "github.com/charmbracelet/x/ansi"}, "The terminal UI"},
-	{"", 5, []string{"internal/config", "internal/locate", "internal/repo", "internal/tui", "internal/version"}, []string{"charm.land/bubbletea/v2"}, "Flags, config and starting the TUI"},
+	{"", 5, []string{"internal/logging", "internal/config", "internal/locate", "internal/repo", "internal/tui", "internal/version"}, []string{"charm.land/bubbletea/v2"}, "Flags, config and starting the TUI"},
 }
 
 // layer is a package's place: its layer, the packages of this module

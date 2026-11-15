@@ -6,6 +6,7 @@ gh-tidy is split into packages by layer. A package imports only packages of lowe
 | Layer | Package | Does | May import | Outside modules |
 |---|---|---|---|---|
 | 0 | `internal/version` | The release version | - | - |
+| 0 | `internal/logging` | The slog logger, the log file and its attribute keys | - | - |
 | 0 | `internal/theme` | The color schemes, named by what the TUI uses each color for | - | - |
 | 0 | `internal/gittest` | Real git repositories in a test's temporary directory; imported by tests only | - | - |
 | 1 | `internal/gitx` | Running git without taking a lock, and parsing its porcelain output | - | - |
@@ -15,7 +16,7 @@ gh-tidy is split into packages by layer. A package imports only packages of lowe
 | 3 | `internal/locate` | The root, and what to open from where gh tidy starts | `internal/gitx`, `internal/repo` | - |
 | 3 | `internal/cleanup` | What d removes and keeps, and removing it | `internal/config`, `internal/gitx`, `internal/repo` | - |
 | 4 | `internal/tui` | The terminal UI | `internal/cleanup`, `internal/config`, `internal/github`, `internal/gitx`, `internal/locate`, `internal/repo`, `internal/theme` | `charm.land/bubbletea/v2`, `charm.land/lipgloss/v2`, `github.com/charmbracelet/x/ansi` |
-| 5 | `main` | Flags, config and starting the TUI | `internal/config`, `internal/locate`, `internal/repo`, `internal/tui`, `internal/version` | `charm.land/bubbletea/v2` |
+| 5 | `main` | Flags, config and starting the TUI | `internal/logging`, `internal/config`, `internal/locate`, `internal/repo`, `internal/tui`, `internal/version` | `charm.land/bubbletea/v2` |
 
 Standard library packages that reach outside the process:
 

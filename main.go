@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/babarot/gh-tidy/internal/config"
 	"github.com/babarot/gh-tidy/internal/locate"
+	"github.com/babarot/gh-tidy/internal/logging"
 	"github.com/babarot/gh-tidy/internal/repo"
 	"github.com/babarot/gh-tidy/internal/tui"
 	"github.com/babarot/gh-tidy/internal/version"
@@ -38,7 +40,7 @@ Without OWNER, the owner comes from where it is started: the owner of the
 clone or worktree it is in, the owner directory under the root
 (<root>/<host>/<owner>), or the owner picker at the root.
 
-Settings are in %s.
+Settings are in %s, and the log is written to %s.
 
 Flags:
 `
@@ -53,11 +55,12 @@ func main() {
 func run() error {
 	fs := flag.NewFlagSet("gh-tidy", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), usage, locate.Abbrev(config.Path()))
+		fmt.Fprintf(fs.Output(), usage, locate.Abbrev(config.Path()), locate.Abbrev(logging.DefaultPath(name)))
 		fs.PrintDefaults()
 	}
 	asJSON := fs.Bool("json", false, "print the clones as JSON instead of opening the list")
 	showVersion := fs.Bool("version", false, "print the version")
+	debug := fs.Bool("debug", false, "log at debug level (also GH_TIDY_LOG_LEVEL)")
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -72,6 +75,9 @@ func run() error {
 		return errors.New("one owner at most")
 	}
 
+	log, closeLog := openLog(*debug)
+	defer closeLog()
+
 	cfg, err := config.Load(config.Path())
 	if err != nil {
 		return err
@@ -84,6 +90,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	log.Info("start", logging.KeyVersion, version.Version, logging.KeyOwner, target.Host+"/"+target.Owner, "json", *asJSON)
 	if *asJSON {
 		if target.Kind != locate.Owner {
 			return errors.New("--json needs an owner: pass one, or run it in an owner's directory")
@@ -99,6 +106,29 @@ func run() error {
 		return nil
 	}
 	return err
+}
+
+// name is the program's name: its command, and the directories its
+// files go in.
+const name = "gh-tidy"
+
+// openLog opens the log file, at debug level when asked by the flag or by
+// GH_TIDY_LOG_LEVEL. A log that cannot be opened is said on stderr and
+// left out, since gh tidy works without one.
+func openLog(debug bool) (*slog.Logger, func()) {
+	level, err := logging.ParseLevel(os.Getenv("GH_TIDY_LOG_LEVEL"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "gh tidy: GH_TIDY_LOG_LEVEL:", err)
+	}
+	if debug {
+		level = slog.LevelDebug
+	}
+	log, c, err := logging.Open(logging.DefaultPath(name), level)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "gh tidy: no log:", err)
+		return logging.Discard(), func() {}
+	}
+	return log.With(logging.KeyRun, logging.NewID()), func() { _ = c.Close() }
 }
 
 // resolve picks what to open: the owner given, else what cwd says, else the
