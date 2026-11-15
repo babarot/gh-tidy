@@ -144,29 +144,6 @@ func (m *Model) confirmPopup(title string, body []drawn, run func(*Model) tea.Cm
 	return &popup{title: title, wide: true, body: &popupBody{lines: body}, question: &popupQuestion{run: run}}
 }
 
-func (m *Model) helpPopup() *popup {
-	var lines []drawn
-	add := func(keys, does string) {
-		lines = append(lines, drawn{parts: append(cut([]cell{{text: keys, role: roleAccent, bold: true}}, 18), cell{text: does, role: roleText})})
-	}
-	for _, s := range []keymap.Scope{keymap.ScopeGlobal, keymap.ScopeNav, keymap.ScopeList} {
-		for _, a := range m.keys.Actions(s) {
-			ks := m.keys.Keys(a)
-			if len(ks) == 0 {
-				continue
-			}
-			add(strings.Join(ks, " "), m.keys.Help(a))
-		}
-	}
-	add(keymap.Back, keymap.Fixed[keymap.Back])
-	add(keymap.Interrupt, keymap.Fixed[keymap.Interrupt])
-	lines = append(lines, drawn{}, drawn{parts: []cell{{text: "Marks: " + m.sym.Behind + " behind  " + m.sym.Ahead + " ahead  " + m.sym.BehindMain +
-		" behind the default branch  " + m.sym.GitHubAhead + " GitHub is ahead", role: roleMuted}}},
-		drawn{parts: []cell{{text: "       " + m.sym.Unstaged + " unstaged  " + m.sym.Staged + " staged  " + m.sym.Untracked + " untracked  " +
-			m.sym.Stash + " stash  " + m.sym.Worktree + " worktrees  ⋅ not read yet", role: roleMuted}}})
-	return &popup{title: "keys", body: &popupBody{lines: lines}}
-}
-
 // popupHints are the popup's keys, from what it holds and the keymap.
 // writes keeps only the keys that change something, and esc, for the key
 // line under the popup.

@@ -22,6 +22,7 @@ import (
 	"github.com/babarot/gh-tidy/internal/model"
 	"github.com/babarot/gh-tidy/internal/theme"
 	"github.com/babarot/gh-tidy/internal/tui/columns"
+	"github.com/babarot/gh-tidy/internal/tui/keymap"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files")
@@ -1214,5 +1215,51 @@ func TestClicksOnTheKeyLineChangeNothing(t *testing.T) {
 	}
 	if calls := w.change.seen(); len(calls) > 0 {
 		t.Errorf("clicks changed clones: %q", calls)
+	}
+}
+
+// docs/keys.md is the list of keys ? shows, with the default keys;
+// go test ./internal/tui -run TestKeysReference -update writes it.
+func TestKeysReference(t *testing.T) {
+	path := filepath.Join("..", "..", "docs", "keys.md")
+	want := keysReference()
+	if *update {
+		if err := os.WriteFile(path, []byte(want), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != want {
+		t.Error("docs/keys.md is not the list of keys; run go test ./internal/tui -run TestKeysReference -update")
+	}
+}
+
+// ? lists every action with a key, in every scope, the actions from the
+// config file, and the mouse; a key set under [keys] shows as set.
+func TestHelpListsEveryKey(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(func(o *Options) {
+		o.Config.Keys = map[string]any{"fetch": "x"}
+		o.Config.Actions = []config.Action{{Key: "H", Name: "open in herdr", Scope: config.ScopeRepo, Run: []string{"true"}}}
+	})
+	var text []string
+	for _, l := range m.helpPopup().body.lines {
+		text = append(text, plain(l))
+	}
+	all := strings.Join(text, "\n")
+	for _, d := range keymap.Defaults {
+		if !strings.Contains(all, string(d.Action)) && !strings.Contains(all, d.Help) {
+			t.Errorf("? leaves out %s", d.Action)
+		}
+	}
+	var words []string
+	for _, l := range text {
+		words = append(words, strings.Join(strings.Fields(l), " "))
+	}
+	for _, want := range []string{"x fetch", "H open in herdr · runs on the repo", "A popup that asks before a change", "double click", "Typing the filter"} {
+		if !slices.ContainsFunc(words, func(l string) bool { return strings.HasPrefix(l, want) }) {
+			t.Errorf("? lacks %q:\n%s", want, all)
+		}
 	}
 }

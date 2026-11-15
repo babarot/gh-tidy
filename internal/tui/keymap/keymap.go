@@ -33,65 +33,67 @@ const (
 	ScopeInput Scope = "input"
 )
 
-// Def is an action with its default keys and the words the key hints show.
+// Def is an action with its default keys, the words the key hints show,
+// and what it does, for the list of keys.
 type Def struct {
 	Action Action
 	Scope  Scope
 	Keys   []string
 	Help   string
+	Doc    string
 }
 
 // Defaults are every action with its keys, in the order the ? list shows
 // them.
 var Defaults = []Def{
-	{"quit", ScopeGlobal, []string{"q"}, "quit"},
-	{"help", ScopeGlobal, []string{"?"}, "keys"},
+	{"quit", ScopeGlobal, []string{"q"}, "quit", "quits, once the changes running end"},
+	{"help", ScopeGlobal, []string{"?"}, "keys", "shows every key"},
 
 	// ctrl+p and ctrl+n move as the arrows and k and j do, also in a
 	// popup's filter, which types k and j.
-	{"up", ScopeNav, []string{"up", "k", "ctrl+p"}, "up"},
-	{"down", ScopeNav, []string{"down", "j", "ctrl+n"}, "down"},
-	{"top", ScopeNav, []string{"home", "g"}, "top"},
-	{"bottom", ScopeNav, []string{"end", "G"}, "bottom"},
-	{"page_up", ScopeNav, []string{"pgup", "ctrl+b"}, "page up"},
-	{"page_down", ScopeNav, []string{"pgdown", "ctrl+f"}, "page down"},
+	{"up", ScopeNav, []string{"up", "k", "ctrl+p"}, "up", "moves the cursor up"},
+	{"down", ScopeNav, []string{"down", "j", "ctrl+n"}, "down", "moves the cursor down"},
+	{"top", ScopeNav, []string{"home", "g"}, "top", "moves to the first row"},
+	{"bottom", ScopeNav, []string{"end", "G"}, "bottom", "moves to the last row"},
+	{"page_up", ScopeNav, []string{"pgup", "ctrl+b"}, "page up", "moves a screen up"},
+	{"page_down", ScopeNav, []string{"pgdown", "ctrl+f"}, "page down", "moves a screen down"},
 
-	{"expand", ScopeList, []string{"enter"}, "worktrees"},
-	{"lens", ScopeList, []string{"v"}, "local / github"},
-	{"prev_owner", ScopeList, []string{"<"}, "previous owner"},
-	{"next_owner", ScopeList, []string{">"}, "next owner"},
-	{"choose_owner", ScopeList, []string{"O"}, "owner"},
-	{"search", ScopeList, []string{"/"}, "filter"},
-	{"fetch", ScopeList, []string{"f"}, "fetch"},
-	{"fetch_all", ScopeList, []string{"F"}, "fetch all"},
+	{"expand", ScopeList, []string{"enter"}, "worktrees", "shows a clone's worktrees, or folds a section"},
+	{"lens", ScopeList, []string{"v"}, "local / github", "switches between the local and the github columns"},
+	{"prev_owner", ScopeList, []string{"<"}, "previous owner", "shows the previous owner"},
+	{"next_owner", ScopeList, []string{">"}, "next owner", "shows the next owner"},
+	{"choose_owner", ScopeList, []string{"O"}, "owner", "chooses an owner from a list"},
+	{"search", ScopeList, []string{"/"}, "filter", "filters the rows by name or branch"},
+	{"fetch", ScopeList, []string{"f"}, "fetch", "fetches the clone"},
+	{"fetch_all", ScopeList, []string{"F"}, "fetch all", "fetches every clone"},
 	// The default branch, not the branch checked out.
-	{"pull", ScopeList, []string{"p"}, "update"},
-	{"pull_all", ScopeList, []string{"P"}, "update all"},
-	{"cleanup", ScopeList, []string{"d"}, "clean up"},
-	{"cleanup_all", ScopeList, []string{"D"}, "clean up all"},
-	{"clone", ScopeList, []string{"c"}, "clone"},
+	{"pull", ScopeList, []string{"p"}, "update", "moves the clone's default branch forward"},
+	{"pull_all", ScopeList, []string{"P"}, "update all", "fetches every clone, then moves each default branch forward; asks first"},
+	{"cleanup", ScopeList, []string{"d"}, "clean up", "cleans up the clone; asks first"},
+	{"cleanup_all", ScopeList, []string{"D"}, "clean up all", "cleans up every clone's finished worktrees; asks first"},
+	{"clone", ScopeList, []string{"c"}, "clone", "clones the repository selected"},
 	// Reads the clones and GitHub again, all of them, fresh or not.
-	{"refresh", ScopeList, []string{"r"}, "read again"},
+	{"refresh", ScopeList, []string{"r"}, "read again", "reads the clones and GitHub again, all of them"},
 	// Reads the list of an owner gh tidy does not read on its own.
-	{"list", ScopeList, []string{"L"}, "read the list"},
+	{"list", ScopeList, []string{"L"}, "read the list", "reads the list of an owner that is not yours"},
 	// Shows how many of each kind of work run, under the activity box.
-	{"workers", ScopeList, []string{"w"}, "workers"},
-	{"open_browser", ScopeList, []string{"o"}, "open on GitHub"},
-	{"reveal", ScopeList, []string{"R"}, "reveal in Finder"},
-	{"copy_path", ScopeList, []string{"y"}, "copy path"},
-	{"copy_url", ScopeList, []string{"Y"}, "copy url"},
-	{"preview_grow", ScopeList, []string{"+"}, "taller pane"},
-	{"preview_shrink", ScopeList, []string{"-"}, "shorter pane"},
-	{"preview_down", ScopeList, []string{"J"}, "scroll pane down"},
-	{"preview_up", ScopeList, []string{"K"}, "scroll pane up"},
+	{"workers", ScopeList, []string{"w"}, "workers", "shows how many of each kind of work run, while gh tidy works"},
+	{"open_browser", ScopeList, []string{"o"}, "open on GitHub", "opens the repository on GitHub"},
+	{"reveal", ScopeList, []string{"R"}, "reveal in Finder", "shows the clone in Finder"},
+	{"copy_path", ScopeList, []string{"y"}, "copy path", "copies the path"},
+	{"copy_url", ScopeList, []string{"Y"}, "copy url", "copies the URL"},
+	{"preview_grow", ScopeList, []string{"+"}, "taller pane", "makes the pane taller"},
+	{"preview_shrink", ScopeList, []string{"-"}, "shorter pane", "makes the pane shorter"},
+	{"preview_down", ScopeList, []string{"J"}, "scroll pane down", "scrolls the pane down"},
+	{"preview_up", ScopeList, []string{"K"}, "scroll pane up", "scrolls the pane up"},
 
-	{"choose", ScopePopup, []string{"enter"}, "choose"},
+	{"choose", ScopePopup, []string{"enter"}, "choose", "chooses the item"},
 
 	// A confirm popup reads no choose, so enter answers it too.
-	{"confirm", ScopeConfirm, []string{"y", "enter"}, "yes"},
+	{"confirm", ScopeConfirm, []string{"y", "enter"}, "yes", "runs the change asked about"},
 
-	{"accept", ScopeInput, []string{"enter"}, "keep"},
-	{"erase", ScopeInput, []string{"backspace"}, "erase"},
+	{"accept", ScopeInput, []string{"enter"}, "keep", "keeps the filter"},
+	{"erase", ScopeInput, []string{"backspace"}, "erase", "erases a character"},
 }
 
 // removed are the actions that are gone, with nothing in their place, by
@@ -152,6 +154,9 @@ func (m Map) First(a Action) string {
 
 // Help is the words the key hints show for action.
 func (m Map) Help(a Action) string { return m.defs[a].Help }
+
+// Doc says what action does, for the list of keys.
+func (m Map) Doc(a Action) string { return m.defs[a].Doc }
 
 // Matches reports whether a key press, as Bubble Tea writes it, is one of
 // action's keys.

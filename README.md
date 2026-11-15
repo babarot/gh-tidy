@@ -77,9 +77,10 @@ gh tidy reads GitHub on its own only within a share of your rate limit, leaving 
 | `L` | read the list of an owner that is not yours |
 | `o` / `y` / `Y` / `R` | open on GitHub / copy the path / copy the URL / reveal in Finder |
 | `esc` | put away the results shown on rows |
+| `w` | show the workers in use while gh tidy works |
 | `?` | every key |
 
-Every key can be changed under `[keys]`. The mouse selects, opens and folds; it never changes anything.
+Every key can be changed under `[keys]`. The mouse selects, opens and folds; it never changes anything. [docs/keys.md](docs/keys.md) lists every key with its name under `[keys]`, what the mouse does, and the marks.
 
 ### Moving the default branch forward
 
