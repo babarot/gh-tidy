@@ -111,6 +111,9 @@ func (e *Engine) leave(key model.CloneKey, op model.Op) {
 	delete(e.lanes, key)
 	e.epoch[key]++
 	e.setOp(key, op)
+	// Told even when no row shows the clone (a clone that failed), so that
+	// a screen waiting to quit sees the lane given back.
+	e.notify()
 }
 
 // setOp sets the operation shown on every row of key. Called with e.mu
