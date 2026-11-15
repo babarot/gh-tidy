@@ -29,6 +29,7 @@ func (m *Model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if m.popup != nil {
 		return m.popupMouse(msg)
 	}
+	listTop := m.listTop()
 	listEnd := listTop + m.listHeight()
 	paneTop := listEnd + 1
 	switch msg := msg.(type) {

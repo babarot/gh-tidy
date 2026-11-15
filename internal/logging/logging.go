@@ -30,6 +30,11 @@ const (
 	KeyGHRequestID  = "gh_request_id"
 	KeyGQLCost      = "gql_cost"
 	KeyGQLRemaining = "gql_remaining"
+	// KeyResource names a rate limit's resource (core, graphql), with
+	// what it has left out of its limit.
+	KeyResource  = "resource"
+	KeyRemaining = "remaining"
+	KeyLimit     = "limit"
 	// KeyWaitedMS is how long a request waited for the rate limit, and
 	// KeyReason why something was held back or skipped.
 	KeyWaitedMS = "waited_ms"

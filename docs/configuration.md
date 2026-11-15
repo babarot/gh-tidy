@@ -93,6 +93,7 @@ This page is written from the code (`go test ./internal/config -run TestConfigur
 # clone = "c"
 # refresh = "r"
 # list = "L"
+# workers = "w"
 # open_browser = "o"
 # reveal = "R"
 # copy_path = "y"

@@ -29,6 +29,10 @@ var update = flag.Bool("update", false, "rewrite the golden files")
 // Every name, repository and value here is made up.
 var now = time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
 
+// later is the screen's clock: a minute after the engine's, so that the
+// activity box and the rate limit have folded by the time it draws.
+var later = now.Add(time.Minute)
+
 const root = "/src"
 
 func ago(d time.Duration) time.Time { return now.Add(-d) }
@@ -319,7 +323,7 @@ func newWorld(t *testing.T) *world {
 
 func (w *world) model(edit func(*Options)) *Model {
 	o := Options{Engine: w.eng, Commands: w.cmds, Config: config.Default(), Owners: []string{"acme", "mika"}, Owner: "mika",
-		Home: "/src", Now: func() time.Time { return now }, NoTimers: true}
+		Home: "/src", Now: func() time.Time { return later }, NoTimers: true}
 	if edit != nil {
 		edit(&o)
 	}
@@ -483,6 +487,17 @@ func TestFilter(t *testing.T) {
 	s := screen(m)
 	if !strings.Contains(s, "dotfiles") || strings.Contains(s, "agent-runner") || !strings.Contains(s, " / dot") {
 		t.Errorf("filtered:\n%s", s)
+	}
+	// The filter line pushes the list down: a click on the list's first
+	// line chooses the first row.
+	lines := strings.Split(screen(m), "\n")
+	if !strings.HasPrefix(lines[1], " / dot") {
+		t.Errorf("the filter is not above the list:\n%s", s)
+	}
+	m.moveTo(len(m.lines) - 1)
+	m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: 5, Y: m.listTop()})
+	if m.sel != 0 {
+		t.Errorf("a click on the first line chose line %d", m.sel)
 	}
 	press(w, m, "esc")
 	if !strings.Contains(screen(m), "agent-runner") {
@@ -1063,23 +1078,107 @@ func TestRefreshKey(t *testing.T) {
 	}
 }
 
-// While work goes on, the status line shows the spinner, the count and
-// the bar; nothing is said over it.
-func TestTheStatusLineShowsProgress(t *testing.T) {
+// While work goes on, the activity box shows the run's counts and its
+// tasks, and the status line says nothing of it; once the run is over the
+// box folds.
+func TestTheActivityBoxShowsTheWork(t *testing.T) {
 	w := newWorld(t)
 	m := w.model(nil)
+	if s := screen(m); strings.Contains(s, "[+]") {
+		t.Errorf("a box with no work going on:\n%s", s)
+	}
 	block := make(chan struct{})
 	w.change.mu.Lock()
 	w.change.block = block
 	w.change.mu.Unlock()
 	m.Update(tea.KeyPressMsg{Code: 'F', Text: "F"})
-	status := plain(m.statusLine())
-	if !strings.Contains(status, "fetching 0/6") || !strings.Contains(status, "▱") {
-		t.Errorf("status line while fetching: %q", status)
+	// The fetches wait on block once the net workers take them.
+	for deadline := time.Now().Add(5 * time.Second); len(m.eng.Activity().Running) < 4; {
+		if time.Now().After(deadline) {
+			t.Fatalf("the fetches did not start: %+v", m.eng.Activity())
+		}
+		time.Sleep(time.Millisecond)
+	}
+	s := screen(m)
+	if !strings.Contains(s, "[+] Fetching mika 0/6 fetched") || !strings.Contains(s, "fetching") || !strings.Contains(s, "+1 running") {
+		t.Errorf("the box while fetching:\n%s", s)
+	}
+	if status := strings.TrimSpace(plain(m.statusLine(m.eng.Activity(), true, false))); status != "" {
+		t.Errorf("status line beside the box: %q", status)
+	}
+	m.Update(tea.KeyPressMsg{Code: 'w', Text: "w"})
+	if s := screen(m); !strings.Contains(s, "workers  disk") || !strings.Contains(s, "net 4/4") {
+		t.Errorf("w did not show the workers:\n%s", s)
 	}
 	close(block)
 	w.settle(m)
-	if status := strings.TrimSpace(plain(m.statusLine())); status != "" {
-		t.Errorf("status line after: %q", status)
+	if s := screen(m); strings.Contains(s, "[+]") || strings.Contains(s, "workers  disk") {
+		t.Errorf("the box did not fold:\n%s", s)
+	}
+}
+
+// fixedActivity is an engine whose run is always a, so that a screen of
+// a run does not hang on the machine: its number of CPUs, or which tasks
+// its workers took first.
+type fixedActivity struct {
+	Engine
+	a model.Activity
+}
+
+func (f fixedActivity) Activity() model.Activity { return f.a }
+
+// The box of a run, with the rate limit in its head and the workers
+// under it, as a golden.
+func TestTheActivityBoxLooks(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	task := func(kind, name, note string, failed bool, took time.Duration) model.Task {
+		x := model.Task{Kind: kind, Name: name, Note: note, Failed: failed, Start: later.Add(-took - time.Second)}
+		if note != "" || failed {
+			x.End = later.Add(-time.Second)
+		}
+		return x
+	}
+	m.eng = fixedActivity{Engine: m.eng, a: model.Activity{Verb: "Reading", What: "mika", Started: later.Add(-4 * time.Second),
+		Counts:  []model.Count{{Name: "clones", Done: 5, Total: 7}, {Name: "GitHub", Done: 1, Total: 3}},
+		Running: []model.Task{task("clone", "trail-notes", "", false, 0), task("github", "fields · 2 repositories", "", false, 0)},
+		Done:    []model.Task{task("clone", "scratchpad", "failed", true, time.Second), task("clone", "dotfiles", "read", false, 2*time.Second)},
+		Workers: []model.Workers{{Name: "disk", Running: 1, Limit: 8}, {Name: "net", Running: 0, Limit: 4}, {Name: "api", Running: 2, Limit: 2}},
+		Queued:  3,
+		Rate:    model.RateLeft{Known: true, Remaining: 4952, Limit: 5000, Used: 12, Saved: 3, Asking: true}}}
+	m.workers = true
+	golden(t, "activity", m)
+}
+
+// The rate limit shows while gh tidy asks GitHub's API and for a while
+// after: in the box's head when it fits, on the status line when not.
+func TestTheRateLimit(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	a := model.Activity{Verb: "Reading", What: "mika", Started: now, Counts: []model.Count{{Name: "GitHub", Done: 1, Total: 3}},
+		Rate: model.RateLeft{Known: true, Remaining: 4952, Limit: 5000, Used: 12, Saved: 3, Asking: true}}
+	box, rateIn := m.activityBox(a)
+	if !rateIn || !strings.Contains(plain(box[0]), "rate limit 4,952/5,000  │ this load 12 used · 3 saved") {
+		t.Errorf("head: %q", plain(box[0]))
+	}
+	if s := plain(m.statusLine(a, true, rateIn)); strings.Contains(s, "rate limit") {
+		t.Errorf("the rate limit twice: %q", s)
+	}
+	m.width = 60
+	box, rateIn = m.activityBox(a)
+	if rateIn || strings.Contains(plain(box[0]), "rate limit") {
+		t.Errorf("a narrow head kept the rate limit: %q", plain(box[0]))
+	}
+	if s := plain(m.statusLine(a, true, rateIn)); !strings.Contains(s, "rate limit 4,952/5,000") {
+		t.Errorf("status line: %q", s)
+	}
+	m.width = 140
+	a.Rate.Asking, a.Rate.LastAsked = false, m.now().Add(-rateFor)
+	if m.rateShown(a) {
+		t.Error("the rate limit stayed after the last request")
+	}
+	a.Rate.Remaining = 400
+	if got := m.rate(a, true)[1].role; got != roleWarn {
+		t.Errorf("under a tenth left: role %v", got)
 	}
 }

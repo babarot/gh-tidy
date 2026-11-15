@@ -140,6 +140,13 @@ type Model struct {
 	// spinning says a frame of the spinner is due: it turns while work
 	// goes on.
 	spinning bool
+	// boxRows is how many lines the activity box took when last drawn;
+	// workers says w asked for the workers' line in it.
+	boxRows int
+	workers bool
+	// syncedBox is boxRows when the rows shown were last told to the
+	// engine.
+	syncedBox int
 
 	width, height int
 	dark          bool
@@ -216,9 +223,10 @@ type statusDoneMsg struct{ id int }
 // frameMsg turns the spinner.
 type frameMsg struct{}
 
-// spin asks for the spinner's next frame while work goes on.
+// spin asks for the spinner's next frame while work goes on, and while
+// the activity box or the rate limit waits to fold.
 func (m *Model) spin() tea.Cmd {
-	if m.noTimers || m.spinning || !m.eng.Activity().Busy() {
+	if a := m.eng.Activity(); m.noTimers || m.spinning || (!a.Busy() && !m.boxShown(a) && !m.rateShown(a)) {
 		return nil
 	}
 	m.spinning = true
@@ -258,6 +266,7 @@ func (m *Model) refresh() {
 // the row selected.
 func (m *Model) sync() {
 	m.scroll()
+	m.syncedBox = m.boxRows
 	var visible []string
 	for _, l := range m.lines[m.offset:min(len(m.lines), m.offset+m.listHeight())] {
 		if l.row != nil {
@@ -303,11 +312,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.waitChange(), m.spin())
 	case tickMsg:
 		m.eng.Tick()
-		return m, m.tick()
+		return m, tea.Batch(m.tick(), m.spin())
 	case statusDoneMsg:
 		m.line.Expire(msg.id)
 	case frameMsg:
 		m.spinning = false
+		// The box folding or showing changed the list's height: the rows
+		// shown are told to the engine again.
+		if m.boxRows != m.syncedBox {
+			m.sync()
+		}
 		return m, m.spin()
 	case sayMsg:
 		return m, m.say(msg.kind, msg.text)
@@ -319,11 +333,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		cmd := m.key(msg.String())
 		m.sync()
-		return m, cmd
+		return m, tea.Batch(cmd, m.spin())
 	case tea.MouseMsg:
 		cmd := m.mouse(msg)
 		m.sync()
-		return m, cmd
+		return m, tea.Batch(cmd, m.spin())
 	}
 	return m, nil
 }
@@ -391,6 +405,12 @@ func (m *Model) key(k string) tea.Cmd {
 		m.open(m.ownerPopup())
 	case on("search"):
 		m.filtering = true
+	case on("workers"):
+		m.workers = !m.workers
+		if m.workers {
+			return m.say(statusline.Info, "workers shown while gh tidy works")
+		}
+		return m.say(statusline.Info, "workers hidden")
 	case on("preview_grow"):
 		m.setPreview(m.ph + 1)
 	case on("preview_shrink"):
