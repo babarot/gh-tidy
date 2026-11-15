@@ -17,6 +17,9 @@ func TestDefaultsHaveNoConflicts(t *testing.T) {
 			t.Errorf("action %q defined twice", d.Action)
 		}
 		seen[d.Action] = true
+		if d.Help == "" || d.Doc == "" {
+			t.Errorf("action %q lacks its hint or what it does", d.Action)
+		}
 		for _, k := range d.Keys {
 			if err := CheckKey(k); err != nil {
 				t.Errorf("default key of %s: %v", d.Action, err)
