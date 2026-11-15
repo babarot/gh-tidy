@@ -373,9 +373,15 @@ func TestOpeningAnotherOwnerDropsTheOldReads(t *testing.T) {
 	w.gh.heavy["acme/api"] = github.HeavyRepo{Default: "main", DefaultOid: "a"}
 	w.gh.heavy["me/app"] = github.HeavyRepo{Default: "main", DefaultOid: "b"}
 	w.gh.block = map[string]chan struct{}{"acme": make(chan struct{})} // never released
+	// The clone waits too, so that nothing of acme is sent before it is left.
+	scanned := make(chan struct{})
+	w.local.mu.Lock()
+	w.local.hold = map[string]chan struct{}{"/src/github.com/acme/api": scanned}
+	w.local.mu.Unlock()
 	e := w.engine()
 	e.Open("acme") // its list waits
 	e.Open("me")   // and is canceled
+	close(scanned)
 	idle(t, e)
 	if slices.Contains(w.gh.asked, "acme/api") {
 		t.Errorf("the owner left was still read: %v", w.gh.asked)

@@ -177,7 +177,15 @@ func (e *Engine) scan(path string) model.Clone {
 	}
 	e.mu.Lock()
 	def := ""
+	// The owner shown first: All may hold an older copy of the value.
+	owners := []*owner{e.owners[e.shown]}
 	for _, o := range e.owners {
+		owners = append(owners, o)
+	}
+	for _, o := range owners {
+		if o == nil || o.login == All {
+			continue
+		}
 		if r := o.rows[string(c.Key)]; r != nil && r.Heavy.Has && r.Heavy.Value.Default != "" {
 			def = r.Heavy.Value.Default
 			break
@@ -478,20 +486,20 @@ func (e *Engine) queueHeavy(o *owner, gen int, part []string, want github.Want, 
 				e.queueHeavy(o, gen, part[h:], want, prio, alive, false)
 				return
 			}
-			e.failHeavy(o, part, "GitHub took too long")
+			e.failHeavy(o, gen, part, "GitHub took too long")
 			return
 		case errors.As(err, &rl):
 			e.budget.pause(rl)
-			e.failHeavy(o, part, rl.Error())
+			e.failHeavy(o, gen, part, rl.Error())
 			return
 		case errors.Is(err, context.Canceled):
 			release() // the owner was left: nothing went wrong with the values
 			return
 		case err != nil:
-			e.failHeavy(o, part, err.Error())
+			e.failHeavy(o, gen, part, err.Error())
 			return
 		}
-		if again := e.putHeavy(o, got, fieldsOf(want)); len(again) > 0 {
+		if again := e.putHeavy(o, gen, got, fieldsOf(want)); len(again) > 0 {
 			// GitHub named another default branch than the clone was
 			// measured on: measure those clones again now.
 			e.scanAll(o, again, alive, func() { e.readAhead(o) })
@@ -514,13 +522,15 @@ func (e *Engine) release(o *owner, part []string, gen int) {
 	}
 }
 
-func (e *Engine) failHeavy(o *owner, part []string, why string) {
+func (e *Engine) failHeavy(o *owner, gen int, part []string, why string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	now := e.now()
 	for _, s := range part {
 		k := model.NewRemoteKey(e.host, s)
-		delete(o.inflight, k)
+		if m, ok := o.inflight[k]; ok && m.gen == gen {
+			delete(o.inflight, k)
+		}
 		for _, r := range e.rowsByRemote(o, k) {
 			r.Heavy.Fail(why, now)
 		}
@@ -532,12 +542,14 @@ func (e *Engine) failHeavy(o *owner, part []string, why string) {
 // every row of each. A repository renamed since takes its new name; the
 // row keeps its origin apart, so a clone read again does not undo it. It
 // returns the clones measured on another default branch than GitHub's.
-func (e *Engine) putHeavy(o *owner, got []github.HeavyRepo, fields model.Need) (again []string) {
+func (e *Engine) putHeavy(o *owner, gen int, got []github.HeavyRepo, fields model.Need) (again []string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	now := e.now()
 	for _, h := range got {
-		delete(o.inflight, h.Asked)
+		if m, ok := o.inflight[h.Asked]; ok && m.gen == gen {
+			delete(o.inflight, h.Asked)
+		}
 		for _, r := range e.rowsByRemote(o, h.Asked) {
 			switch {
 			case h.Err != "":
