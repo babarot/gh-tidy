@@ -39,6 +39,22 @@ func Find(dir string) ([]string, error) {
 	return paths, nil
 }
 
+// Owners lists the owner directories under dir (<root>/<host>), leaving
+// out hidden ones.
+func Owners(dir string) ([]string, error) {
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, e := range ents {
+		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+			out = append(out, e.Name())
+		}
+	}
+	return out, nil
+}
+
 // Scan reads the clone whose main worktree is at path.
 func Scan(ctx context.Context, path string) model.Clone {
 	c := model.Clone{Key: model.NewCloneKey(path), Path: path, Name: filepath.Base(path)}

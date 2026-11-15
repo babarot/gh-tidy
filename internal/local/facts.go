@@ -165,6 +165,13 @@ func DeleteMergedBranch(ctx context.Context, path, branch, base string) error {
 	return err
 }
 
+// BranchExists reports whether the local branch exists in the clone at
+// path: a worktree's own removal command may have deleted it already.
+func BranchExists(ctx context.Context, path, branch string) bool {
+	_, err := gitx.Run(ctx, path, "rev-parse", "-q", "--verify", "refs/heads/"+branch)
+	return err == nil
+}
+
 // DeleteBranch deletes branch whether or not it is merged: only for what a
 // setting asks for, such as a branch whose upstream is gone.
 func DeleteBranch(ctx context.Context, path, branch string) error {
