@@ -20,9 +20,14 @@ import (
 	"github.com/babarot/gh-tidy/internal/model"
 )
 
-// Version is the format of the files. A file of another version is read
-// as no file.
-const Version = 2
+// Version is the format of the cache, and StateVersion of the state. A
+// file of another version is read as no file. They are apart so that a
+// cache read again does not lose what the user chose: a field the cache
+// gains is not read from an older file as zero (version 3: the stars).
+const (
+	Version      = 3
+	StateVersion = 2
+)
 
 // Store is where the files go: CacheDir for the cache and StateDir for the
 // state, each already under the program's own directory.
@@ -90,8 +95,8 @@ func (s Store) statePath() string { return filepath.Join(s.StateDir, "state.json
 func (s Store) LoadState() (State, error) {
 	st := State{LastOwner: map[string]string{}}
 	ok, err := readJSON(s.statePath(), &st)
-	if err != nil || !ok || st.Version != Version {
-		return State{Version: Version, LastOwner: map[string]string{}}, err
+	if err != nil || !ok || st.Version != StateVersion {
+		return State{Version: StateVersion, LastOwner: map[string]string{}}, err
 	}
 	if st.LastOwner == nil {
 		st.LastOwner = map[string]string{}
@@ -101,7 +106,7 @@ func (s Store) LoadState() (State, error) {
 
 // SaveState keeps st.
 func (s Store) SaveState(st State) error {
-	st.Version = Version
+	st.Version = StateVersion
 	return writeJSON(s.statePath(), st)
 }
 

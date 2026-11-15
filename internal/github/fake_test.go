@@ -43,6 +43,7 @@ type fake struct {
 
 type fakeNode struct {
 	pushed    time.Time
+	stars     int
 	def, oid  string
 	ci        string
 	issues    int
@@ -70,7 +71,8 @@ func (f *fake) client(t *testing.T) *Client {
 
 func (f *fake) addRepos(owner string, names ...string) {
 	for _, n := range names {
-		f.repos[owner] = append(f.repos[owner], restRepo{Name: n, FullName: owner + "/" + n, DefaultBranch: "main", PushedAt: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)})
+		f.repos[owner] = append(f.repos[owner], restRepo{Name: n, FullName: owner + "/" + n, DefaultBranch: "main", PushedAt: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC),
+			Stars: len(f.repos[owner])})
 	}
 	slices.SortFunc(f.repos[owner], func(a, b restRepo) int { return strings.Compare(a.Name, b.Name) })
 }
@@ -216,6 +218,9 @@ func (f *fake) graphql(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		v := map[string]any{"nameWithOwner": slug, "pushedAt": n.pushed}
+		if strings.Contains(fields, "stargazerCount") {
+			v["stargazerCount"] = n.stars
+		}
 		if strings.Contains(fields, "defaultBranchRef") {
 			target := map[string]any{"oid": n.oid}
 			if strings.Contains(fields, "statusCheckRollup") {

@@ -58,6 +58,7 @@ type Remote struct {
 	PushedAt      time.Time
 	DefaultBranch string
 	Description   string
+	Stars         int
 }
 
 // Heavy is what GitHub says of a repository when asked by name, beyond the
@@ -71,6 +72,7 @@ type Heavy struct {
 	CI         string
 	Issues     int
 	PRs        int
+	Stars      int
 	// Alerts counts open Dependabot alerts; AlertsOff says they are not
 	// turned on, AlertsDenied that the token may not read them.
 	Alerts       int

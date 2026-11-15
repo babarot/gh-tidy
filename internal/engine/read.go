@@ -441,7 +441,7 @@ func (e *Engine) putList(o *owner, l github.Listing) {
 		}
 		for _, r := range rows {
 			r.Listed.Set(model.Remote{Key: lr.Key, Name: lr.Name, Fork: lr.Fork, Archived: lr.Archived, Private: lr.Private,
-				PushedAt: lr.PushedAt, DefaultBranch: lr.DefaultBranch, Description: lr.Description}, now)
+				PushedAt: lr.PushedAt, DefaultBranch: lr.DefaultBranch, Description: lr.Description, Stars: lr.Stars}, now)
 		}
 	}
 	// What a complete list no longer holds is gone from GitHub, as far as
@@ -700,7 +700,7 @@ func (e *Engine) putHeavy(o *owner, gen int, got []github.HeavyRepo, fields mode
 					r.Remote = h.Key
 				}
 				r.Heavy.Set(model.Heavy{Key: h.Key, Found: true, PushedAt: h.PushedAt, Default: h.Default, DefaultOid: h.DefaultOid, CI: h.CI,
-					Issues: h.Issues, PRs: h.PRs, Alerts: h.Alerts, AlertsOff: h.AlertsOff, AlertsDenied: h.AlertsDenied, Fields: fields}, now)
+					Issues: h.Issues, PRs: h.PRs, Stars: h.Stars, Alerts: h.Alerts, AlertsOff: h.AlertsOff, AlertsDenied: h.AlertsDenied, Fields: fields}, now)
 				if c := r.Local.Value; r.Local.Has && h.Default != "" && (c.Default != h.Default || c.DefaultSource != model.DefaultFromGitHub) {
 					again = append(again, c.Path)
 				}

@@ -52,6 +52,7 @@ type ListedRepo struct {
 	PushedAt      time.Time
 	DefaultBranch string
 	Description   string
+	Stars         int
 }
 
 // Listing is an owner's list as read.
@@ -225,11 +226,12 @@ type restRepo struct {
 	PushedAt      time.Time `json:"pushed_at"`
 	DefaultBranch string    `json:"default_branch"`
 	Description   string    `json:"description"`
+	Stars         int       `json:"stargazers_count"`
 }
 
 func (r restRepo) listed(host string) ListedRepo {
 	return ListedRepo{Key: model.NewRemoteKey(host, r.FullName), Name: r.Name, NameWithOwner: r.FullName, Fork: r.Fork, Archived: r.Archived,
-		Private: r.Private, PushedAt: r.PushedAt, DefaultBranch: r.DefaultBranch, Description: r.Description}
+		Private: r.Private, PushedAt: r.PushedAt, DefaultBranch: r.DefaultBranch, Description: r.Description, Stars: r.Stars}
 }
 
 // Viewer is who gh is signed in as, and the organizations it belongs to.

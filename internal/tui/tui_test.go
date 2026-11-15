@@ -301,7 +301,7 @@ func newWorld(t *testing.T) *world {
 	} {
 		slug := "mika/" + r.name
 		listed = append(listed, github.ListedRepo{Key: model.NewRemoteKey("github.com", slug), Name: r.name, NameWithOwner: slug,
-			Fork: r.fork, Archived: r.archived, Private: r.private, PushedAt: ago(r.pushed), DefaultBranch: "main"})
+			Fork: r.fork, Archived: r.archived, Private: r.private, PushedAt: ago(r.pushed), DefaultBranch: "main", Stars: len(r.name) * 7 % 40})
 		oid := "oid-" + r.name
 		if r.name == "trail-notes" {
 			oid = "newer"

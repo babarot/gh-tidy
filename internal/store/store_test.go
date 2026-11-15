@@ -79,6 +79,31 @@ func TestState(t *testing.T) {
 	}
 }
 
+// A cache of version 2 holds no stars: read, a list answered 304 would
+// keep its rows and show 0 stars for every one. It is read as no cache,
+// so that the list is read whole; the state of version 2 is still read,
+// since the stars do not touch it.
+func TestTheStarsReadNoCacheOfVersion2(t *testing.T) {
+	s := Store{CacheDir: t.TempDir(), StateDir: t.TempDir()}
+	path := s.ownerPath("github.com", "me", "acme")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"Version":2,"Host":"github.com","Viewer":"me","Owner":"acme","ETags":["W/\"a\""],"Ended":true,"Rows":[{"Remote":"github.com/acme/app"}]}`
+	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := s.LoadOwner("github.com", "me", "acme"); ok || err != nil {
+		t.Errorf("a cache of version 2 was used: %v, %v", ok, err)
+	}
+	if err := os.WriteFile(s.statePath(), []byte(`{"Version":2,"Lens":"github","PreviewHeight":12}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := s.LoadState(); err != nil || st.Lens != "github" || st.PreviewHeight != 12 {
+		t.Errorf("the state of version 2 was lost: %+v, %v", st, err)
+	}
+}
+
 func TestSafeNames(t *testing.T) {
 	for in, want := range map[string]string{"../etc": "__etc", "a/b": "a_b", "GitHub.com": "github.com"} {
 		if got := safe(in); got != want {

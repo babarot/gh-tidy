@@ -475,6 +475,37 @@ func pushedCell(x Ctx, it Item) Cell {
 	return Unread
 }
 
+// starsCell counts the repository's stars, from the list or, for an
+// owner whose list is not read, from the fields asked by name.
+func starsCell(x Ctx, it Item) Cell {
+	r := it.Row
+	switch {
+	case it.Kind == KindWorktree:
+		return nil
+	case r.Remote == "":
+		return Cell{{Text: "-", Role: Dim}}
+	case r.Listed.Has:
+		return stars(r.Listed.Value.Stars)
+	case r.Heavy.Has && r.Heavy.Value.Found:
+		return stars(r.Heavy.Value.Stars)
+	case r.Heavy.Last == model.Denied:
+		return Cell{{Text: "n/a", Role: Dim}}
+	}
+	return Unread
+}
+
+// stars writes a count of stars, in thousands from 10,000 on, so that it
+// fits the column.
+func stars(n int) Cell {
+	switch {
+	case n == 0:
+		return Cell{{Text: "0", Role: Dim}}
+	case n >= 10000:
+		return Cell{{Text: strconv.FormatFloat(float64(n)/1000, 'f', 1, 64) + "k", Role: Subtle}}
+	}
+	return Cell{{Text: strconv.Itoa(n), Role: Subtle}}
+}
+
 func visibilityCell(_ Ctx, it Item) Cell {
 	r := it.Row
 	if it.Kind != KindWorktree && r.Listed.Has && r.Listed.Value.Private {

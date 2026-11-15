@@ -28,6 +28,9 @@ func TestListAsksAgainForFree(t *testing.T) {
 	if l.Repos[0].Key != model.RemoteKey("github.com/me/repo-000") {
 		t.Errorf("key = %q", l.Repos[0].Key)
 	}
+	if l.Repos[7].Stars != 7 {
+		t.Errorf("stars = %d", l.Repos[7].Stars)
+	}
 
 	before := f.remaining
 	again, err := c.List(ctx, "me", OwnerViewer, l.Pages, 10)
@@ -112,7 +115,7 @@ func TestListCompleteness(t *testing.T) {
 func TestHeavy(t *testing.T) {
 	f := newFake()
 	pushed := time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC)
-	f.nodes["me/app"] = fakeNode{pushed: pushed, def: "main", oid: "abc", ci: "FAILURE", issues: 3, prs: 1, alerts: 2}
+	f.nodes["me/app"] = fakeNode{pushed: pushed, stars: 42, def: "main", oid: "abc", ci: "FAILURE", issues: 3, prs: 1, alerts: 2}
 	f.nodes["me/new-name"] = fakeNode{pushed: pushed, def: "trunk", oid: "def"}
 	f.renamed["me/old-name"] = "me/new-name"
 	f.nodes["me/no-alerts"] = fakeNode{pushed: pushed, def: "main", oid: "1", alertsOff: true}
@@ -129,7 +132,7 @@ func TestHeavy(t *testing.T) {
 		t.Errorf("rate = %+v", rate)
 	}
 	app, renamed, gone, off, secret := got[0], got[1], got[2], got[3], got[4]
-	if !app.Found || app.Default != "main" || app.DefaultOid != "abc" || app.CI != "FAILURE" || app.Issues != 3 || app.PRs != 1 || app.Alerts != 2 || !app.PushedAt.Equal(pushed) {
+	if !app.Found || app.Default != "main" || app.DefaultOid != "abc" || app.CI != "FAILURE" || app.Issues != 3 || app.PRs != 1 || app.Alerts != 2 || !app.PushedAt.Equal(pushed) || app.Stars != 42 {
 		t.Errorf("app = %+v", app)
 	}
 	if !renamed.Found || renamed.Asked != "github.com/me/old-name" || renamed.Key != "github.com/me/new-name" || renamed.Default != "trunk" {

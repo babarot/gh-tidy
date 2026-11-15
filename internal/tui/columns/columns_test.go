@@ -279,3 +279,28 @@ func TestSections(t *testing.T) {
 		t.Errorf("facts: %q", labels)
 	}
 }
+
+// The stars come from the list, or asked by name for an owner whose list
+// is not read; a count never read is not shown as 0.
+func TestStars(t *testing.T) {
+	text := func(r model.Row) string {
+		var b strings.Builder
+		for _, s := range starsCell(ctx(true), Item{Row: &r, Kind: KindClone}) {
+			b.WriteString(s.Text)
+		}
+		return b.String()
+	}
+	listed := model.Row{Remote: "github.com/me/app"}
+	listed.Listed.Set(model.Remote{Stars: 12345}, now)
+	asked := model.Row{Remote: "github.com/other/lib"}
+	asked.Heavy.Set(model.Heavy{Found: true, Stars: 7}, now)
+	unread := model.Row{Remote: "github.com/other/new"}
+	for _, tt := range []struct {
+		row  model.Row
+		want string
+	}{{listed, "12.3k"}, {asked, "7"}, {unread, Unread[0].Text}, {model.Row{}, "-"}} {
+		if got := text(tt.row); got != tt.want {
+			t.Errorf("stars of %s = %q; want %q", tt.row.Remote, got, tt.want)
+		}
+	}
+}
