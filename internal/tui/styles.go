@@ -8,136 +8,136 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/babarot/gh-tidy/internal/theme"
+	"github.com/babarot/gh-tidy/internal/tui/columns"
 )
 
-// styles holds every style the TUI renders with, built from one palette. The
-// layout is claude-recall's: a header bar, ╌ rules around the column headers,
-// an accent bar on the selected row and a rounded detail pane.
-type styles struct {
-	surface  lipgloss.Style // background of the header bar and the selected row
-	app      lipgloss.Style
-	tag      lipgloss.Style
-	rule     lipgloss.Style
-	colHdr   lipgloss.Style
-	bar      lipgloss.Style
-	name     lipgloss.Style // repository names
-	text     lipgloss.Style
-	strong   lipgloss.Style
-	subtle   lipgloss.Style
-	muted    lipgloss.Style
-	dim      lipgloss.Style
-	accent   lipgloss.Style // behind, BASE, keys
-	worktree lipgloss.Style // ⌥, ahead, unpushed
-	ok       lipgloss.Style // staged, confirmations
-	warn     lipgloss.Style // diverged, no origin, errors
-	prompt   lipgloss.Style // unstaged, stale, the filter
-	stash    lipgloss.Style
-	key      lipgloss.Style
-	border   color.Color
-	tabOn    lipgloss.Style
+// The roles of the screen are the columns' roles: one set of names for
+// every color, which the theme gives values.
+const (
+	roleText     = columns.Text
+	roleMuted    = columns.Muted
+	roleSubtle   = columns.Subtle
+	roleStrong   = columns.Strong
+	roleAccent   = columns.Accent
+	roleTitle    = columns.Title
+	roleOK       = columns.OK
+	rolePrompt   = columns.Prompt
+	roleWorktree = columns.Worktree
+	roleWarn     = columns.Warn
+	roleDim      = columns.Dim
+	roleBorder   = columns.Border
+)
+
+// seg is a part of a line: text with the role of its color.
+type seg struct {
+	text string
+	role columns.Role
 }
 
-func fg(c string) lipgloss.Style { return lipgloss.NewStyle().Foreground(lipgloss.Color(c)) }
+// styles are the colors of one palette, by role.
+type styles struct {
+	fg      map[columns.Role]color.Color
+	surface color.Color
+	faint   color.Color // what a popup dims the screen to
+}
 
 func newStyles(p theme.Palette) styles {
+	c := func(s string) color.Color { return lipgloss.Color(s) }
 	return styles{
-		surface:  lipgloss.NewStyle().Background(lipgloss.Color(p.Surface)),
-		app:      fg(p.Accent).Bold(true),
-		tag:      fg(p.Dim),
-		rule:     fg(p.Border),
-		colHdr:   fg(p.Strong).Bold(true),
-		bar:      fg(p.Accent),
-		name:     fg(p.Title).Bold(true),
-		text:     fg(p.Text),
-		strong:   fg(p.Strong),
-		subtle:   fg(p.Subtle),
-		muted:    fg(p.Muted),
-		dim:      fg(p.Dim),
-		accent:   fg(p.Accent),
-		worktree: fg(p.Worktree),
-		ok:       fg(p.OK),
-		warn:     fg(p.Warn),
-		prompt:   fg(p.Prompt),
-		stash:    fg(p.Title),
-		key:      fg(p.Accent).Bold(true),
-		border:   lipgloss.Color(p.Border),
-		tabOn:    fg(p.Accent).Bold(true).Underline(true),
+		fg: map[columns.Role]color.Color{
+			roleText: c(p.Text), roleMuted: c(p.Muted), roleSubtle: c(p.Subtle), roleStrong: c(p.Strong),
+			roleAccent: c(p.Accent), roleTitle: c(p.Title), roleOK: c(p.OK), rolePrompt: c(p.Prompt),
+			roleWorktree: c(p.Worktree), roleWarn: c(p.Warn), roleDim: c(p.Dim), roleBorder: c(p.Border),
+		},
+		surface: c(p.Surface),
+		faint:   c(p.Border),
 	}
 }
 
-// seg is a run of text in one style. Cells are built from segs so they can
-// be cut to a width before styling, and take the selected row's background.
-type seg struct {
-	text  string
-	style lipgloss.Style
+// cell is a part of a line as drawn: text, color, and how.
+type cell struct {
+	text      string
+	role      columns.Role
+	bold      bool
+	underline bool
 }
 
-type segs []seg
+// drawn is one line of the screen, in parts; bg paints its background.
+type drawn struct {
+	parts []cell
+	bg    bool
+}
 
-func (s segs) width() int {
+func fromCell(c columns.Cell) []cell {
+	out := make([]cell, len(c))
+	for i, s := range c {
+		out[i] = cell{text: s.Text, role: s.Role, bold: s.Bold, underline: s.Underline}
+	}
+	return out
+}
+
+func fromSegs(ss []seg) []cell {
+	out := make([]cell, len(ss))
+	for i, s := range ss {
+		out[i] = cell{text: s.text, role: s.role}
+	}
+	return out
+}
+
+func width(cs []cell) int {
 	n := 0
-	for _, x := range s {
-		n += ansi.StringWidth(x.text)
+	for _, c := range cs {
+		n += ansi.StringWidth(c.text)
 	}
 	return n
 }
 
-// add appends text in style, with a space before it when s is not empty.
-func (s segs) add(text string, style lipgloss.Style) segs {
-	if text == "" {
-		return s
+// cut fits parts in w cells: cut with … when longer, padded when shorter.
+func cut(cs []cell, w int) []cell {
+	var out []cell
+	used := 0
+	for _, c := range cs {
+		if used >= w {
+			break
+		}
+		n := ansi.StringWidth(c.text)
+		if used+n > w {
+			c.text = ansi.Truncate(c.text, w-used, "…")
+			n = ansi.StringWidth(c.text)
+		}
+		out = append(out, c)
+		used += n
 	}
-	if len(s) > 0 {
-		s = append(s, seg{" ", lipgloss.NewStyle()})
+	if used < w {
+		out = append(out, cell{text: strings.Repeat(" ", w-used)})
 	}
-	return append(s, seg{text, style})
+	return out
 }
 
-// join appends more after a space, when there is anything to append.
-func (s segs) join(more segs) segs {
-	if len(more) == 0 {
-		return s
-	}
-	if len(s) > 0 {
-		s = append(s, seg{" ", lipgloss.NewStyle()})
-	}
-	return append(s, more...)
-}
-
-// render draws s in exactly w cells, cut with … when longer, on bg when
-// it has a background.
-func (s segs) render(w int, bg *lipgloss.Style) string {
+// paint writes a line with its colors; dim paints it all faint, as under
+// a popup.
+func (s styles) paint(d drawn, dim bool) string {
 	var b strings.Builder
-	left := w
-	for i, x := range s {
-		if left <= 0 {
-			break
-		}
-		t := x.text
-		tw := ansi.StringWidth(t)
-		rest := s[i+1:].width()
-		if tw > left || (tw == left && rest > 0) {
-			t = ansi.Truncate(t, left, "…")
-			tw = ansi.StringWidth(t)
-			left = 0
+	for _, c := range d.parts {
+		st := lipgloss.NewStyle().Foreground(s.fg[c.role])
+		if dim {
+			st = lipgloss.NewStyle().Foreground(s.faint)
 		} else {
-			left -= tw
+			st = st.Bold(c.bold).Underline(c.underline)
 		}
-		st := x.style
-		if bg != nil {
-			st = st.Background(bg.GetBackground())
+		if d.bg && !dim {
+			st = st.Background(s.surface)
 		}
-		b.WriteString(st.Render(t))
-		if left == 0 {
-			break
-		}
+		b.WriteString(st.Render(c.text))
 	}
-	if left > 0 {
-		pad := lipgloss.NewStyle()
-		if bg != nil {
-			pad = *bg
-		}
-		b.WriteString(pad.Render(strings.Repeat(" ", left)))
+	return b.String()
+}
+
+// plain is a line's text without colors, for tests and for overlaying.
+func plain(d drawn) string {
+	var b strings.Builder
+	for _, c := range d.parts {
+		b.WriteString(c.text)
 	}
 	return b.String()
 }

@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -25,7 +26,7 @@ func TestLive(t *testing.T) {
 	if _, ok := got["babarot/does-not-exist-tidy"]; ok {
 		t.Errorf("a missing repository came back")
 	}
-	if _, err := List(ctx, "github.com", "no-such-owner-for-tidy-test"); err != ErrNoOwner {
+	if _, err := List(ctx, "github.com", "no-such-owner-for-tidy-test"); !errors.Is(err, ErrNoOwner) {
 		t.Errorf("List of a missing owner = %v, want ErrNoOwner", err)
 	}
 }

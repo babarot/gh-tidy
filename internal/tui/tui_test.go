@@ -2,83 +2,359 @@ package tui
 
 import (
 	"context"
+	"flag"
 	"os"
 	"path/filepath"
-	"reflect"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/babarot/gh-tidy/internal/config"
-	"github.com/babarot/gh-tidy/internal/gittest"
-	"github.com/babarot/gh-tidy/internal/locate"
-	"github.com/babarot/gh-tidy/internal/repo"
+	"github.com/babarot/gh-tidy/internal/engine"
+	"github.com/babarot/gh-tidy/internal/github"
+	"github.com/babarot/gh-tidy/internal/model"
+	"github.com/babarot/gh-tidy/internal/tui/columns"
 )
 
-// world is a root with one owner, "me", whose clones are made from bare
-// remotes in the same temporary directory.
-type world struct {
-	t       *testing.T
-	base    string
-	root    string
-	owner   string
-	remotes map[string]string
+var update = flag.Bool("update", false, "rewrite the golden files")
+
+// Every name, repository and value here is made up.
+var now = time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
+
+const root = "/src"
+
+func ago(d time.Duration) time.Time { return now.Add(-d) }
+
+// fakeLocal is the clones on disk, as values.
+type fakeLocal struct {
+	mu     sync.Mutex
+	clones map[string]model.Clone
+	facts  map[string]model.CleanupFacts
 }
 
+func (f *fakeLocal) add(c model.Clone, facts *model.CleanupFacts) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.clones[c.Path] = c
+	if facts != nil {
+		f.facts[c.Path] = *facts
+	}
+}
+
+func (f *fakeLocal) Owners(dir string) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []string
+	for p := range f.clones {
+		if o := filepath.Base(filepath.Dir(p)); filepath.Dir(filepath.Dir(p)) == dir && !slices.Contains(out, o) {
+			out = append(out, o)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+func (f *fakeLocal) Find(dir string) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []string
+	for p := range f.clones {
+		if filepath.Dir(p) == dir {
+			out = append(out, p)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+func (f *fakeLocal) Scan(_ context.Context, path string) model.Clone {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.clones[path]
+}
+
+func (f *fakeLocal) SetDefault(_ context.Context, c model.Clone, name string) model.Clone {
+	c.Default, c.DefaultSource = name, model.DefaultFromGitHub
+	return c
+}
+
+func (f *fakeLocal) RemoteAhead(_ context.Context, path, _, oid string) model.Ahead {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	c := f.clones[path]
+	return model.Ahead{Remote: oid, Local: c.DefaultOid, Ahead: oid != c.DefaultOid}
+}
+
+func (f *fakeLocal) WorktreeFacts(_ context.Context, c model.Clone) (model.CleanupFacts, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.facts[c.Path], nil
+}
+
+func (f *fakeLocal) Detail(_ context.Context, c model.Clone, tree string) model.Detail {
+	if tree != "" {
+		return model.Detail{Unpushed: []model.Commit{{Hash: "ef81585", Subject: "Speed up status parsing", Author: "ren", When: ago(7 * time.Hour)}}}
+	}
+	d := model.Detail{}
+	if c.Name == "agent-runner" {
+		d.Incoming = []model.Commit{
+			{Hash: "d3665f0", Subject: "Bump golang.org/x/net from 0.45.0 to 0.47.0", Author: "hana", When: ago(time.Hour)},
+			{Hash: "f02d507", Subject: "Document the cache layout", Author: "kai", When: ago(2 * time.Hour)},
+		}
+		d.Unpushed = []model.Commit{{Hash: "ef81585", Subject: "Speed up status parsing", Author: "ren", When: ago(7 * time.Hour)}}
+		d.Files = []model.File{{XY: " M", Path: "internal/retry.go"}}
+	}
+	return d
+}
+
+// fakeGitHub is GitHub, as values.
+type fakeGitHub struct {
+	lists map[string]github.Listing
+	heavy map[string]github.HeavyRepo
+}
+
+func (f *fakeGitHub) Host() string { return "github.com" }
+
+func (f *fakeGitHub) Viewer(context.Context) (github.Viewer, github.Rate, error) {
+	return github.Viewer{Login: "mika", Orgs: []string{"acme"}}, github.Rate{}, nil
+}
+
+func (f *fakeGitHub) List(_ context.Context, owner string, _ github.OwnerKind, _ github.Pages, _ int) (github.Listing, error) {
+	return f.lists[strings.ToLower(owner)], nil
+}
+
+func (f *fakeGitHub) Heavy(_ context.Context, slugs []string, _ github.Want) ([]github.HeavyRepo, github.Rate, error) {
+	var out []github.HeavyRepo
+	for _, s := range slugs {
+		k := model.NewRemoteKey("github.com", s)
+		h, ok := f.heavy[strings.ToLower(s)]
+		if !ok {
+			out = append(out, github.HeavyRepo{Asked: k, Key: k})
+			continue
+		}
+		h.Asked, h.Key, h.Found = k, k, true
+		out = append(out, h)
+	}
+	return out, github.Rate{Cost: 1}, nil
+}
+
+// clone is a clone of mika/name on main, up to date, fetched an hour ago.
+func clone(name string, f func(*model.Clone)) model.Clone {
+	path := filepath.Join(root, "github.com", "mika", name)
+	slug := "mika/" + name
+	c := model.Clone{Key: model.NewCloneKey(path), Path: path, Name: name, OriginURL: "git@github.com:" + slug + ".git",
+		Host: "github.com", Slug: slug, Remote: model.NewRemoteKey("github.com", slug),
+		Default: "main", DefaultSource: model.DefaultFromOriginHEAD, DefaultOid: "oid-" + name, FetchedAt: ago(time.Hour),
+		Status:    model.Status{Head: "main", Upstream: "origin/main", HasAB: true},
+		Worktrees: []model.Worktree{{Path: path, Branch: "main", Main: true}},
+		Branches:  []model.Branch{{Name: "main", Upstream: "origin/main"}}}
+	if f != nil {
+		f(&c)
+	}
+	return c
+}
+
+type world struct {
+	t      *testing.T
+	local  *fakeLocal
+	gh     *fakeGitHub
+	change *fakeChange
+	cmds   *fakeCommands
+	eng    *engine.Engine
+}
+
+// fakeChange records the changes asked of git and gh, and makes them.
+type fakeChange struct {
+	mu    sync.Mutex
+	local *fakeLocal
+	calls []string
+}
+
+func (f *fakeChange) record(s string) { f.mu.Lock(); f.calls = append(f.calls, s); f.mu.Unlock() }
+func (f *fakeChange) seen() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.calls)
+}
+func (f *fakeChange) Fetch(_ context.Context, path string) error {
+	f.record("fetch " + filepath.Base(path))
+	return nil
+}
+func (f *fakeChange) AdvanceFacts(_ context.Context, path, name string, src model.DefaultSource) model.AdvanceFacts {
+	return model.AdvanceFacts{Default: name, DefaultSource: src, LocalExists: true, RemoteExists: true, Upstream: "origin/" + name, Behind: 2, FastForward: true}
+}
+func (f *fakeChange) FastForwardRef(_ context.Context, path, name string) error {
+	f.record("ff " + filepath.Base(path))
+	return nil
+}
+func (f *fakeChange) MergeFastForward(context.Context, string, string) error { return nil }
+func (f *fakeChange) CleanupFacts(_ context.Context, c model.Clone) (model.CleanupFacts, error) {
+	return f.local.WorktreeFacts(context.Background(), c)
+}
+func (f *fakeChange) WorktreeDirty(context.Context, string) (int, error) { return 0, nil }
+func (f *fakeChange) RemoveWorktree(_ context.Context, path, wt, branch string) error {
+	f.record("remove " + wt)
+	return nil
+}
+func (f *fakeChange) BranchExists(context.Context, string, string) bool                { return false }
+func (f *fakeChange) DeleteMergedBranch(context.Context, string, string, string) error { return nil }
+func (f *fakeChange) DeleteBranch(context.Context, string, string) error               { return nil }
+func (f *fakeChange) PruneWorktrees(context.Context, string) error                     { return nil }
+func (f *fakeChange) Clone(_ context.Context, host, slug, dir string) error {
+	f.record("clone " + slug + " " + dir)
+	f.local.add(clone(filepath.Base(dir), nil), nil)
+	return nil
+}
+
+// fakeCommands records the programs the screen would run.
+type fakeCommands struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+func (f *fakeCommands) record(s string) { f.mu.Lock(); f.calls = append(f.calls, s); f.mu.Unlock() }
+func (f *fakeCommands) Run(_ context.Context, dir string, argv []string) (string, error) {
+	f.record("run " + dir + " " + strings.Join(argv, " "))
+	return "ok\nall done", nil
+}
+func (f *fakeCommands) Interactive(dir string, argv []string) tea.ExecCommand { return nil }
+func (f *fakeCommands) OpenURL(u string) error                                { f.record("open " + u); return nil }
+func (f *fakeCommands) Reveal(p string) error                                 { f.record("reveal " + p); return nil }
+func (f *fakeCommands) Copy(t string) error                                   { f.record("copy " + t); return nil }
+
 func newWorld(t *testing.T) *world {
-	gittest.Isolate(t)
-	base, _ := filepath.EvalSymlinks(t.TempDir())
-	w := &world{t: t, base: base, root: filepath.Join(base, "src"), remotes: map[string]string{}}
-	w.owner = filepath.Join(w.root, "github.com", "me")
-	os.MkdirAll(w.owner, 0o755)
+	w := &world{t: t, local: &fakeLocal{clones: map[string]model.Clone{}, facts: map[string]model.CleanupFacts{}},
+		gh: &fakeGitHub{lists: map[string]github.Listing{}, heavy: map[string]github.HeavyRepo{}}}
+	l := w.local
+	l.add(clone("agent-runner", func(c *model.Clone) {
+		base := c.Path
+		c.Head, c.Upstream, c.Ahead, c.BaseBehind, c.Unstaged = "retry-backoff", "origin/retry-backoff", 2, 5, 1
+		c.FetchedAt = ago(5 * time.Hour)
+		c.Branches = []model.Branch{{Name: "main", Upstream: "origin/main", Behind: 6},
+			{Name: "retry-backoff", Upstream: "origin/retry-backoff", Ahead: 2},
+			{Name: "fix-cgo", Upstream: "origin/fix-cgo", Ahead: 1}, {Name: "try-ui"}, {Name: "landed"}}
+		c.Worktrees = []model.Worktree{{Path: base, Branch: "retry-backoff", Main: true},
+			{Path: "/wt/fix-cgo", Branch: "fix-cgo", Active: ago(3 * time.Hour)},
+			{Path: "/wt/try-ui", Branch: "try-ui", Created: ago(20 * time.Minute)},
+			{Path: "/wt/landed", Branch: "landed", Active: ago(2 * 24 * time.Hour)}}
+	}), &model.CleanupFacts{Merged: map[string]bool{"main": true, "try-ui": true, "landed": true},
+		WorkedOn: map[string]bool{"fix-cgo": true, "landed": true}})
+	l.add(clone("scratchpad", func(c *model.Clone) {
+		c.OriginURL, c.Slug, c.Remote, c.Untracked = "", "", "", 4
+		c.Branches[0].Upstream, c.Upstream = "", ""
+	}), nil)
+	l.add(clone("dotfiles", func(c *model.Clone) {
+		c.Branches[0].Behind, c.Unstaged, c.Untracked, c.Stash = 2, 3, 2, 1
+	}), nil)
+	l.add(clone("calendar-sync", func(c *model.Clone) {
+		c.Head, c.Upstream, c.BaseBehind, c.Unstaged, c.Staged = "feat/ics-export", "origin/feat/ics-export", 1, 1, 2
+		c.Branches = []model.Branch{{Name: "main", Upstream: "origin/main", Behind: 1}, {Name: "feat/ics-export", Upstream: "origin/feat/ics-export"}}
+		c.Worktrees[0].Branch = "feat/ics-export"
+	}), nil)
+	l.add(clone("color-picker", nil), nil)
+	l.add(clone("trail-notes", nil), nil)
+	l.add(clone("pixel-garden", nil), nil)
+	listed := []github.ListedRepo{}
+	for _, r := range []struct {
+		name            string
+		fork, archived  bool
+		private         bool
+		pushed          time.Duration
+		issues, prs, al int
+		ci              string
+	}{
+		{"agent-runner", false, false, false, 2 * time.Hour, 4, 2, 0, "SUCCESS"},
+		{"dotfiles", false, false, true, 3 * time.Hour, 0, 0, 0, "SUCCESS"},
+		{"calendar-sync", false, false, false, 3 * 24 * time.Hour, 1, 0, 2, "FAILURE"},
+		{"color-picker", false, false, false, 15 * 24 * time.Hour, 0, 0, 0, ""},
+		{"trail-notes", false, false, false, 24 * time.Hour, 0, 1, 0, "PENDING"},
+		{"pixel-garden", false, false, false, 20 * time.Hour, 0, 0, 0, "SUCCESS"},
+		{"tool-shed", false, false, false, 4 * 24 * time.Hour, 3, 0, 1, "SUCCESS"},
+		{"weather-cli", false, false, true, 9 * 24 * time.Hour, 0, 0, 0, ""},
+		{"forked-lib", true, false, false, time.Hour, 0, 0, 0, ""},
+		{"old-site", false, true, false, 20 * 24 * time.Hour, 0, 0, 0, ""},
+	} {
+		slug := "mika/" + r.name
+		listed = append(listed, github.ListedRepo{Key: model.NewRemoteKey("github.com", slug), Name: r.name, NameWithOwner: slug,
+			Fork: r.fork, Archived: r.archived, Private: r.private, PushedAt: ago(r.pushed), DefaultBranch: "main"})
+		oid := "oid-" + r.name
+		if r.name == "trail-notes" {
+			oid = "newer"
+		}
+		w.gh.heavy[slug] = github.HeavyRepo{PushedAt: ago(r.pushed), Default: "main", DefaultOid: oid, CI: r.ci,
+			Issues: r.issues, PRs: r.prs, Alerts: r.al, AlertsOff: r.name == "weather-cli"}
+	}
+	w.gh.lists["mika"] = github.Listing{Repos: listed, Completeness: github.Complete,
+		Pages: github.Pages{ETags: []string{"e1"}, Ended: true, Completeness: github.Complete}}
+	w.gh.lists["acme"] = github.Listing{Completeness: github.Complete, Pages: github.Pages{ETags: []string{"e2"}, Ended: true, Completeness: github.Complete}}
+	w.change = &fakeChange{local: w.local}
+	w.cmds = &fakeCommands{}
+	w.eng = engine.New(engine.Options{Root: root, Local: w.local, GitHub: w.gh, Change: w.change, Cloner: w.change,
+		Now: func() time.Time { return now }})
+	if err := w.eng.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	return w
 }
 
-// clone makes a remote called name and clones it under the owner.
-func (w *world) clone(name string) string {
-	w.remotes[name] = gittest.Remote(w.t, w.base, name)
-	dir := filepath.Join(w.owner, name)
-	gittest.Clone(w.t, w.remotes[name], dir, "me/"+name)
-	return dir
-}
-
-// advance pushes n commits to the remote's main from elsewhere.
-func (w *world) advance(name string, n int) {
-	other := filepath.Join(w.base, "pusher-"+name)
-	if _, err := os.Stat(other); err != nil {
-		gittest.Git(w.t, w.base, "clone", "-q", w.remotes[name], other)
+func (w *world) model(edit func(*Options)) *Model {
+	o := Options{Engine: w.eng, Commands: w.cmds, Config: config.Default(), Owners: []string{"acme", "mika"}, Owner: "mika",
+		Home: "/src", Now: func() time.Time { return now }, NoTimers: true}
+	if edit != nil {
+		edit(&o)
 	}
-	gittest.Git(w.t, other, "pull", "-q")
-	for i := range n {
-		gittest.Commit(w.t, other, "f"+name, strings.Repeat("x", i+1)+time.Now().String())
-	}
-	gittest.Git(w.t, other, "push", "-q", "origin", "main")
-}
-
-func (w *world) model(cfgEdit func(*config.File)) *Model {
-	cfg := config.Default()
-	cfg.Core.StaleCheck = false // no GitHub in tests
-	cfg.TUI.Hide = nil
-	if cfgEdit != nil {
-		cfgEdit(&cfg)
-	}
-	m, err := New(context.Background(), cfg, w.root, locate.Target{Kind: locate.Owner, Host: "github.com", Owner: "me"})
+	m, err := New(o)
 	if err != nil {
 		w.t.Fatal(err)
 	}
-	m.noTimers = true
-	m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
-	drive(w.t, m, m.Init())
+	m.Update(tea.WindowSizeMsg{Width: 140, Height: 38})
+	m.Init()
+	w.settle(m)
 	return m
 }
 
-// drive runs cmd and feeds what it returns back into m until nothing is
-// left. The model's timers are off, so every command returns.
-func drive(t *testing.T, m *Model, cmd tea.Cmd) {
-	t.Helper()
+// settle waits for the engine to have nothing left to do, and hands the
+// screen what changed, until a change asks for nothing more.
+func (w *world) settle(m *Model) {
+	for range 5 {
+		if err := w.eng.Idle(context.Background()); err != nil {
+			w.t.Fatal(err)
+		}
+		m.Update(changedMsg{})
+	}
+}
+
+func press(w *world, m *Model, keys ...string) {
+	for _, k := range keys {
+		var msg tea.KeyPressMsg
+		switch k {
+		case "enter":
+			msg = tea.KeyPressMsg{Code: tea.KeyEnter}
+		case "esc":
+			msg = tea.KeyPressMsg{Code: tea.KeyEscape}
+		case "down":
+			msg = tea.KeyPressMsg{Code: tea.KeyDown}
+		case "up":
+			msg = tea.KeyPressMsg{Code: tea.KeyUp}
+		case "backspace":
+			msg = tea.KeyPressMsg{Code: tea.KeyBackspace}
+		default:
+			r := []rune(k)[0]
+			msg = tea.KeyPressMsg{Code: r, Text: k}
+		}
+		_, cmd := m.Update(msg)
+		w.run(m, cmd)
+		w.settle(m)
+	}
+}
+
+// run runs cmd and what it leads to, feeding the screen's own messages
+// back; the timers are off, so every command returns.
+func (w *world) run(m *Model, cmd tea.Cmd) {
 	queue := []tea.Cmd{cmd}
 	for len(queue) > 0 {
 		c := queue[0]
@@ -86,303 +362,377 @@ func drive(t *testing.T, m *Model, cmd tea.Cmd) {
 		if c == nil {
 			continue
 		}
-		ch := make(chan tea.Msg, 1)
-		go func() { ch <- c() }()
-		var msg tea.Msg
-		select {
-		case msg = <-ch:
-		case <-time.After(30 * time.Second):
-			t.Fatal("a command did not return")
-		}
-		switch msg := msg.(type) {
-		case nil:
+		switch msg := c().(type) {
 		case tea.BatchMsg:
 			queue = append(queue, msg...)
-		case tickMsg, statusExpMsg:
-		default:
-			if reflect.TypeOf(msg).PkgPath() != "github.com/babarot/gh-tidy/internal/tui" {
-				continue // clipboard, background color requests
-			}
+		case sayMsg, planMsg, actionDoneMsg, changedMsg:
 			_, next := m.Update(msg)
 			queue = append(queue, next)
 		}
 	}
 }
 
-func press(t *testing.T, m *Model, key string) {
-	t.Helper()
-	var k tea.KeyPressMsg
-	switch key {
-	case "enter":
-		k = tea.KeyPressMsg{Code: tea.KeyEnter}
-	case "tab":
-		k = tea.KeyPressMsg{Code: tea.KeyTab}
-	default:
-		k = tea.KeyPressMsg{Code: []rune(key)[0], Text: key}
+func screen(m *Model) string {
+	ls := m.screen()
+	out := make([]string, len(ls))
+	for i, l := range ls {
+		out[i] = strings.TrimRight(plain(l), " ")
 	}
-	_, cmd := m.Update(k)
-	drive(t, m, cmd)
+	return strings.Join(out, "\n") + "\n"
 }
 
-func (w *world) find(m *Model, name string) *repo.Repo {
-	for _, r := range m.repos {
-		if r.Name == name {
-			return r
+func golden(t *testing.T, name, got string) {
+	t.Helper()
+	path := filepath.Join("testdata", name+".golden")
+	if *update {
+		if err := os.MkdirAll("testdata", 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("%v (run with -update)", err)
+	}
+	if got != string(want) {
+		t.Errorf("%s differs (run with -update to accept):\n%s", name, got)
+	}
+}
+
+func TestLocal(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	golden(t, "local", screen(m))
+	press(w, m, "enter")
+	golden(t, "local-worktrees", screen(m))
+}
+
+func TestGitHub(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	press(w, m, "v")
+	golden(t, "github", screen(m))
+}
+
+func TestNoCounts(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(func(o *Options) { o.Config.Symbols.Counts = false })
+	golden(t, "local-no-counts", screen(m))
+}
+
+func TestEveryColumnAndSectionIsDrawn(t *testing.T) {
+	d := config.Default()
+	for _, c := range columns.All {
+		if !slices.Contains(d.Columns.Local, c.Name) && !slices.Contains(d.Columns.GitHub, c.Name) {
+			t.Errorf("column %s is in no default set, so no golden draws it", c.Name)
 		}
 	}
-	w.t.Fatalf("%s not listed", name)
-	return nil
+	for _, s := range columns.Sections {
+		if !slices.Contains(d.Preview.Sections, s.Name) {
+			t.Errorf("section %s is not shown by default, so no golden draws it", s.Name)
+		}
+	}
 }
 
-func plain(m *Model) string { return ansi.Strip(m.render()) }
+func TestOwners(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	press(w, m, ">")
+	if m.owner != "all" || !strings.Contains(screen(m), "GitHub as last read") {
+		t.Errorf("after >: %s\n%s", m.owner, screen(m))
+	}
+	press(w, m, "O", "a", "c", "enter")
+	if m.owner != "acme" {
+		t.Errorf("chose %q", m.owner)
+	}
+	if s := screen(m); !strings.Contains(s, "0 clones") {
+		t.Errorf("an owner with nothing:\n%s", s)
+	}
+	press(w, m, "<")
+	if m.owner != "all" {
+		t.Errorf("after <: %s", m.owner)
+	}
+}
 
-// selectRepo moves the selection to name.
-func selectRepo(t *testing.T, m *Model, name string) {
-	t.Helper()
-	for i, r := range m.rows() {
-		if r.wt == nil && r.r.Name == name {
-			m.sel = i
+func TestFilter(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	press(w, m, "/", "d", "o", "t", "enter")
+	s := screen(m)
+	if !strings.Contains(s, "dotfiles") || strings.Contains(s, "agent-runner") || !strings.Contains(s, " / dot") {
+		t.Errorf("filtered:\n%s", s)
+	}
+	press(w, m, "esc")
+	if !strings.Contains(screen(m), "agent-runner") {
+		t.Error("esc did not clear the filter")
+	}
+}
+
+func TestFoldsAndMouse(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	// The cursor goes to the head of not cloned, which enter opens.
+	for i, l := range m.lines {
+		if l.head == headNotCloned {
+			m.moveTo(i)
+		}
+	}
+	press(w, m, "enter")
+	if !strings.Contains(screen(m), "tool-shed") {
+		t.Errorf("not cloned did not open:\n%s", screen(m))
+	}
+	// A click on github in the header switches the set.
+	m.screen()
+	for _, h := range m.hits {
+		if h.y == 0 && h.x1-h.x0 == len("github") {
+			m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: h.x0, Y: 0})
+		}
+	}
+	if m.lens != columns.GitHub {
+		t.Error("a click on github did not switch the set")
+	}
+}
+
+func TestSavesWhatTheNextStartOpens(t *testing.T) {
+	w := newWorld(t)
+	var saved []string
+	m := w.model(func(o *Options) {
+		o.Save = func(owner, lens string, ph int) {
+			saved = append(saved, owner+" "+lens+" "+strings.Repeat("+", ph-previewDefault))
+		}
+	})
+	press(w, m, "v", "+", ">")
+	if want := []string{"mika github ", "mika github +", "all github +"}; !slices.Equal(saved, want) {
+		t.Errorf("saved %q, want %q", saved, want)
+	}
+}
+
+func TestBadSettings(t *testing.T) {
+	w := newWorld(t)
+	cfg := config.Default()
+	cfg.Columns.Local = []string{"repo", "nope"}
+	cfg.Preview.Sections = []string{"what"}
+	_, err := New(Options{Engine: w.eng, Config: cfg})
+	if err == nil || !strings.Contains(err.Error(), "nope") || !strings.Contains(err.Error(), "what") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestPaneKeysTurnedOff(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(func(o *Options) {
+		o.Config.Keys = map[string]any{"preview_grow": []any{}, "preview_shrink": []any{}}
+	})
+	if s := screen(m); strings.Contains(s, " preview") {
+		t.Errorf("a hint without keys:\n%s", s)
+	}
+}
+
+func TestTheQuietHeadStaysWhileRowsHold(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	m.folds[headQuiet] = false
+	m.relayout()
+	// Rows hold their places while something is read.
+	m.snap.Reading = "reading GitHub"
+	m.order = map[string]int{}
+	m.relayout()
+	m.relayout()
+	if !strings.Contains(screen(m), "▾ nothing to do") {
+		t.Errorf("the head went away:\n%s", screen(m))
+	}
+}
+
+func (w *world) to(m *Model, key string) {
+	w.t.Helper()
+	for i, l := range m.lines {
+		if l.key() == key {
+			m.moveTo(i)
 			return
 		}
 	}
-	t.Fatalf("%s is not a row", name)
+	w.t.Fatalf("no row %s", key)
 }
 
-func TestListShowsState(t *testing.T) {
-	w := newWorld(t)
-	app := w.clone("app")
-	w.clone("quiet")
-	w.advance("app", 2)
-	gittest.Git(t, app, "fetch", "-q")
-	os.WriteFile(filepath.Join(app, "README"), []byte("edit\n"), 0o644)
+const runner = "/src/github.com/mika/agent-runner"
 
-	m := w.model(func(c *config.File) { c.TUI.Hide = []string{config.HideQuiet} })
-	s := plain(m)
-	for _, want := range []string{"cloned 2", "app", "1*", "<2", "1 repositories · 1 with nothing to say hidden (a)"} {
-		if !strings.Contains(s, want) {
-			t.Errorf("screen lacks %q:\n%s", want, s)
+func TestFetchAndClearResults(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	w.to(m, runner)
+	press(w, m, "f")
+	row := func() string {
+		for l := range strings.SplitSeq(screen(m), "\n") {
+			if strings.Contains(l, "agent-runner ⌥") {
+				return l
+			}
+		}
+		return ""
+	}
+	if !slices.Contains(w.change.seen(), "fetch agent-runner") || !strings.Contains(row(), " fetched ") {
+		t.Fatalf("calls %v\n%s", w.change.seen(), screen(m))
+	}
+	press(w, m, "esc")
+	if strings.Contains(row(), " fetched ") {
+		t.Errorf("esc did not put the results away: %s", row())
+	}
+}
+
+func TestUpdateAllAsksFirst(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	press(w, m, "P")
+	if m.popup == nil || !strings.Contains(strings.Join(popupText(m), "\n"), "can update") {
+		t.Fatalf("no confirm:\n%s", strings.Join(popupText(m), "\n"))
+	}
+	press(w, m, "esc")
+	if len(w.change.seen()) != 0 {
+		t.Fatalf("esc ran it: %v", w.change.seen())
+	}
+	press(w, m, "P", "y")
+	if n := len(slices.DeleteFunc(w.change.seen(), func(s string) bool { return !strings.HasPrefix(s, "ff ") })); n != 6 {
+		t.Errorf("%d fast-forwards: %v", n, w.change.seen())
+	}
+}
+
+func TestCleanupShowsThePlan(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	w.to(m, runner)
+	press(w, m, "d")
+	text := strings.Join(popupText(m), "\n")
+	if !strings.Contains(text, "remove ⌥ /wt/landed") || !strings.Contains(text, "keep") {
+		t.Fatalf("plan:\n%s", text)
+	}
+	press(w, m, "y")
+	if !slices.Contains(w.change.seen(), "remove /wt/landed") || slices.Contains(w.change.seen(), "remove /wt/try-ui") {
+		t.Errorf("calls %v", w.change.seen())
+	}
+}
+
+func TestCloneOpenCopyAndActions(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(func(o *Options) {
+		o.Config.Actions = []config.Action{{Key: "H", Name: "hello", Run: []string{"echo", "{repo}", "{branch}"}, Confirm: true}}
+	})
+	for i, l := range m.lines {
+		if l.head == headNotCloned {
+			m.moveTo(i)
 		}
 	}
-	if strings.Contains(s, "quiet") {
-		t.Errorf("a quiet repository is listed while hidden:\n%s", s)
+	press(w, m, "enter")
+	w.to(m, "github.com/mika/tool-shed")
+	press(w, m, "c")
+	if !slices.Contains(w.change.seen(), "clone mika/tool-shed /src/github.com/mika/tool-shed") {
+		t.Fatalf("calls %v", w.change.seen())
 	}
-	press(t, m, "a")
-	if !strings.Contains(plain(m), "quiet") {
-		t.Errorf("a shows the hidden repository")
+	if !strings.Contains(screen(m), "cloned") {
+		t.Errorf("not cloned:\n%s", screen(m))
+	}
+	w.to(m, runner)
+	press(w, m, "o", "y", "H")
+	if m.popup == nil || !strings.Contains(strings.Join(popupText(m), "\n"), "echo mika/agent-runner retry-backoff") {
+		t.Fatalf("action confirm:\n%s", strings.Join(popupText(m), "\n"))
+	}
+	press(w, m, "enter")
+	want := []string{"open https://github.com/mika/agent-runner", "copy " + runner, "run " + runner + " echo mika/agent-runner retry-backoff"}
+	if got := w.cmds.calls; !slices.Equal(got, want) {
+		t.Errorf("commands %q, want %q", got, want)
+	}
+	if !strings.Contains(screen(m), "hello: all done") {
+		t.Errorf("no result:\n%s", screen(m))
 	}
 }
 
-func TestFetchAndPull(t *testing.T) {
+func TestAnActionOnAKeyTaken(t *testing.T) {
 	w := newWorld(t)
-	w.clone("app")
-	m := w.model(nil)
-	w.advance("app", 3)
-
-	selectRepo(t, m, "app")
-	press(t, m, "f")
-	if r := w.find(m, "app"); r.Behind != 3 {
-		t.Fatalf("after f: behind %d, want 3", r.Behind)
-	}
-	press(t, m, "p")
-	if r := w.find(m, "app"); r.Behind != 0 {
-		t.Errorf("after p: behind %d, want 0", r.Behind)
-	}
-	if !strings.Contains(plain(m), "pulled app") {
-		t.Errorf("no status after pull:\n%s", plain(m))
-	}
-}
-
-func TestPullRefusesDirty(t *testing.T) {
-	w := newWorld(t)
-	app := w.clone("app")
-	w.advance("app", 1)
-	gittest.Git(t, app, "fetch", "-q")
-	os.WriteFile(filepath.Join(app, "README"), []byte("edit\n"), 0o644)
-	m := w.model(nil)
-	selectRepo(t, m, "app")
-	press(t, m, "p")
-	if r := w.find(m, "app"); r.Behind != 1 {
-		t.Errorf("a dirty clone was pulled")
-	}
-	if !strings.Contains(plain(m), "not pulled, 1 uncommitted changes") {
-		t.Errorf("no reason given:\n%s", plain(m))
-	}
-}
-
-func TestPullAll(t *testing.T) {
-	w := newWorld(t)
-	w.clone("behind")
-	dirty := w.clone("dirty")
-	ahead := w.clone("ahead")
-	m := w.model(nil)
-	w.advance("behind", 2)
-	w.advance("dirty", 1)
-	os.WriteFile(filepath.Join(dirty, "README"), []byte("edit\n"), 0o644)
-	gittest.Commit(t, ahead, "mine", "mine")
-	w.advance("ahead", 1) // diverged once fetched
-
-	press(t, m, "P")
-	if r := w.find(m, "behind"); r.Behind != 0 {
-		t.Errorf("behind: still behind %d", r.Behind)
-	}
-	if r := w.find(m, "dirty"); r.Behind != 1 {
-		t.Errorf("dirty: behind %d, want 1 (fetched, not pulled)", r.Behind)
-	}
-	if r := w.find(m, "ahead"); r.Ahead != 1 || r.Behind != 1 {
-		t.Errorf("ahead: %d/%d, want diverged 1/1", r.Ahead, r.Behind)
-	}
-	if !strings.Contains(plain(m), "fetched all; pulled 1") {
-		t.Errorf("no summary:\n%s", plain(m))
-	}
-}
-
-func TestExpandWorktrees(t *testing.T) {
-	w := newWorld(t)
-	app := w.clone("app")
-	gittest.Git(t, app, "worktree", "add", "-q", "-b", "feature", filepath.Join(w.base, "wt", "feature"))
-	m := w.model(nil)
-	selectRepo(t, m, "app")
-	press(t, m, "enter")
-	s := plain(m)
-	if !strings.Contains(s, "└─ ⌥ feature") || !strings.Contains(s, "├─ ⌥ (main)") {
-		t.Errorf("worktrees not expanded:\n%s", s)
-	}
-	m.sel++ // onto the main worktree row
-	press(t, m, "enter")
-	if strings.Contains(plain(m), "└─ ⌥ feature") {
-		t.Errorf("enter on a worktree row does not fold")
-	}
-}
-
-func TestKeysFromConfig(t *testing.T) {
 	cfg := config.Default()
-	cfg.Keys = map[string]any{"fetch": "x", "quit": []any{"Q"}}
-	cfg.Actions = []config.Action{{Key: "H", Name: "herdr", Run: []string{"true"}}}
-	km, err := newKeymap(cfg)
-	if err != nil {
+	cfg.Actions = []config.Action{{Key: "f", Name: "x", Run: []string{"x"}}}
+	if _, err := New(Options{Engine: w.eng, Config: cfg}); err == nil || !strings.Contains(err.Error(), "fetch") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func popupText(m *Model) []string {
+	if m.popup == nil {
+		return nil
+	}
+	var out []string
+	for _, l := range m.popupLines() {
+		out = append(out, plain(l))
+	}
+	return out
+}
+
+func TestTheCursorWaitsForTheRowsBeingRead(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(func(o *Options) { o.Select = "/src/github.com/mika/dotfiles" })
+	if l, _ := m.selected(); l.key() != "/src/github.com/mika/dotfiles" {
+		t.Errorf("started on %s", l.key())
+	}
+	// Before anything is read only a head shows; the first clone read
+	// comes above it, and the cursor goes with the top.
+	m2 := w.model(nil)
+	m2.snap = model.Owner{List: model.ListPartial}
+	m2.relayout()
+	m2.snap = w.eng.Owner()
+	m2.relayout()
+	if m2.sel != 0 {
+		t.Errorf("the cursor stayed on line %d", m2.sel)
+	}
+}
+
+func TestQuitWaitsForChanges(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	if !w.eng.Hold(runner, "running x") {
+		t.Fatal("no hold")
+	}
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if cmd != nil || !m.quitting || !strings.Contains(screen(m), "quitting once 1 change ends") {
+		t.Fatalf("quit with a change in flight:\n%s", screen(m))
+	}
+	w.eng.Release(runner)
+	if err := w.eng.Idle(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	for key, want := range map[string]string{"x": opFetch, "f": "", "Q": opQuit, "q": "", "esc": "", "H": "action:0", "p": opPull} {
-		if got := km.op(key); got != want {
-			t.Errorf("key %q = %q, want %q", key, got, want)
-		}
+	_, cmd = m.Update(changedMsg{})
+	if cmd == nil {
+		t.Fatal("did not quit once the change ended")
 	}
-	cfg.Keys = map[string]any{"fetch": "p", "pull": "p"}
-	if _, err := newKeymap(cfg); err == nil || !strings.Contains(err.Error(), `both use "p"`) {
-		t.Errorf("a shared key = %v", err)
-	}
-	cfg.Keys = map[string]any{"fetchh": "x"}
-	if _, err := newKeymap(cfg); err == nil || !strings.Contains(err.Error(), "fetchh is not an operation") {
-		t.Errorf("an unknown operation = %v", err)
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Error("not a quit")
 	}
 }
 
-func TestCleanupDialog(t *testing.T) {
+func TestAStalePlanIsNotShown(t *testing.T) {
 	w := newWorld(t)
-	app := w.clone("app")
-	wt := filepath.Join(w.base, "wt", "landed")
-	gittest.Git(t, app, "worktree", "add", "-q", "-b", "landed", wt)
-	gittest.Commit(t, wt, "l", "landed work")
-	gittest.Git(t, wt, "push", "-q", "origin", "landed:main")
-	gittest.Git(t, app, "fetch", "-q")
-	gittest.Git(t, app, "worktree", "add", "-q", "-b", "fresh", filepath.Join(w.base, "wt", "fresh"), "origin/main")
-
 	m := w.model(nil)
-	selectRepo(t, m, "app")
-	press(t, m, "d")
-	s := plain(m)
-	for _, want := range []string{"clean up app", "REMOVE 1", "⌥ landed landed", "KEEP 1", "⌥ fresh fresh  no commits since it was created"} {
-		if !strings.Contains(s, want) {
-			t.Errorf("dialog lacks %q:\n%s", want, s)
+	w.to(m, runner)
+	_, first := m.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	press(w, m, "P") // another popup opens while the plan is read
+	var msg planMsg
+	switch got := first().(type) {
+	case planMsg:
+		msg = got
+	case tea.BatchMsg:
+		for _, c := range got {
+			if c == nil {
+				continue
+			}
+			if p, ok := c().(planMsg); ok {
+				msg = p
+			}
 		}
 	}
-	press(t, m, "y") // copy path outside the dialog; nothing here
-	press(t, m, "j")
-	if m.confirm == nil {
-		t.Fatal("a key other than enter or esc closed the dialog")
+	if msg.seq == 0 {
+		t.Fatal("no plan read")
 	}
-	if _, err := os.Stat(wt); err != nil {
-		t.Fatal("removed before enter")
-	}
-	press(t, m, "enter")
-	if m.confirm != nil {
-		t.Error("the dialog stays open after enter")
-	}
-	if _, err := os.Stat(wt); !os.IsNotExist(err) {
-		t.Errorf("the landed worktree is still there")
-	}
-	if !strings.Contains(plain(m), "app: removed 1") {
-		t.Errorf("no status:\n%s", plain(m))
-	}
-
-	press(t, m, "d")
-	press(t, m, "esc")
-	if m.confirm != nil || !strings.Contains(plain(m), "nothing removed") {
-		t.Errorf("esc does not cancel:\n%s", plain(m))
-	}
-}
-
-func TestCustomAction(t *testing.T) {
-	w := newWorld(t)
-	app := w.clone("app")
-	wt := filepath.Join(w.base, "wt", "feature")
-	gittest.Git(t, app, "worktree", "add", "-q", "-b", "feature", wt)
-	log := filepath.Join(w.base, "action.log")
-	m := w.model(func(c *config.File) {
-		c.Actions = []config.Action{
-			{Key: "H", Name: "where", Scope: config.ScopeWorktree, Run: []string{"sh", "-c", `echo "$PWD $1 $2" > ` + log + `; echo said hello`, "sh", "{branch}", "{name}"}},
-			{Key: "X", Name: "fail", Run: []string{"sh", "-c", "echo broken >&2; exit 3"}},
-		}
-	})
-	selectRepo(t, m, "app")
-	press(t, m, "enter")
-	m.sel += 2 // the feature worktree, after the main one
-	press(t, m, "H")
-	got, _ := os.ReadFile(log)
-	if strings.TrimSpace(string(got)) != wt+" feature app" {
-		t.Errorf("action ran with %q", got)
-	}
-	if !strings.Contains(plain(m), "where: said hello") {
-		t.Errorf("no output in the status:\n%s", plain(m))
-	}
-	press(t, m, "X")
-	if !strings.Contains(plain(m), "fail: broken") {
-		t.Errorf("no failure in the status:\n%s", plain(m))
-	}
-}
-
-func TestConfirmedActionRemovingClone(t *testing.T) {
-	w := newWorld(t)
-	app := w.clone("app")
-	w.clone("other")
-	trash := filepath.Join(w.base, "trash")
-	os.MkdirAll(trash, 0o755)
-	m := w.model(func(c *config.File) {
-		c.Actions = []config.Action{{Key: "D", Name: "trash", Confirm: true, Run: []string{"mv", "{path}", trash}}}
-	})
-	selectRepo(t, m, "app")
-	press(t, m, "D")
-	s := plain(m)
-	if !strings.Contains(s, "─ trash ─") || !strings.Contains(s, "run mv /") || !strings.Contains(s, "enter run · esc cancel") {
-		t.Fatalf("no dialog:\n%s", s)
-	}
-	press(t, m, "j") // nothing while asking
-	press(t, m, "esc")
-	if _, err := os.Stat(app); err != nil || !strings.Contains(plain(m), "trash: not run") {
-		t.Fatalf("esc ran it, or said nothing:\n%s", plain(m))
-	}
-	selectRepo(t, m, "app")
-	press(t, m, "D")
-	press(t, m, "enter")
-	if _, err := os.Stat(app); !os.IsNotExist(err) {
-		t.Fatal("the action did not run")
-	}
-	for _, r := range m.repos {
-		if r.Name == "app" {
-			t.Errorf("a removed clone is still listed")
-		}
-	}
-	if !strings.Contains(plain(m), "cloned 1") {
-		t.Errorf("header not updated:\n%s", plain(m))
+	m.Update(msg)
+	if !strings.Contains(strings.Join(popupText(m), "\n"), "update all") {
+		t.Errorf("the plan replaced the popup open:\n%s", strings.Join(popupText(m), "\n"))
 	}
 }

@@ -1,0 +1,38 @@
+ tidy // ‹ mika ›    local │ github                                                         4 can update · 4 with changes · 1 worktree done
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  REPO                        MAIN            CHECKED OUT                   CHANGES         WORKTREES                              FETCHED
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+▎ agent-runner ⌥3             <               retry-backoff > ⇣             *               1 busy  1 new  1 done                  5h ago
+  scratchpad local only       no origin       main                          %                                                      -
+  dotfiles                    <               main                          *%$                                                    1h ago
+  calendar-sync               <               feat/ics-export = ⇣           *+                                                     1h ago
+  trail-notes                 <?              main                                                                                 1h ago
+  ▸ nothing to do  2
+  ▸ not cloned  2   c clones one
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 7 clones · 2 not cloned
+╭─ agent-runner ────────────────────────────────────────────────────────────────────────────────────────────────────── ↓ 7 more · +/- size ╮
+│ ▾ <  on origin/main, not in your main · p brings them in                            │ path     ~/github.com/mika/agent-runner            │
+│   d3665f0 Bump golang.org/x/net from 0.45.0 to 0.47.0  hana 1h                      │ fetched  5h ago                                    │
+│   f02d507 Document the cache layout  kai 2h                                         │ p        updates main · ff, not checked out        │
+│   … 4 more                                                                          │ d        removes 1 worktree · keeps 2 worktrees    │
+│ ▾ >  on retry-backoff, not pushed                                                   │ default  main from github                          │
+│   ef81585 Speed up status parsing  ren 7h                                           │                                                    │
+│   … 1 more                                                                          │                                                    │
+│ ▾ ⇣  on main, not in retry-backoff                                                  │                                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+ enter worktrees · v github · P update all · p update · f fetch · d clean up · D clean up all · / filter · O owner · + - preview · ? keys

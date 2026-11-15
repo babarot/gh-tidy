@@ -2,21 +2,20 @@
 
 A gh extension that keeps one GitHub owner's local clones up to date and clear of what you are done with, so they are ready to hand to a coding agent.
 
-A coding agent works from the clone it is given. If the clone is behind `origin/<default>`, the agent starts its work from old code, or reads old code as context and acts or decides on it. In a shell this is `for repo in $repos; do git -C $repo pull --rebase; done`; gh tidy does this, but only fast-forwards, and stops at a clone where pulling would be wrong.
-
-It lists the clones with what stands in the way: how far each is from its upstream and its default branch, what is not committed or not pushed, and its worktrees. `P` pulls every clone that can be pulled safely, `d` removes the worktrees and branches that are merged, and `c` clones what is not cloned yet.
+A coding agent works from the clone it is given. If the clone's default branch is behind GitHub's, the agent starts its work from old code, or reads old code as context and decides on it. gh tidy lists an owner's clones with what stands in the way, moves their default branches forward where nothing is in the way, and removes the worktrees and branches you are done with.
 
 ```
- tidy // babarot    cloned 61  not cloned 31                     38 need attention · 20 stale · sort: attention
-╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
-  REPO                          BRANCH                  STATUS         SYNC     BASE    BRANCHES     FETCHED
+ tidy // ‹ mika ›    local │ github                              4 can update · 4 with changes · 1 worktree done
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
-▎ enter-rs local only           main                    4%                                           -
-  github-config                 main                    5* 3+ 1$       >1?                           never
-  gh-infra ⌥3                   babarot/followup-secr…  3% 2$          =?               ↑1 ·2        May 20
-  agent-recall → claude-recall  babarot/settle-size                    =?               ↑2           6d ago
-  herdr                         patches                                =        ⇣109    ·4           2d ago
-  gist                          main                                   <12                           4d ago
+  REPO                        MAIN            CHECKED OUT                   CHANGES         WORKTREES
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+▎ agent-runner ⌥3             <6              retry-backoff >2 ⇣5           *1              1 busy  1 new  1 done
+  scratchpad local only       no origin       main                          %4
+  dotfiles                    <2              main                          *3 %2 $1
+  calendar-sync               <1              feat/ics-export = ⇣1          *1 +2
+  trail-notes                 <?              main
+  ▸ nothing to do  2
+  ▸ not cloned  2   c clones one
 ```
 
 ## Install
@@ -30,65 +29,82 @@ gh extension install babarot/gh-tidy
 ```sh
 gh tidy            # the owner of where you are
 gh tidy babarot    # one owner
-gh tidy ghe.example.com/team
+gh tidy all        # every owner's clones
 ```
 
-Clones are looked for where [ghq](https://github.com/x-motemen/ghq) puts them, `<root>/<host>/<owner>/<repo>`; the root is `ghq.root` in git config, or `~/ghq`. ghq itself is not needed. Without an owner, gh tidy works it out from the directory it starts in:
+Clones are looked for where [ghq](https://github.com/x-motemen/ghq) puts them, `<root>/<host>/<owner>/<repo>`; the root is `ghq.root` in git config, or `~/ghq`. ghq itself is not needed. Without an owner, gh tidy opens the owner of the clone it starts in (with that clone selected), the owner directory it starts in, the owner opened last, or you.
 
-| Started in | Opens |
+A clone is matched to GitHub by its origin, not its directory name, so a clone in a directory of another name, or of a repository renamed since, is still found. A worktree is shown under its clone wherever it is on disk.
+
+`<` and `>` step through the owners, and `O` chooses one: you, your organizations, the owners you have clones of, and `all`. For you and your organizations, gh tidy reads the list of repositories, so those not cloned show at the end. For any other owner it looks up only what you have cloned, so a large organization costs nothing until you press `L`.
+
+## The list
+
+Each row is a clone, the ones that need looking at first. Clones with nothing to do and repositories not cloned (neither forks nor archived) are folded at the end; `enter` on a head opens it. `enter` on a clone shows its linked worktrees under it.
+
+The marks are those of [zsh-mini-prompt](https://github.com/babarot/zsh-mini-prompt), and each one is compared with one thing on every row:
+
+| Mark | Means |
 |---|---|
-| a clone or one of its worktrees, wherever the worktree is | the owner of its origin, with that clone selected |
-| `<root>/<host>/<owner>` | that owner; with nothing cloned yet, the repositories to clone |
-| `<root>` or `<root>/<host>` | the owners to pick from |
-| anywhere else | `default_owner`, or the owners to pick from |
+| `<N` `>N` `<N>M` `=` | behind, ahead, diverged from, or the same as the upstream. In MAIN, the local default branch against `origin/<default>` |
+| `?` | GitHub's default branch has commits you have not fetched; what they are is known after `f` |
+| `⇣N` | the default branch has N commits the branch checked out lacks: time to rebase |
+| `*` `+` `%` `$` | unstaged, staged, untracked, stashed |
+| `⌥N` | N linked worktrees |
+| `⋅` | not read yet |
 
-A clone is matched to GitHub by its origin, not its directory name, so a clone in a directory of another name, or of a repository renamed since, is still found.
+WORKTREES judges each linked worktree: `busy` (changes, unpushed commits, or touched lately), `new` (never committed to: about to be used), `done` (merged and clean: `d` removes it), `idle` (clean, not merged, untouched for two weeks), with how long ago it was made or last touched. `+N br` counts branches in no worktree that hold work found nowhere else.
 
-## What the columns say
+`v` switches to the github columns: open issues and pull requests, Dependabot alerts (`off` when they are not turned on, `n/a` when your token may not read them), the checks on the default branch, and when it was last pushed. They are ordered by what needs attention on GitHub, and the repositories not cloned are mixed in.
 
-| Column | Shows |
-|---|---|
-| REPO | `⌥N` N worktrees; `local only` no origin, never pushed; `→ name` the origin is another repository; `archived` |
-| STATUS | `3*` unstaged, `1+` staged, `12%` untracked, `2$` stashed; `status_style = "symbol"` writes `*+%$` as [zsh-mini-prompt](https://github.com/babarot/zsh-mini-prompt) does |
-| SYNC | against the upstream: `<N` behind, `>N` ahead, `<N>M` diverged, `=` the same |
-| BASE | `⇣N`: the default branch has N commits the current branch does not, time to rebase |
-| BRANCHES | the other branches: `↑N` with commits not pushed, `·N` tracking nothing, `✗N` whose upstream was deleted |
-| FETCHED | when the clone last fetched |
+The pane below the list shows what is behind the selected row's marks: the commits `p` would bring in, those not pushed, those on the default branch the branch lacks, the files changed and the stash; on the right, where the row is and what `p` and `d` would do to it now. `+` and `-` change its height.
 
-Only what is on your machine is read, so the counts are as of the last fetch. To know when they are out of date without fetching, gh tidy asks GitHub, in one query, where each clone's default branch is now; when GitHub has moved past the clone, SYNC and BASE get a `?` and FETCHED turns yellow. `F` fetches everything.
-
-Repositories with nothing to say, and those whose only news is untracked files, are hidden until `a`.
+gh tidy reads GitHub on its own only within a share of your rate limit, leaving the rest to your other tools, and keeps what it read so the next start shows it at once.
 
 ## Keys
 
 | Key | Does |
 |---|---|
-| `enter` | show the clone's worktrees under it |
-| `f` / `F` | fetch the clone / every clone, a few at a time |
-| `p` | `git pull --ff-only`; refused, with the reason, on uncommitted changes, a diverged branch or no upstream |
-| `P` | fetch everything, then pull the clones that are behind with nothing in the way |
-| `d` | remove merged worktrees and branches (below) |
-| `o` | open on GitHub |
-| `R` | reveal in Finder |
-| `y` / `Y` | copy the path / the URL |
-| `tab` | the owner's repositories not cloned yet; `c` clones one |
+| `enter` | show the clone's worktrees; open a folded section |
+| `v` | local / github columns |
+| `<` `>` `O` | previous, next, or choose an owner |
 | `/` | filter by name or branch |
-| `a` | show the hidden repositories |
-| `s` | sort by attention, name, last fetch or last commit |
+| `f` / `F` | fetch the clone / every clone |
+| `p` | move the clone's default branch forward |
+| `P` | fetch every clone, then move each default branch forward where nothing is in the way (asks first) |
+| `d` | clean up the clone (below; asks first) |
+| `D` | clean up every clone's finished worktrees (asks first) |
+| `c` | clone the repository selected |
+| `L` | read the list of an owner that is not yours |
+| `o` / `y` / `Y` / `R` | open on GitHub / copy the path / copy the URL / reveal in Finder |
+| `esc` | put away the results shown on rows |
 | `?` | every key |
+
+Every key can be changed under `[keys]`. The mouse selects, opens and folds; it never changes anything.
+
+### Moving the default branch forward
+
+`p` and `P` move the default branch, not the branch checked out: work in progress is not touched. Each clone is fetched first, and then:
+
+- where the default branch is checked out nowhere, it is moved with `git fetch . origin/<default>:<default>`, which only fast-forwards;
+- where it is checked out, it is merged with `git merge --ff-only`, only when that worktree has no changes to tracked files.
+
+A clone is skipped, with why, when it has no local default branch, when its default branch has commits `origin` lacks, tracks something other than `origin/<default>`, is checked out in more than one worktree or in one with a rebase or bisect stopped in it, or when its name is only a guess (run `git remote set-head origin -a`).
 
 ### Cleaning up
 
-`d` measures the selected clone against `origin/<default>` and lists what it would remove and what it keeps, with why; nothing is removed until `enter`.
+`d` measures the selected clone against `origin/<default>` and lists what it would remove and what it keeps, with why; nothing is removed until you confirm. Each clone is read again before anything goes, and each worktree right before it is removed, so what changed since the confirm is left.
 
 - A worktree goes when its branch is merged, it has no changes, and it was committed to after it was made. A worktree never committed to is kept: its branch sits on the default branch, so it looks merged, but it may be the one you are about to work in. So is the worktree gh tidy runs in.
 - A worktree whose directory is gone is pruned.
 - A merged branch checked out nowhere goes.
-- A branch whose upstream was deleted but which is not merged, as after a squash merge, is kept unless `delete_gone = true`.
+- A branch whose upstream was deleted but which is not merged, as after a squash merge, is kept unless `delete_gone = true`. `D` never deletes it.
 
 ## Settings
 
-`~/.config/gh-tidy/config.toml`, written on first run with every setting commented out at its default. A mistake is reported with where it is in the file.
+`~/.config/gh-tidy/config.toml`. Every setting is optional; `gh tidy --print-config` prints them all at their defaults, and [docs/configuration.md](docs/configuration.md) shows the same. A mistake is reported with where it is in the file.
+
+You can choose the columns of each set and the parts of the pane, change the marks to match your own prompt, add or hide owners, and change the keys.
 
 ### Handing work to other tools
 
@@ -108,13 +124,13 @@ run = ["herdr", "worktree", "open", "--path", "{path}"]
 
 ```toml
 [[actions]]
-key = "D"
+key = "T"
 name = "trash"
 confirm = true
 run = ["gomi", "{path}"]
 ```
 
-`worktree_remove` is how `d` removes a worktree, for worktrees another tool made and should forget too. The command runs in the clone and must remove the worktree at `{path}`; a script can look up what the tool needs from it:
+`worktree_remove` is how `d` removes a worktree, for worktrees another tool made and should forget too. The command runs in the clone and must remove the worktree at `{path}`:
 
 ```toml
 [cleanup]
