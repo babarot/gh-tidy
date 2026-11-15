@@ -207,14 +207,16 @@ func measureWorktrees(ctx context.Context, c *model.Clone) {
 
 // gitDir is a worktree's own git directory: the common one for the main
 // worktree, and for a linked one what its .git file points to. Reading
-// the file costs no git process.
+// the file costs no git process. A linked worktree whose directory is gone
+// (moved, or on a disk not mounted) still has its directory under
+// <common>/worktrees, found by the gitdir file that points back to it.
 func gitDir(w model.Worktree, common string) string {
 	if w.Main {
 		return common
 	}
 	data, err := os.ReadFile(filepath.Join(w.Path, ".git"))
 	if err != nil {
-		return ""
+		return adminDir(common, w.Path)
 	}
 	dir, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "gitdir: ")
 	if !ok {
@@ -224,6 +226,27 @@ func gitDir(w model.Worktree, common string) string {
 		dir = filepath.Join(w.Path, dir)
 	}
 	return dir
+}
+
+// adminDir finds the directory under <common>/worktrees whose gitdir file
+// points to the worktree at path.
+func adminDir(common, path string) string {
+	if common == "" {
+		return ""
+	}
+	ents, err := os.ReadDir(filepath.Join(common, "worktrees"))
+	if err != nil {
+		return ""
+	}
+	want := filepath.Join(path, ".git")
+	for _, e := range ents {
+		dir := filepath.Join(common, "worktrees", e.Name())
+		b, err := os.ReadFile(filepath.Join(dir, "gitdir"))
+		if err == nil && filepath.Clean(strings.TrimSpace(string(b))) == want {
+			return dir
+		}
+	}
+	return ""
 }
 
 // inProgress names the operation stopped half way in the worktree whose

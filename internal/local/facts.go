@@ -42,7 +42,7 @@ func AdvanceFacts(ctx context.Context, path, name string, source model.DefaultSo
 	if out, err := git("worktree", "list", "--porcelain", "-z"); err == nil {
 		for i, gw := range gitx.ParseWorktrees(out) {
 			w := model.Worktree{Path: gw.Path, Branch: gw.Branch, Main: i == 0, Prunable: gw.Prunable}
-			if w.Branch == "" && !w.Prunable {
+			if w.Branch == "" {
 				w.Occupies = occupied(gitDir(w, common))
 			}
 			if w.Holds() != name {

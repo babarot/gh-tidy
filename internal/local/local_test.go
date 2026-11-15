@@ -306,7 +306,7 @@ func TestAdvanceSkipsWhatHoldsMainUnseen(t *testing.T) {
 		if err := gittestTry(w.clone, "rebase", "-q", "--exec", "false", "HEAD~1"); err == nil {
 			t.Fatal("the rebase did not stop")
 		}
-		if d := advance(t, w.clone); d.Action != policy.AdvanceSkip || !strings.Contains(d.Why, "rebase") {
+		if d := advance(t, w.clone); d.Action != policy.AdvanceSkip || !strings.Contains(d.Why, "rebase is in progress") {
 			t.Fatalf("decision = %+v", d)
 		}
 	})
@@ -345,6 +345,25 @@ func TestAdvanceSkipsWhatHoldsMainUnseen(t *testing.T) {
 		}
 		if w.oid(w.clone, "main") != before {
 			t.Error("main moved under a worktree that may be in use")
+		}
+	})
+	t.Run("main held by a rebase in a worktree that was moved", func(t *testing.T) {
+		w := newWorld(t)
+		w.push(1)
+		gittest.Git(t, w.clone, "pull", "-q")
+		gittest.Git(t, w.clone, "checkout", "-q", "-b", "feature")
+		wt := filepath.Join(w.base, "main-wt")
+		gittest.Git(t, w.clone, "worktree", "add", "-q", wt, "main")
+		t.Setenv("GIT_SEQUENCE_EDITOR", "true")
+		if err := gittestTry(wt, "rebase", "-q", "--exec", "false", "HEAD~1"); err == nil {
+			t.Fatal("the rebase did not stop")
+		}
+		if err := os.Rename(wt, wt+"-moved"); err != nil {
+			t.Fatal(err)
+		}
+		w.push(1)
+		if d := advance(t, w.clone); d.Action != policy.AdvanceSkip || !strings.Contains(d.Why, "cannot find") {
+			t.Fatalf("decision = %+v", d)
 		}
 	})
 	t.Run("untracked files are not in the way", func(t *testing.T) {
