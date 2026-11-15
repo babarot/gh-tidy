@@ -1,0 +1,158 @@
+-- screen --
+ tidy // ‹ mika ›    local │ github                                                         4 can update · 4 with changes · 1 worktree done 
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  REPO                        MAIN            CHECKED OUT                   CHANGES         WORKTREES                              FETCHED
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+▎ agent-runner ⌥3             <6              retry-backoff >2 ⇣5           *1              1 busy  1 new  1 done                  5h ago   
+  scratchpad local only       no origin       main                          %4                                                     -
+  dotfiles                    <2              main                          *3 %2 $1                                               1h ago
+  calendar-sync               <1              feat/ics-export = ⇣1          *1 +2                                                  1h ago
+  trail-notes                 <?              main                                                                                 1h ago
+  ▸ nothing to do  2
+  ▸ not cloned  2   c clones one
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 7 clones · 2 not cloned
+╭─ agent-runner ────────────────────────────────────────────────────────────────────────────────────────────────────── ↓ 7 more · +/- size ╮
+│ ▾ <6  on origin/main, not in your main · p brings them in                           │ path     ~/github.com/mika/agent-runner            │
+│   d3665f0 Bump golang.org/x/net from 0.45.0 to 0.47.0  hana 1h                      │ fetched  5h ago                                    │
+│   f02d507 Document the cache layout  kai 2h                                         │ p        updates main · ff, not checked out        │
+│   … 4 more                                                                          │ d        removes 1 worktree · keeps 2 worktrees    │
+│ ▾ >2  on retry-backoff, not pushed                                                  │ default  main from github                          │
+│   ef81585 Speed up status parsing  ren 7h                                           │                                                    │
+│   … 1 more                                                                          │                                                    │
+│ ▾ ⇣5  on main, not in retry-backoff                                                 │                                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+ enter worktrees · v github · P update all · p update · f fetch · d clean up · D clean up all · / filter · O owner · + - preview · ? keys
+-- styles --
+L1 0-6 fg=c12 bg=c8 bold
+L1 6-11 fg=c8 bg=c8
+L1 11-16 fg=c15 bg=c8 bold
+L1 16-21 fg=c8 bg=c8
+L1 21-26 fg=c12 bg=c8 bold underline
+L1 26-29 fg=c8 bg=c8
+L1 29-92 fg=c7 bg=c8
+L1 92-105 fg=c12 bg=c8
+L1 105-107 fg=c8 bg=c8
+L1 107-122 fg=c11 bg=c8
+L1 122-124 fg=c8 bg=c8
+L1 124-140 fg=c10 bg=c8
+L2 0-140 fg=c8
+L3 2-138 fg=c15 bold
+L4 0-140 fg=c8
+L5 0-2 fg=c12 bg=c8
+L5 2-15 fg=c13 bg=c8 bold
+L5 15-30 fg=c3 bg=c8
+L5 30-46 fg=c12 bg=c8
+L5 46-60 fg=c15 bg=c8
+L5 60-63 fg=c3 bg=c8
+L5 63-76 fg=c12 bg=c8
+L5 76-92 fg=c11 bg=c8
+L5 92-100 fg=c3 bg=c8
+L5 100-107 fg=c12 bg=c8
+L5 107-131 fg=c10 bg=c8
+L5 131-140 fg=c8 bg=c8
+L6 2-12 fg=c13 bold
+L6 13-23 fg=c9
+L6 30-132 fg=c8
+L7 2-10 fg=c13 bold
+L7 30-32 fg=c12
+L7 46-50 fg=c8
+L7 76-78 fg=c11
+L7 79-81 fg=c8
+L7 82-84 fg=c13
+L7 131-137 fg=c8
+L8 2-15 fg=c13 bold
+L8 30-32 fg=c12
+L8 46-61 fg=c15
+L8 62-63 fg=c8
+L8 64-66 fg=c12
+L8 76-78 fg=c11
+L8 79-81 fg=c10
+L8 131-137 fg=c8
+L9 2-13 fg=c13 bold
+L9 30-31 fg=c12
+L9 31-32 fg=c11
+L9 46-50 fg=c8
+L9 131-137 fg=c11
+L10 2-3 fg=c8
+L10 4-17 fg=c7 bold
+L10 19-20 fg=c8
+L11 2-3 fg=c8
+L11 4-14 fg=c7 bold
+L11 16-32 fg=c8
+L26 1-24 fg=c8
+L27 0-140 fg=c8
+L28 0-3 fg=c8
+L28 4-6 fg=c12 bold
+L28 8-59 fg=c7
+L28 86-87 fg=c8
+L28 88-92 fg=c7
+L28 97-127 fg=c15
+L28 139-140 fg=c8
+L29 0-11 fg=c8
+L29 12-55 fg=c15
+L29 57-87 fg=c8
+L29 88-95 fg=c7
+L29 97-140 fg=c8
+L30 0-11 fg=c8
+L30 12-37 fg=c15
+L30 39-87 fg=c8
+L30 88-89 fg=c7
+L30 97-109 fg=c10
+L30 110-140 fg=c8
+L31 0-87 fg=c8
+L31 88-89 fg=c7
+L31 97-115 fg=c10
+L31 116-140 fg=c8
+L32 0-3 fg=c8
+L32 4-6 fg=c3 bold
+L32 8-36 fg=c7
+L32 86-87 fg=c8
+L32 88-95 fg=c7
+L32 97-101 fg=c15
+L32 102-140 fg=c8
+L33 0-11 fg=c8
+L33 12-35 fg=c15
+L33 37-140 fg=c8
+L34 0-140 fg=c8
+L35 0-3 fg=c8
+L35 4-6 fg=c12 bold
+L35 8-37 fg=c7
+L35 86-140 fg=c8
+L36 0-140 fg=c8
+L38 1-6 fg=c12 bold
+L38 7-18 fg=c8
+L38 19-20 fg=c12 bold
+L38 21-29 fg=c8
+L38 30-31 fg=c12 bold
+L38 32-44 fg=c8
+L38 45-46 fg=c12 bold
+L38 47-55 fg=c8
+L38 56-57 fg=c12 bold
+L38 58-65 fg=c8
+L38 66-67 fg=c12 bold
+L38 68-78 fg=c8
+L38 79-80 fg=c12 bold
+L38 81-95 fg=c8
+L38 96-97 fg=c12 bold
+L38 98-106 fg=c8
+L38 107-108 fg=c12 bold
+L38 109-116 fg=c8
+L38 117-120 fg=c12 bold
+L38 121-130 fg=c8
+L38 131-132 fg=c12 bold
+L38 133-137 fg=c8

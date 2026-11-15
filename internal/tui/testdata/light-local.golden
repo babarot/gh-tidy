@@ -1,0 +1,186 @@
+-- screen --
+ tidy // ‹ mika ›    local │ github                                                         4 can update · 4 with changes · 1 worktree done 
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  REPO                        MAIN            CHECKED OUT                   CHANGES         WORKTREES                              FETCHED
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+▎ agent-runner ⌥3             <6              retry-backoff >2 ⇣5           *1              1 busy  1 new  1 done                  5h ago   
+  scratchpad local only       no origin       main                          %4                                                     -
+  dotfiles                    <2              main                          *3 %2 $1                                               1h ago
+  calendar-sync               <1              feat/ics-export = ⇣1          *1 +2                                                  1h ago
+  trail-notes                 <?              main                                                                                 1h ago
+  ▸ nothing to do  2
+  ▸ not cloned  2   c clones one
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 7 clones · 2 not cloned
+╭─ agent-runner ────────────────────────────────────────────────────────────────────────────────────────────────────── ↓ 7 more · +/- size ╮
+│ ▾ <6  on origin/main, not in your main · p brings them in                           │ path     ~/github.com/mika/agent-runner            │
+│   d3665f0 Bump golang.org/x/net from 0.45.0 to 0.47.0  hana 1h                      │ fetched  5h ago                                    │
+│   f02d507 Document the cache layout  kai 2h                                         │ p        updates main · ff, not checked out        │
+│   … 4 more                                                                          │ d        removes 1 worktree · keeps 2 worktrees    │
+│ ▾ >2  on retry-backoff, not pushed                                                  │ default  main from github                          │
+│   ef81585 Speed up status parsing  ren 7h                                           │                                                    │
+│   … 1 more                                                                          │                                                    │
+│ ▾ ⇣5  on main, not in retry-backoff                                                 │                                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+ enter worktrees · v github · P update all · p update · f fetch · d clean up · D clean up all · / filter · O owner · + - preview · ? keys
+-- styles --
+L1 0-6 fg=#1e66f5 bg=#ccd0da bold
+L1 6-9 fg=#9ca0b0 bg=#ccd0da
+L1 9-11 fg=#8c8fa1 bg=#ccd0da
+L1 11-16 fg=#5c5f77 bg=#ccd0da bold
+L1 16-21 fg=#8c8fa1 bg=#ccd0da
+L1 21-26 fg=#1e66f5 bg=#ccd0da bold underline
+L1 26-29 fg=#bcc0cc bg=#ccd0da
+L1 29-92 fg=#6c6f85 bg=#ccd0da
+L1 92-105 fg=#1e66f5 bg=#ccd0da
+L1 105-107 fg=#bcc0cc bg=#ccd0da
+L1 107-122 fg=#df8e1d bg=#ccd0da
+L1 122-124 fg=#bcc0cc bg=#ccd0da
+L1 124-140 fg=#40a02b bg=#ccd0da
+L2 0-140 fg=#bcc0cc
+L3 2-138 fg=#5c5f77 bold
+L4 0-140 fg=#bcc0cc
+L5 0-2 fg=#1e66f5 bg=#ccd0da
+L5 2-15 fg=#8839ef bg=#ccd0da bold
+L5 15-30 fg=#fe640b bg=#ccd0da
+L5 30-46 fg=#1e66f5 bg=#ccd0da
+L5 46-60 fg=#5c5f77 bg=#ccd0da
+L5 60-63 fg=#fe640b bg=#ccd0da
+L5 63-76 fg=#1e66f5 bg=#ccd0da
+L5 76-92 fg=#df8e1d bg=#ccd0da
+L5 92-100 fg=#fe640b bg=#ccd0da
+L5 100-107 fg=#1e66f5 bg=#ccd0da
+L5 107-131 fg=#40a02b bg=#ccd0da
+L5 131-140 fg=#8c8fa1 bg=#ccd0da
+L6 2-12 fg=#8839ef bold
+L6 13-23 fg=#d20f39
+L6 30-50 fg=#9ca0b0
+L6 76-78 fg=#8c8fa1
+L6 131-132 fg=#9ca0b0
+L7 2-10 fg=#8839ef bold
+L7 30-32 fg=#1e66f5
+L7 46-50 fg=#9ca0b0
+L7 76-78 fg=#df8e1d
+L7 79-81 fg=#8c8fa1
+L7 82-84 fg=#8839ef
+L7 131-137 fg=#8c8fa1
+L8 2-15 fg=#8839ef bold
+L8 30-32 fg=#1e66f5
+L8 46-61 fg=#5c5f77
+L8 62-63 fg=#9ca0b0
+L8 64-66 fg=#1e66f5
+L8 76-78 fg=#df8e1d
+L8 79-81 fg=#40a02b
+L8 131-137 fg=#8c8fa1
+L9 2-13 fg=#8839ef bold
+L9 30-31 fg=#1e66f5
+L9 31-32 fg=#df8e1d
+L9 46-50 fg=#9ca0b0
+L9 131-137 fg=#df8e1d
+L10 2-3 fg=#8c8fa1
+L10 4-17 fg=#6c6f85 bold
+L10 19-20 fg=#9ca0b0
+L11 2-3 fg=#8c8fa1
+L11 4-14 fg=#6c6f85 bold
+L11 16-32 fg=#9ca0b0
+L26 1-24 fg=#8c8fa1
+L27 0-140 fg=#bcc0cc
+L28 0-1 fg=#bcc0cc
+L28 2-3 fg=#8c8fa1
+L28 4-6 fg=#1e66f5 bold
+L28 8-59 fg=#6c6f85
+L28 86-87 fg=#9ca0b0
+L28 88-92 fg=#6c6f85
+L28 97-127 fg=#4c4f69
+L28 139-140 fg=#bcc0cc
+L29 0-1 fg=#bcc0cc
+L29 4-11 fg=#9ca0b0
+L29 12-55 fg=#4c4f69
+L29 57-87 fg=#9ca0b0
+L29 88-95 fg=#6c6f85
+L29 97-103 fg=#8c8fa1
+L29 139-140 fg=#bcc0cc
+L30 0-1 fg=#bcc0cc
+L30 4-11 fg=#9ca0b0
+L30 12-37 fg=#4c4f69
+L30 39-87 fg=#9ca0b0
+L30 88-89 fg=#6c6f85
+L30 97-109 fg=#40a02b
+L30 110-131 fg=#8c8fa1
+L30 139-140 fg=#bcc0cc
+L31 0-1 fg=#bcc0cc
+L31 4-87 fg=#9ca0b0
+L31 88-89 fg=#6c6f85
+L31 97-115 fg=#40a02b
+L31 116-135 fg=#8c8fa1
+L31 139-140 fg=#bcc0cc
+L32 0-1 fg=#bcc0cc
+L32 2-3 fg=#8c8fa1
+L32 4-6 fg=#fe640b bold
+L32 8-36 fg=#6c6f85
+L32 86-87 fg=#9ca0b0
+L32 88-95 fg=#6c6f85
+L32 97-101 fg=#5c5f77
+L32 102-113 fg=#9ca0b0
+L32 139-140 fg=#bcc0cc
+L33 0-1 fg=#bcc0cc
+L33 4-11 fg=#9ca0b0
+L33 12-35 fg=#4c4f69
+L33 37-87 fg=#9ca0b0
+L33 139-140 fg=#bcc0cc
+L34 0-1 fg=#bcc0cc
+L34 4-87 fg=#9ca0b0
+L34 139-140 fg=#bcc0cc
+L35 0-1 fg=#bcc0cc
+L35 2-3 fg=#8c8fa1
+L35 4-6 fg=#1e66f5 bold
+L35 8-37 fg=#6c6f85
+L35 86-87 fg=#9ca0b0
+L35 139-140 fg=#bcc0cc
+L36 0-140 fg=#bcc0cc
+L38 1-6 fg=#1e66f5 bold
+L38 7-16 fg=#8c8fa1
+L38 17-18 fg=#bcc0cc
+L38 19-20 fg=#1e66f5 bold
+L38 21-27 fg=#8c8fa1
+L38 28-29 fg=#bcc0cc
+L38 30-31 fg=#1e66f5 bold
+L38 32-42 fg=#8c8fa1
+L38 43-44 fg=#bcc0cc
+L38 45-46 fg=#1e66f5 bold
+L38 47-53 fg=#8c8fa1
+L38 54-55 fg=#bcc0cc
+L38 56-57 fg=#1e66f5 bold
+L38 58-63 fg=#8c8fa1
+L38 64-65 fg=#bcc0cc
+L38 66-67 fg=#1e66f5 bold
+L38 68-76 fg=#8c8fa1
+L38 77-78 fg=#bcc0cc
+L38 79-80 fg=#1e66f5 bold
+L38 81-93 fg=#8c8fa1
+L38 94-95 fg=#bcc0cc
+L38 96-97 fg=#1e66f5 bold
+L38 98-104 fg=#8c8fa1
+L38 105-106 fg=#bcc0cc
+L38 107-108 fg=#1e66f5 bold
+L38 109-114 fg=#8c8fa1
+L38 115-116 fg=#bcc0cc
+L38 117-120 fg=#1e66f5 bold
+L38 121-128 fg=#8c8fa1
+L38 129-130 fg=#bcc0cc
+L38 131-132 fg=#1e66f5 bold
+L38 133-137 fg=#8c8fa1

@@ -1,0 +1,88 @@
+-- screen --
+ tidy // ‹ mika ›    local │ github                                                         4 can update · 4 with changes · 1 worktree done
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  REPO                        MAIN            CHECKED OUT                   CHANGES         WORKTREES                              FETCHED
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+▎ agent-runner ⌥3             <6              retry-backoff >2 ⇣5           *1              1 busy  1 new  1 done                  5h ago
+  scratchpad local only       no origin       main                          %4                                                     -
+  dotfiles                    <2              main                          *3 %2 $1                                               1h ago
+  calendar-sync     ╭─ update all ─────────────────────────────────────────────────────────────────────────────────────╮           1h ago
+  trail-notes       │ Fetch the 6 clones of mika, then fast-forward each default branch                                │           1h ago
+  ▸ nothing to do  2│ where nothing is in the way. Branches being worked on are not touched.                           │
+  ▸ not cloned  2   │                                                                                                  │
+                    │ as last read: 4 can update · 0 in the way                                                        │
+                    │ each is decided again after its fetch                                                            │
+                    │                                                                                                  │
+                    │ y yes · esc cancel                                                                               │
+                    ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+ 7 clones · 2 not cloned
+╭─ agent-runner ────────────────────────────────────────────────────────────────────────────────────────────────────── ↓ 7 more · +/- size ╮
+│ ▾ <6  on origin/main, not in your main · p brings them in                           │ path     ~/github.com/mika/agent-runner            │
+│   d3665f0 Bump golang.org/x/net from 0.45.0 to 0.47.0  hana 1h                      │ fetched  5h ago                                    │
+│   f02d507 Document the cache layout  kai 2h                                         │ p        updates main · ff, not checked out        │
+│   … 4 more                                                                          │ d        removes 1 worktree · keeps 2 worktrees    │
+│ ▾ >2  on retry-backoff, not pushed                                                  │ default  main from github                          │
+│   ef81585 Speed up status parsing  ren 7h                                           │                                                    │
+│   … 1 more                                                                          │                                                    │
+│ ▾ ⇣5  on main, not in retry-backoff                                                 │                                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+ y yes · esc cancel
+-- styles --
+L1 1-139 fg=#bcc0cc
+L2 0-140 fg=#bcc0cc
+L3 2-138 fg=#bcc0cc
+L4 0-140 fg=#bcc0cc
+L5 0-137 fg=#bcc0cc
+L6 2-132 fg=#bcc0cc
+L7 2-137 fg=#bcc0cc
+L8 2-15 fg=#bcc0cc
+L8 20-120 fg=#1e66f5
+L8 131-137 fg=#bcc0cc
+L9 2-13 fg=#bcc0cc
+L9 20-21 fg=#1e66f5
+L9 22-87 fg=#4c4f69
+L9 119-120 fg=#1e66f5
+L9 131-137 fg=#bcc0cc
+L10 2-20 fg=#bcc0cc
+L10 20-21 fg=#1e66f5
+L10 22-92 fg=#4c4f69
+L10 119-120 fg=#1e66f5
+L11 2-17 fg=#bcc0cc
+L11 20-120 fg=#1e66f5
+L12 20-48 fg=#1e66f5
+L12 49-63 fg=#df8e1d
+L12 119-120 fg=#1e66f5
+L13 20-21 fg=#1e66f5
+L13 22-59 fg=#8c8fa1
+L13 119-120 fg=#1e66f5
+L14 20-120 fg=#1e66f5
+L15 20-21 fg=#1e66f5
+L15 22-23 fg=#1e66f5 bold
+L15 24-27 fg=#df8e1d
+L15 28-29 fg=#bcc0cc
+L15 30-33 fg=#1e66f5 bold
+L15 34-40 fg=#8c8fa1
+L15 119-120 fg=#1e66f5
+L16 20-120 fg=#1e66f5
+L26 1-24 fg=#bcc0cc
+L27 0-140 fg=#bcc0cc
+L28 0-140 fg=#bcc0cc
+L29 0-140 fg=#bcc0cc
+L30 0-140 fg=#bcc0cc
+L31 0-140 fg=#bcc0cc
+L32 0-140 fg=#bcc0cc
+L33 0-140 fg=#bcc0cc
+L34 0-140 fg=#bcc0cc
+L35 0-140 fg=#bcc0cc
+L36 0-140 fg=#bcc0cc
+L38 1-19 fg=#bcc0cc

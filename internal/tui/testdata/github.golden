@@ -1,10 +1,11 @@
- tidy // ‹ mika ›    local │ github                                                         4 can update · 4 with changes · 1 worktree done
+-- screen --
+ tidy // ‹ mika ›    local │ github                                                         4 can update · 4 with changes · 1 worktree done 
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
   REPO                        ISSUES    PRS       DEPENDABOT  CI    PUSHED              MAIN
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
   calendar-sync               1         0         2           ✗     3d ago              <1
   tool-shed                   3         0         1           ✓     4d ago              not cloned
-▎ agent-runner ⌥3             4         2         0           ✓     2h ago              <6
+▎ agent-runner ⌥3             4         2         0           ✓     2h ago              <6                                                  
   trail-notes                 0         1         0           ~     1d ago              <?
   dotfiles                    0         0         0           ✓     3h ago     private  <2
   pixel-garden                0         0         0           ✓     20h ago             =
@@ -36,3 +37,135 @@
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
  v local · o open on GitHub · c clone · / filter · O owner · ? keys · q quit
+-- styles --
+L1 0-6 fg=#96bfff bg=#3b3b52 bold
+L1 6-9 fg=#706f87 bg=#3b3b52
+L1 9-11 fg=#8888a4 bg=#3b3b52
+L1 11-16 fg=#d0d6e8 bg=#3b3b52 bold
+L1 16-21 fg=#8888a4 bg=#3b3b52
+L1 21-27 fg=#b0b8d1 bg=#3b3b52
+L1 27-29 fg=#525270 bg=#3b3b52
+L1 29-35 fg=#96bfff bg=#3b3b52 bold underline
+L1 35-105 fg=#96bfff bg=#3b3b52
+L1 105-107 fg=#525270 bg=#3b3b52
+L1 107-122 fg=#ffe5a0 bg=#3b3b52
+L1 122-124 fg=#525270 bg=#3b3b52
+L1 124-140 fg=#b5f0b0 bg=#3b3b52
+L2 0-140 fg=#525270
+L3 2-92 fg=#d0d6e8 bold
+L4 0-140 fg=#525270
+L5 2-15 fg=#d4b0ff bold
+L5 30-31 fg=#e0e4f0
+L5 40-41 fg=#706f87
+L5 50-63 fg=#f5a3b5
+L5 68-74 fg=#b0b8d1
+L5 88-90 fg=#96bfff
+L6 2-11 fg=#8888a4
+L6 30-31 fg=#e0e4f0
+L6 40-41 fg=#706f87
+L6 50-51 fg=#f5a3b5
+L6 62-63 fg=#b5f0b0
+L6 68-74 fg=#b0b8d1
+L6 88-98 fg=#706f87
+L7 0-2 fg=#96bfff bg=#3b3b52
+L7 2-15 fg=#d4b0ff bg=#3b3b52 bold
+L7 15-30 fg=#ffc49a bg=#3b3b52
+L7 30-50 fg=#e0e4f0 bg=#3b3b52
+L7 50-62 fg=#706f87 bg=#3b3b52
+L7 62-68 fg=#b5f0b0 bg=#3b3b52
+L7 68-88 fg=#b0b8d1 bg=#3b3b52
+L7 88-140 fg=#96bfff bg=#3b3b52
+L8 2-13 fg=#d4b0ff bold
+L8 30-31 fg=#706f87
+L8 40-41 fg=#e0e4f0
+L8 50-51 fg=#706f87
+L8 62-63 fg=#ffe5a0
+L8 68-74 fg=#b0b8d1
+L8 88-89 fg=#96bfff
+L8 89-90 fg=#ffe5a0
+L9 2-10 fg=#d4b0ff bold
+L9 30-51 fg=#706f87
+L9 62-63 fg=#b5f0b0
+L9 68-74 fg=#b0b8d1
+L9 79-86 fg=#706f87
+L9 88-90 fg=#96bfff
+L10 2-14 fg=#d4b0ff bold
+L10 30-51 fg=#706f87
+L10 62-63 fg=#b5f0b0
+L10 68-75 fg=#b0b8d1
+L10 88-89 fg=#706f87
+L11 2-13 fg=#8888a4
+L11 30-41 fg=#706f87
+L11 50-53 fg=#8888a4
+L11 62-63 fg=#706f87
+L11 68-74 fg=#b0b8d1
+L11 79-98 fg=#706f87
+L12 2-14 fg=#d4b0ff bold
+L12 30-63 fg=#706f87
+L12 68-75 fg=#b0b8d1
+L12 88-89 fg=#706f87
+L13 2-12 fg=#d4b0ff bold
+L13 13-23 fg=#f5a3b5
+L13 30-97 fg=#706f87
+L26 1-24 fg=#8888a4
+L27 0-140 fg=#525270
+L28 0-1 fg=#525270
+L28 2-6 fg=#b0b8d1 bold
+L28 86-87 fg=#706f87
+L28 88-92 fg=#b0b8d1
+L28 97-127 fg=#e0e4f0
+L28 139-140 fg=#525270
+L29 0-1 fg=#525270
+L29 4-30 fg=#e0e4f0
+L29 86-87 fg=#706f87
+L29 88-95 fg=#b0b8d1
+L29 97-103 fg=#8888a4
+L29 139-140 fg=#525270
+L30 0-1 fg=#525270
+L30 86-87 fg=#706f87
+L30 88-89 fg=#b0b8d1
+L30 97-109 fg=#b5f0b0
+L30 110-131 fg=#8888a4
+L30 139-140 fg=#525270
+L31 0-1 fg=#525270
+L31 86-87 fg=#706f87
+L31 88-89 fg=#b0b8d1
+L31 97-115 fg=#b5f0b0
+L31 116-135 fg=#8888a4
+L31 139-140 fg=#525270
+L32 0-1 fg=#525270
+L32 86-87 fg=#706f87
+L32 88-95 fg=#b0b8d1
+L32 97-101 fg=#d0d6e8
+L32 102-113 fg=#706f87
+L32 139-140 fg=#525270
+L33 0-1 fg=#525270
+L33 86-87 fg=#706f87
+L33 139-140 fg=#525270
+L34 0-1 fg=#525270
+L34 86-87 fg=#706f87
+L34 139-140 fg=#525270
+L35 0-1 fg=#525270
+L35 86-87 fg=#706f87
+L35 139-140 fg=#525270
+L36 0-140 fg=#525270
+L38 1-2 fg=#96bfff bold
+L38 3-8 fg=#8888a4
+L38 9-10 fg=#525270
+L38 11-12 fg=#96bfff bold
+L38 13-27 fg=#8888a4
+L38 28-29 fg=#525270
+L38 30-31 fg=#96bfff bold
+L38 32-37 fg=#8888a4
+L38 38-39 fg=#525270
+L38 40-41 fg=#96bfff bold
+L38 42-48 fg=#8888a4
+L38 49-50 fg=#525270
+L38 51-52 fg=#96bfff bold
+L38 53-58 fg=#8888a4
+L38 59-60 fg=#525270
+L38 61-62 fg=#96bfff bold
+L38 63-67 fg=#8888a4
+L38 68-69 fg=#525270
+L38 70-71 fg=#96bfff bold
+L38 72-76 fg=#8888a4

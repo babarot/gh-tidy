@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,6 +20,7 @@ import (
 	"github.com/babarot/gh-tidy/internal/engine"
 	"github.com/babarot/gh-tidy/internal/github"
 	"github.com/babarot/gh-tidy/internal/model"
+	"github.com/babarot/gh-tidy/internal/theme"
 	"github.com/babarot/gh-tidy/internal/tui/columns"
 )
 
@@ -383,8 +385,11 @@ func screen(m *Model) string {
 	return strings.Join(out, "\n") + "\n"
 }
 
-func golden(t *testing.T, name, got string) {
+// golden compares what m draws, text and looks, with testdata/<name>.golden;
+// -update writes it.
+func golden(t *testing.T, name string, m *Model) {
 	t.Helper()
+	got := normalize(t, m.render())
 	path := filepath.Join("testdata", name+".golden")
 	if *update {
 		if err := os.MkdirAll("testdata", 0o755); err != nil {
@@ -399,7 +404,7 @@ func golden(t *testing.T, name, got string) {
 	if err != nil {
 		t.Fatalf("%v (run with -update)", err)
 	}
-	if got != string(want) {
+	if !sameView(got, string(want)) {
 		t.Errorf("%s differs (run with -update to accept):\n%s", name, got)
 	}
 }
@@ -407,22 +412,22 @@ func golden(t *testing.T, name, got string) {
 func TestLocal(t *testing.T) {
 	w := newWorld(t)
 	m := w.model(nil)
-	golden(t, "local", screen(m))
+	golden(t, "local", m)
 	press(w, m, "enter")
-	golden(t, "local-worktrees", screen(m))
+	golden(t, "local-worktrees", m)
 }
 
 func TestGitHub(t *testing.T) {
 	w := newWorld(t)
 	m := w.model(nil)
 	press(w, m, "v")
-	golden(t, "github", screen(m))
+	golden(t, "github", m)
 }
 
 func TestNoCounts(t *testing.T) {
 	w := newWorld(t)
 	m := w.model(func(o *Options) { o.Config.Symbols.Counts = false })
-	golden(t, "local-no-counts", screen(m))
+	golden(t, "local-no-counts", m)
 }
 
 func TestEveryColumnAndSectionIsDrawn(t *testing.T) {
@@ -782,5 +787,46 @@ func TestThePopupLinesUpOverWideCharacters(t *testing.T) {
 				t.Errorf("line %d: the box's edge is %q at cell %d", i, c, left)
 			}
 		}
+	}
+}
+
+// scenes are the screens drawn on a light background, and the first on
+// every theme.
+var scenes = []struct {
+	name string
+	keys []string
+}{
+	{"local", nil},
+	{"local-worktrees", []string{"enter"}},
+	{"github", []string{"v"}},
+	{"confirm", []string{"P"}},
+}
+
+var white = color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
+
+func TestLightBackground(t *testing.T) {
+	for _, sc := range scenes {
+		t.Run(sc.name, func(t *testing.T) {
+			w := newWorld(t)
+			m := w.model(nil)
+			m.Update(tea.BackgroundColorMsg{Color: white})
+			press(w, m, sc.keys...)
+			golden(t, "light-"+sc.name, m)
+		})
+	}
+}
+
+// TestThemes draws one screen on every theme, so that a theme added gets
+// a golden file without a test of its own.
+func TestThemes(t *testing.T) {
+	for _, name := range theme.Names() {
+		if name == theme.Auto {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			w := newWorld(t)
+			m := w.model(func(o *Options) { o.Config.TUI.Theme = name })
+			golden(t, "theme-"+name, m)
+		})
 	}
 }
