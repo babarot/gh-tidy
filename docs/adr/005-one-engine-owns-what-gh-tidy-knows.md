@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-The prototype kept its data, its concurrency (a semaphore for fetches) and its decisions about reading in the TUI's one model, which every file of the TUI could write. gh-desk did the same and later moved state out part by part. gh-tidy now reads many clones and one or more owners' lists and fields from GitHub, in the background, under a rate limit shared with other tools, while the user switches owners and changes clones.
+The prototype kept its data, its concurrency (a semaphore for fetches) and its decisions about reading in the TUI's one model, which every file of the TUI could write; state kept that way has to be moved out part by part later. gh-tidy now reads many clones and one or more owners' lists and fields from GitHub, in the background, under a rate limit shared with other tools, while the user switches owners and changes clones.
 
 ## Decision
 
@@ -18,7 +18,7 @@ The prototype kept its data, its concurrency (a semaphore for fetches) and its d
 - What gh-tidy reads on its own is held back by a budget: below a share of the hourly points left, heavy fields stop, and below a smaller share everything does; gh-tidy also caps what it spends unasked in an hour, whatever is left. The lowest remaining count seen for a reset is used, since GitHub's regions report it out of step. After a rate limit refusal no request goes until GitHub says it may, longer each time it happens again. After GitHub gives up on a query, queries ask for fewer repositories.
 - The screen tells the engine what it needs read (the union of what its columns and preview need) and which rows it shows; the engine reads only that, the rows shown first. A value records which fields its read asked for, so that a field needed later is read.
 - `all` is a view put together from every owner's clones and their GitHub values as last read; it reads no more of GitHub.
-- Rejected: keeping data in the TUI's model and moving it out later, as gh-desk had to.
+- Rejected: keeping data in the TUI's model and moving it out later, each move touching every part that reads it.
 - Rejected: one limit for every kind of access. A slow fetch would hold back reading the disk, and the API's limit is set by GitHub's rate limits, not by the machine.
 
 ## Consequences

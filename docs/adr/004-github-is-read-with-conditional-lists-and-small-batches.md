@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-gh-tidy lists an owner's repositories (405 for babarot, possibly hundreds for an organization) and reads fields of many of them, with a token whose hourly points are shared with gh-desk and gh. Measured on 2026-11-14 and 15:
+gh-tidy lists an owner's repositories (405 for babarot, possibly hundreds for an organization) and reads fields of many of them, with a token whose hourly points are shared with gh and the user's other tools. Measured on 2026-11-14 and 15:
 
 - Listing with GraphQL is slow once `defaultBranchRef` is asked for at all: 6 seconds for 405 repositories became 25. With every heavy field on a page of 100, GitHub cut the query off at its 10-second limit (502), and it takes extra points for the next hour after a cut-off.
 - The REST list returns the default branch's name with no such cost, and answers a conditional request with 304 without counting it against the rate limit; 5 pages answered 304 in 3 seconds at a cost of 0.
