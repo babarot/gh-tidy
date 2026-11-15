@@ -83,6 +83,7 @@ This page is written from the code (`go test ./internal/tui -run TestKeysReferen
 | click the owner | chooses an owner; ‹ and › step to the previous and next |
 | click local, github | switches the columns |
 | click a pane's head | folds that part of the pane |
+| drag the pane's top | makes the pane taller or shorter, as + and - do |
 | click a key hint | presses the key, unless it changes a clone or asks GitHub |
 | click in a popup | puts the cursor on an item; a click on it again chooses it |
 | click outside | closes the popup |
