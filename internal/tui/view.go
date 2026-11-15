@@ -121,7 +121,7 @@ func (m *Model) header() drawn {
 		x += width(cs)
 	}
 	add([]cell{{text: "‹ ", role: roleMuted}}, func(m *Model) tea.Cmd { m.stepOwner(-1); return nil })
-	add([]cell{{text: m.owner, role: roleStrong, bold: true}}, func(m *Model) tea.Cmd { m.popup = m.ownerPopup(); return nil })
+	add([]cell{{text: m.owner, role: roleStrong, bold: true}}, func(m *Model) tea.Cmd { m.open(m.ownerPopup()); return nil })
 	add([]cell{{text: " ›", role: roleMuted}}, func(m *Model) tea.Cmd { m.stepOwner(1); return nil })
 	add([]cell{{text: strings.Repeat(" ", ow-ansi.StringWidth(m.owner)+4)}}, nil)
 	for i, l := range columns.Lenses {
@@ -423,7 +423,7 @@ type hint struct {
 
 func (m *Model) hints() []hint {
 	if m.popup != nil {
-		return m.popup.hints
+		return m.popupHints(true)
 	}
 	if m.filtering {
 		return []hint{{m.keys.First("accept"), m.keys.Help("accept")}, {"esc", "clear"}}

@@ -98,7 +98,7 @@ func (m *Model) operate(k string) (tea.Cmd, bool) {
 		}
 		return m.busySaid("update", m.eng.Advance([]model.CloneKey{r.Clone})), true
 	case on("pull_all"):
-		m.popup = m.updateAllPopup()
+		m.open(m.updateAllPopup())
 		return nil, true
 	case on("cleanup"):
 		r, ok := m.target()
@@ -333,7 +333,7 @@ func (m *Model) planned(msg planMsg) tea.Cmd {
 }
 
 func (m *Model) openConfirm(title string, body []drawn, run func(*Model) tea.Cmd) tea.Cmd {
-	m.popup = m.confirmPopup(title, body, run)
+	m.open(m.confirmPopup(title, body, run))
 	return nil
 }
 

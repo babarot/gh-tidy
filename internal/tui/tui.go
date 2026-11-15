@@ -279,6 +279,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.st = newStyles(theme.Get(m.themeArg, m.dark))
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.place()
 		m.sync()
 	case changedMsg:
 		m.refresh()
@@ -352,7 +353,7 @@ func (m *Model) key(k string) tea.Cmd {
 	case on("quit"):
 		return m.quit()
 	case on("help"):
-		m.popup = m.helpPopup()
+		m.open(m.helpPopup())
 	case on("up"):
 		m.move(-1)
 	case on("down"):
@@ -374,7 +375,7 @@ func (m *Model) key(k string) tea.Cmd {
 	case on("next_owner"):
 		m.stepOwner(1)
 	case on("choose_owner"):
-		m.popup = m.ownerPopup()
+		m.open(m.ownerPopup())
 	case on("search"):
 		m.filtering = true
 	case on("preview_grow"):
