@@ -11,6 +11,7 @@ gh-tidy is split into packages by layer. A package imports only packages of lowe
 | 0 | `internal/model` | The values passed between packages: a clone's state, the facts decisions are made from, the keys of rows | - | - |
 | 0 | `internal/gittest` | Real git repositories in a test's temporary directory; imported by tests only | - | - |
 | 1 | `internal/gitx` | Running git without taking a lock, and parsing its porcelain output | - | - |
+| 1 | `internal/policy` | Deciding what to do with a clone from facts: moving its default branch, what d removes, how a worktree is judged, attention | `internal/model` | - |
 | 1 | `internal/config` | Reading the config file and reporting its mistakes | `internal/theme` | `github.com/pelletier/go-toml/v2` |
 | 2 | `internal/repo` | One clone's state, read from git alone | `internal/gitx` | - |
 | 2 | `internal/github` | GitHub's GraphQL API through gh's authentication | - | `github.com/cli/go-gh/v2` |

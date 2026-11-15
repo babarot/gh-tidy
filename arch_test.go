@@ -29,6 +29,7 @@ var layers = []layer{
 	{"internal/model", 0, nil, nil, "The values passed between packages: a clone's state, the facts decisions are made from, the keys of rows"},
 	{"internal/gittest", 0, nil, nil, "Real git repositories in a test's temporary directory; imported by tests only"},
 	{"internal/gitx", 1, nil, nil, "Running git without taking a lock, and parsing its porcelain output"},
+	{"internal/policy", 1, []string{"internal/model"}, nil, "Deciding what to do with a clone from facts: moving its default branch, what d removes, how a worktree is judged, attention"},
 	{"internal/config", 1, []string{"internal/theme"}, []string{"github.com/pelletier/go-toml/v2"}, "Reading the config file and reporting its mistakes"},
 	{"internal/repo", 2, []string{"internal/gitx"}, nil, "One clone's state, read from git alone"},
 	{"internal/github", 2, nil, []string{"github.com/cli/go-gh/v2"}, "GitHub's GraphQL API through gh's authentication"},
