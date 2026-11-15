@@ -53,10 +53,14 @@ type layer struct {
 }
 
 // reach are the parts of the standard library that reach outside the
-// process, and the packages allowed to use each.
+// process, and the packages allowed to use each. An entry covers the
+// packages under it too (net/http covers net/http/httptest), except net,
+// whose subpackages such as net/url only parse text.
 var reach = map[string][]string{
 	"net":      {},
 	"net/http": {},
+	"net/rpc":  {},
+	"net/smtp": {},
 	"os/exec":  {"internal/cleanup", "internal/gittest", "internal/gitx", "internal/tui"},
 	"syscall":  {},
 }
@@ -109,12 +113,23 @@ func TestArchitecture(t *testing.T) {
 					t.Errorf("%s imports %s, an outside module not allowed for it", p.ImportPath, imp)
 				}
 			default:
-				if who, ok := reach[imp]; ok && !slices.Contains(who, rel) {
-					t.Errorf("%s imports %s, which only %s may use", p.ImportPath, imp, whoMay(who))
+				if key, who, ok := reaching(imp); ok && !slices.Contains(who, rel) {
+					t.Errorf("%s imports %s, which only %s may use (%s)", p.ImportPath, imp, whoMay(who), key)
 				}
 			}
 		}
 	}
+}
+
+// reaching finds the reach entry that covers imp: the entry itself, or one
+// above it other than net.
+func reaching(imp string) (string, []string, bool) {
+	for key, who := range reach {
+		if imp == key || (key != "net" && strings.HasPrefix(imp, key+"/")) {
+			return key, who, true
+		}
+	}
+	return "", nil, false
 }
 
 // TestLayersGoDownward checks the table itself: every allowed import is a

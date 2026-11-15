@@ -27,6 +27,8 @@ Standard library packages that reach outside the process:
 |---|---|
 | `net` | - |
 | `net/http` | - |
+| `net/rpc` | - |
+| `net/smtp` | - |
 | `os/exec` | `internal/cleanup`, `internal/gittest`, `internal/gitx`, `internal/tui` |
 | `syscall` | - |
 <!-- layers:end -->
