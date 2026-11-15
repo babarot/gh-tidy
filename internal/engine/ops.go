@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -59,37 +60,57 @@ func (noChanger) PruneWorktrees(context.Context, string) error       { return er
 // clone are made one at a time.
 var ErrBusy = errors.New("busy")
 
+// hold is a lane taken: what is being done, and the owners it keeps in
+// memory until it ends.
+type hold struct {
+	doing  string
+	owners []*owner
+}
+
 // lane takes key's lane for doing, or returns false when it is taken.
-// While it is held, reads of the clone that started before are dropped.
-func (e *Engine) lane(key model.CloneKey, doing string) bool {
+// While it is held, reads of the clone that started before are dropped,
+// and the owners holding the clone (and extra) are not let go.
+func (e *Engine) lane(key model.CloneKey, doing string, extra ...*owner) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.lanes[key] != "" {
+	if e.lanes[key] != nil {
 		return false
 	}
-	e.lanes[key] = doing
-	e.epoch[key]++
-	e.setOp(key, model.Op{Doing: doing})
+	h := &hold{doing: doing}
 	for _, o := range e.owners {
-		if o.rows[string(key)] != nil {
+		if o.rows[string(key)] != nil || slices.Contains(extra, o) {
 			o.writes++
+			h.owners = append(h.owners, o)
 		}
 	}
+	e.lanes[key] = h
+	e.epoch[key]++
+	e.setOp(key, model.Op{Doing: doing})
 	return true
+}
+
+// doing says what is being done in a lane already taken.
+func (e *Engine) doing(key model.CloneKey, doing string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if h := e.lanes[key]; h != nil {
+		h.doing = doing
+	}
+	e.setOp(key, model.Op{Doing: doing})
 }
 
 // leave gives key's lane back, with what was done.
 func (e *Engine) leave(key model.CloneKey, op model.Op) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	delete(e.lanes, key)
-	e.epoch[key]++
-	e.setOp(key, op)
-	for _, o := range e.owners {
-		if o.rows[string(key)] != nil && o.writes > 0 {
+	if h := e.lanes[key]; h != nil {
+		for _, o := range h.owners {
 			o.writes--
 		}
 	}
+	delete(e.lanes, key)
+	e.epoch[key]++
+	e.setOp(key, op)
 }
 
 // setOp sets the operation shown on every row of key. Called with e.mu
@@ -144,31 +165,17 @@ func (e *Engine) rescan(_ context.Context, path string) model.Clone {
 	return s.clone
 }
 
-// free returns the keys whose lanes are free, and those taken: a change
-// asked for a clone being changed is refused at once rather than queued,
-// since what decided it may no longer hold when its turn would come.
-func (e *Engine) free(keys []model.CloneKey) (free, busy []model.CloneKey) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	for _, k := range keys {
-		if e.lanes[k] != "" {
-			busy = append(busy, k)
-		} else {
-			free = append(free, k)
-		}
-	}
-	return free, busy
-}
-
 // Fetch fetches the clones of keys, a few at a time, and returns those it
-// refused because a change is in flight in them.
+// refused because a change is in flight in them. Each clone's lane is
+// taken when asked, so that what is refused is said at once.
 func (e *Engine) Fetch(keys []model.CloneKey) (busy []model.CloneKey) {
-	keys, busy = e.free(keys)
 	for _, k := range keys {
+		if !e.lane(k, "waiting to fetch") {
+			busy = append(busy, k)
+			continue
+		}
 		e.netPool.add(prioAsked, nil, func() {
-			if !e.lane(k, "fetching") {
-				return
-			}
+			e.doing(k, "fetching")
 			c, ok := e.clone(k)
 			op := model.Op{Result: "fetched"}
 			switch {
@@ -193,12 +200,13 @@ func (e *Engine) Fetch(keys []model.CloneKey) (busy []model.CloneKey) {
 // being worked on. What is skipped says why. It returns the clones it
 // refused because a change is in flight in them.
 func (e *Engine) Advance(keys []model.CloneKey) (busy []model.CloneKey) {
-	keys, busy = e.free(keys)
 	for _, k := range keys {
+		if !e.lane(k, "waiting to update") {
+			busy = append(busy, k)
+			continue
+		}
 		e.netPool.add(prioAsked, nil, func() {
-			if !e.lane(k, "fetching") {
-				return
-			}
+			e.doing(k, "fetching")
 			op := e.advance(k)
 			e.leave(k, op)
 			e.readHeavyShown()
@@ -265,14 +273,12 @@ func (e *Engine) PlanCleanup(key model.CloneKey, opts policy.Cleanup, cwd string
 // because a change is in flight in them.
 func (e *Engine) Cleanup(plans map[model.CloneKey]policy.Plan, opts policy.Cleanup, cwd string) (busy []model.CloneKey) {
 	for k, confirmed := range plans {
-		if _, b := e.free([]model.CloneKey{k}); len(b) > 0 {
+		if !e.lane(k, "waiting to clean up") {
 			busy = append(busy, k)
 			continue
 		}
 		e.localPool.add(prioAsked, nil, func() {
-			if !e.lane(k, "cleaning up") {
-				return
-			}
+			e.doing(k, "cleaning up")
 			op := e.cleanup(k, confirmed, opts, cwd)
 			e.leave(k, op)
 		}, nil)
@@ -431,10 +437,10 @@ func (e *Engine) Clone(key model.RemoteKey) (string, error) {
 	if _, err := os.Stat(dir); err == nil {
 		return dir, fmt.Errorf("%s already exists", abbrevHome(dir))
 	}
+	if !e.lane(ck, "cloning", o) {
+		return dir, errors.New("busy with another change")
+	}
 	e.netPool.add(prioAsked, nil, func() {
-		if !e.lane(ck, "cloning") {
-			return
-		}
 		// The row is the remote's until the clone is read: show it there.
 		e.mu.Lock()
 		r.Op = model.Op{Doing: "cloning"}
@@ -461,12 +467,20 @@ func (e *Engine) Clone(key model.RemoteKey) (string, error) {
 	return dir, nil
 }
 
-// Reread reads the clone at path again after something other than gh
-// tidy may have changed it (an action), or forgets it when it is gone.
-func (e *Engine) Reread(path string) {
+// Hold takes the lane of the clone at path for something other than gh
+// tidy that may change it (an action), or returns false when a change is
+// in flight there. Release gives it back.
+func (e *Engine) Hold(path, doing string) bool {
+	return e.lane(model.NewCloneKey(path), doing)
+}
+
+// Release reads the clone at path again, held by Hold, and gives its lane
+// back; a clone whose directory is gone is forgotten.
+func (e *Engine) Release(path string) {
 	key := model.NewCloneKey(path)
 	e.localPool.add(prioAsked, nil, func() {
 		if _, err := os.Stat(path); err != nil {
+			e.leave(key, model.Op{})
 			e.mu.Lock()
 			o := e.owners[e.shown]
 			e.mu.Unlock()
@@ -475,10 +489,14 @@ func (e *Engine) Reread(path string) {
 			}
 			return
 		}
-		if !e.lane(key, "reading") {
-			return
-		}
 		e.rescan(e.ctx, path)
 		e.leave(key, model.Op{})
 	}, nil)
+}
+
+// Writing is how many clones have a change in flight.
+func (e *Engine) Writing() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return len(e.lanes)
 }

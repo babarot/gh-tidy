@@ -26,6 +26,8 @@ type Commands interface {
 
 // planMsg is what d or D would remove, read for the confirm.
 type planMsg struct {
+	seq   int
+	owner string
 	plans map[model.CloneKey]policy.Plan
 	names map[model.CloneKey]string
 	bulk  bool
@@ -249,13 +251,15 @@ func (m *Model) plan(rs []*model.Row, bulk bool) tea.Cmd {
 		names[r.Clone] = line{kind: columns.KindClone, row: r}.name()
 	}
 	eng, cwd := m.eng, m.cwd
+	m.planSeq++
+	seq, owner := m.planSeq, m.owner
 	return tea.Batch(m.say(seg{"reading what to clean up…", roleAccent}), func() tea.Msg {
 		plans := map[model.CloneKey]policy.Plan{}
 		for _, k := range keys {
 			p, err := eng.PlanCleanup(k, opts, cwd)
 			if err != nil {
 				if !bulk {
-					return planMsg{err: err}
+					return planMsg{seq: seq, owner: owner, err: err}
 				}
 				continue
 			}
@@ -266,12 +270,17 @@ func (m *Model) plan(rs []*model.Row, bulk bool) tea.Cmd {
 				plans[k] = p
 			}
 		}
-		return planMsg{plans: plans, names: names, bulk: bulk}
+		return planMsg{seq: seq, owner: owner, plans: plans, names: names, bulk: bulk}
 	})
 }
 
 // planned shows the confirm of d or D.
 func (m *Model) planned(msg planMsg) tea.Cmd {
+	// Asked again since, another owner shown, or another popup open: a
+	// confirm must be of what the user is looking at.
+	if msg.seq != m.planSeq || msg.owner != m.owner || m.popup != nil {
+		return nil
+	}
 	if msg.err != nil {
 		return m.say(seg{"clean up: " + msg.err.Error(), roleWarn})
 	}
@@ -306,6 +315,11 @@ func (m *Model) planned(msg planMsg) tea.Cmd {
 		}
 	}
 	title := "clean up"
+	for _, n := range msg.names {
+		if len(msg.plans) == 1 && !msg.bulk {
+			title = "clean up " + n
+		}
+	}
 	if msg.bulk {
 		title = "clean up all"
 		body = append([]drawn{{parts: []cell{{text: fmt.Sprintf("%d worktrees and %d branches in %d clones; nothing not merged", worktrees, branches, len(msg.plans)), role: roleText}}}, {}}, body...)
@@ -358,6 +372,11 @@ func (m *Model) action(i int) tea.Cmd {
 		name = argv[0]
 	}
 	run := func(m *Model) tea.Cmd {
+		// The action may change the clone: it takes the clone's lane, as a
+		// change of gh tidy's own does.
+		if !m.eng.Hold(clone, name) {
+			return m.say(seg{name + ": busy with another change", rolePrompt})
+		}
 		if a.Interactive {
 			return tea.Exec(m.cmds.Interactive(dir, argv), func(err error) tea.Msg {
 				return actionDoneMsg{name: name, path: clone, err: err}
@@ -380,7 +399,7 @@ func (m *Model) action(i int) tea.Cmd {
 }
 
 func (m *Model) actionDone(msg actionDoneMsg) tea.Cmd {
-	m.eng.Reread(msg.path)
+	m.eng.Release(msg.path)
 	last := msg.out
 	if i := strings.LastIndex(last, "\n"); i >= 0 {
 		last = last[i+1:]

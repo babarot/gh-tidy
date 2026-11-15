@@ -38,7 +38,9 @@ type Engine interface {
 	ClearResults()
 	Clone(key model.RemoteKey) (string, error)
 	ReadList()
-	Reread(path string)
+	Hold(path, doing string) bool
+	Release(path string)
+	Writing() int
 }
 
 // All is the owner that stands for every owner, first among the owners.
@@ -127,6 +129,12 @@ type Model struct {
 	detail  *model.Detail
 
 	popup *popup
+
+	// planSeq numbers the reads of what d and D would remove: only the
+	// last one asked for is shown.
+	planSeq int
+	// quitting waits for the changes in flight before quitting.
+	quitting bool
 
 	status   []seg
 	statusID int
@@ -274,6 +282,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sync()
 	case changedMsg:
 		m.refresh()
+		if m.quitting && m.eng.Writing() == 0 {
+			return m, tea.Quit
+		}
 		return m, m.waitChange()
 	case tickMsg:
 		m.eng.Tick()
@@ -339,7 +350,7 @@ func (m *Model) key(k string) tea.Cmd {
 	on := func(a keymap.Action) bool { return m.keys.Matches(a, k) }
 	switch {
 	case on("quit"):
-		return tea.Quit
+		return m.quit()
 	case on("help"):
 		m.popup = m.helpPopup()
 	case on("up"):
@@ -378,6 +389,20 @@ func (m *Model) key(k string) tea.Cmd {
 		cmd, _ := m.operate(k)
 		return cmd
 	}
+	return nil
+}
+
+// quit quits once the changes in flight end: cut off, a merge or a
+// worktree removal would leave its clone half done. ctrl+c quits at once.
+func (m *Model) quit() tea.Cmd {
+	n := m.eng.Writing()
+	if n == 0 {
+		return tea.Quit
+	}
+	m.quitting = true
+	m.statusID++
+	m.status = []seg{{fmt.Sprintf("quitting once %d change%s end%s", n, plural(n), map[bool]string{true: "s", false: ""}[n == 1]), roleAccent},
+		{" · " + keymap.Interrupt + " quits now", roleMuted}}
 	return nil
 }
 

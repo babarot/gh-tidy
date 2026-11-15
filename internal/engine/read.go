@@ -159,7 +159,7 @@ func (e *Engine) scanAll(o *owner, paths []string, alive func() bool, done func(
 			e.mu.Lock()
 			// A change started or ended since the read started: what the
 			// change reads afterwards is newer.
-			if e.epoch[key] == epoch && e.lanes[key] == "" {
+			if e.epoch[key] == epoch && e.lanes[key] == nil {
 				e.putClone(o, s)
 			}
 			e.mu.Unlock()

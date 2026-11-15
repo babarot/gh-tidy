@@ -311,11 +311,44 @@ func TestReadListReadsAnOwnerNotYours(t *testing.T) {
 	}
 }
 
-func TestRereadForgetsAGoneClone(t *testing.T) {
-	_, _, e := opsWorld(t)
-	e.Reread(t.TempDir() + "/nowhere")
-	idle(t, e)
-	if rowOf(e.Owner(), string(app)) == nil {
-		t.Error("a clone still there was forgotten")
+func TestHoldKeepsChangesOutUntilReleased(t *testing.T) {
+	_, ch, e := opsWorld(t)
+	gone := t.TempDir() + "/nowhere"
+	if !e.Hold(gone, "running x") || e.Writing() != 1 {
+		t.Fatal("no hold")
 	}
+	e.Release(gone)
+	idle(t, e)
+	if e.Writing() != 0 || rowOf(e.Owner(), string(app)) == nil {
+		t.Errorf("writing %d after release", e.Writing())
+	}
+	// A change asked for while another holds the clone is refused at once.
+	if !e.Hold(string(app), "running x") {
+		t.Fatal("no hold")
+	}
+	if busy := e.Fetch([]model.CloneKey{app}); len(busy) != 1 {
+		t.Errorf("busy = %v", busy)
+	}
+	if busy := e.Fetch([]model.CloneKey{app}); len(busy) != 1 || len(ch.calls) != 0 {
+		t.Errorf("fetched while held: %v", ch.calls)
+	}
+	e.Release(string(app))
+	idle(t, e)
+	if r := rowOf(e.Owner(), string(app)); r.Op.Doing != "" {
+		t.Errorf("op after release = %+v", r.Op)
+	}
+}
+
+func TestAQueuedChangeHoldsItsLane(t *testing.T) {
+	_, ch, e := opsWorld(t)
+	ch.block, ch.fetching = make(chan struct{}), make(chan struct{})
+	e.Fetch([]model.CloneKey{app})
+	if r := rowOf(e.Owner(), string(app)); r.Op.Doing == "" {
+		t.Error("a queued fetch shows nothing")
+	}
+	if busy := e.Advance([]model.CloneKey{app}); len(busy) != 1 {
+		t.Errorf("an update asked while a fetch is queued was not refused: %v", busy)
+	}
+	close(ch.block)
+	idle(t, e)
 }

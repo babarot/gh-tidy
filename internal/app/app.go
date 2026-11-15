@@ -89,11 +89,16 @@ func Run(cmd string, args []string, stderr io.Writer) error {
 
 	root := locate.Root(ctx, cfg.Core.Root)
 	if *asJSON {
-		owner, _ := startOwner(ctx, fs.Arg(0), root, "", "")
+		host, owner := locate.DefaultHost, ""
+		if h, o, ok := strings.Cut(fs.Arg(0), "/"); ok {
+			host, owner = h, o
+		} else {
+			owner, _ = startOwner(ctx, fs.Arg(0), root, "", "")
+		}
 		if owner == "" || owner == tui.All {
 			return errors.New("--json needs an owner: pass one, or run it in an owner's directory")
 		}
-		return printJSON(ctx, os.Stdout, filepath.Join(root, locate.DefaultHost, owner))
+		return printJSON(ctx, os.Stdout, filepath.Join(root, host, owner))
 	}
 	client, err := github.NewClient(github.Options{Logger: log})
 	if err != nil {
@@ -226,12 +231,22 @@ func xdg(env, fallback string) string {
 	return filepath.Join(dir, Name)
 }
 
+// cwd is where gh tidy runs, with symlinks resolved as git resolves the
+// paths of worktrees: d keeps the worktree holding it, and a path reached
+// through a link would not be seen inside it.
 func cwd() string {
 	d, err := os.Getwd()
 	if err != nil {
 		return ""
 	}
-	return d
+	return resolved(d)
+}
+
+func resolved(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return p
 }
 
 func home() string {

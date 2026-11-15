@@ -122,7 +122,7 @@ type Engine struct {
 	changed chan struct{}
 	// lanes holds what is being done to each clone; epoch moves on when a
 	// change starts and ends, so that a read begun before is dropped.
-	lanes map[model.CloneKey]string
+	lanes map[model.CloneKey]*hold
 	epoch map[model.CloneKey]int64
 	// details are what the preview shows of the rows asked for, and
 	// detailing those being read.
@@ -180,7 +180,7 @@ func New(o Options) *Engine {
 		log = logging.Discard()
 	}
 	e := &Engine{root: o.Root, host: o.GitHub.Host(), local: o.Local, change: o.Change, gh: o.GitHub, store: o.Store, cloner: o.Cloner, log: log, now: now,
-		lanes: map[model.CloneKey]string{}, epoch: map[model.CloneKey]int64{},
+		lanes: map[model.CloneKey]*hold{}, epoch: map[model.CloneKey]int64{},
 		details: map[detailKey]model.Detail{}, detailing: map[detailKey]bool{}, reads: map[model.CloneKey]int64{},
 		localPool: newPool(runtime.NumCPU(), idle), netPool: newPool(networkAtOnce, idle), apiPool: newPool(apiAtOnce, idle),
 		idle: idle, owners: map[string]*owner{}, visible: map[string]bool{}, changed: make(chan struct{}, 1)}

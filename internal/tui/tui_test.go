@@ -365,7 +365,7 @@ func (w *world) run(m *Model, cmd tea.Cmd) {
 		switch msg := c().(type) {
 		case tea.BatchMsg:
 			queue = append(queue, msg...)
-		case sayMsg, planMsg, actionDoneMsg:
+		case sayMsg, planMsg, actionDoneMsg, changedMsg:
 			_, next := m.Update(msg)
 			queue = append(queue, next)
 		}
@@ -682,5 +682,57 @@ func TestTheCursorWaitsForTheRowsBeingRead(t *testing.T) {
 	m2.relayout()
 	if m2.sel != 0 {
 		t.Errorf("the cursor stayed on line %d", m2.sel)
+	}
+}
+
+func TestQuitWaitsForChanges(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	if !w.eng.Hold(runner, "running x") {
+		t.Fatal("no hold")
+	}
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if cmd != nil || !m.quitting || !strings.Contains(screen(m), "quitting once 1 change ends") {
+		t.Fatalf("quit with a change in flight:\n%s", screen(m))
+	}
+	w.eng.Release(runner)
+	if err := w.eng.Idle(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	_, cmd = m.Update(changedMsg{})
+	if cmd == nil {
+		t.Fatal("did not quit once the change ended")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Error("not a quit")
+	}
+}
+
+func TestAStalePlanIsNotShown(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	w.to(m, runner)
+	_, first := m.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	press(w, m, "P") // another popup opens while the plan is read
+	var msg planMsg
+	switch got := first().(type) {
+	case planMsg:
+		msg = got
+	case tea.BatchMsg:
+		for _, c := range got {
+			if c == nil {
+				continue
+			}
+			if p, ok := c().(planMsg); ok {
+				msg = p
+			}
+		}
+	}
+	if msg.seq == 0 {
+		t.Fatal("no plan read")
+	}
+	m.Update(msg)
+	if !strings.Contains(strings.Join(popupText(m), "\n"), "update all") {
+		t.Errorf("the plan replaced the popup open:\n%s", strings.Join(popupText(m), "\n"))
 	}
 }
