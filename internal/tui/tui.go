@@ -153,6 +153,8 @@ type Model struct {
 
 	hits      []hit
 	lastClick click
+	// dragging says the pane's top line is held by the mouse.
+	dragging bool
 }
 
 // New returns the screen, or what is wrong with the settings it reads.

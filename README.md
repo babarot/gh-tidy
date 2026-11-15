@@ -55,7 +55,7 @@ WORKTREES judges each linked worktree: `busy` (changes, unpushed commits, or tou
 
 `v` switches to the github columns: open issues and pull requests, Dependabot alerts (`off` when they are not turned on, `n/a` when your token may not read them), the checks on the default branch, its stars, and when it was last pushed. They are ordered by what needs attention on GitHub, and the repositories not cloned are mixed in.
 
-The pane below the list shows what is behind the selected row's marks: the commits `p` would bring in, those not pushed, those on the default branch the branch lacks, the files changed and the stash; on the right, where the row is and what `p` and `d` would do to it now. `+` and `-` change its height.
+The pane below the list shows what is behind the selected row's marks: the commits `p` would bring in, those not pushed, those on the default branch the branch lacks, the files changed and the stash; on the right, where the row is and what `p` and `d` would do to it now. `+` and `-`, or dragging its top line, change its height.
 
 gh tidy reads GitHub on its own only within a share of your rate limit, leaving the rest to your other tools, and keeps what it read so the next start shows it at once.
 

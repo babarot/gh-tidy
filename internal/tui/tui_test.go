@@ -1263,3 +1263,42 @@ func TestHelpListsEveryKey(t *testing.T) {
 		}
 	}
 }
+
+// Dragging the pane's top line changes its height, within its limits, and
+// keeps it when the button is let go, as + and - do.
+func TestDraggingThePaneTop(t *testing.T) {
+	w := newWorld(t)
+	var saved []int
+	m := w.model(func(o *Options) { o.Save = func(_, _ string, ph int) { saved = append(saved, ph) } })
+	m.screen()
+	before := m.ph
+	top := m.listTop() + m.listHeight() + 1
+	if !strings.HasPrefix(plain(m.screen()[top]), "╭") {
+		t.Fatalf("line %d is not the pane's top: %q", top, plain(m.screen()[top]))
+	}
+	m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: 10, Y: top})
+	m.Update(tea.MouseMotionMsg{Button: tea.MouseLeft, X: 10, Y: top - 2})
+	m.Update(tea.MouseMotionMsg{Button: tea.MouseLeft, X: 10, Y: top - 3})
+	if m.ph != before+3 || len(saved) != 0 {
+		t.Errorf("while dragging: height %d, want %d; saved %v", m.ph, before+3, saved)
+	}
+	m.Update(tea.MouseReleaseMsg{Button: tea.MouseLeft, X: 10, Y: top - 3})
+	if !slices.Equal(saved, []int{before + 3}) {
+		t.Errorf("saved %v; want the height once, on release", saved)
+	}
+	if !strings.HasPrefix(plain(m.screen()[top-3]), "╭") {
+		t.Errorf("the pane's top is not where it was let go")
+	}
+	// Far down, it stops at its least; a move with no button held does
+	// nothing.
+	m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: 10, Y: top - 3})
+	m.Update(tea.MouseMotionMsg{Button: tea.MouseLeft, X: 10, Y: m.height})
+	m.Update(tea.MouseReleaseMsg{Button: tea.MouseLeft, X: 10, Y: m.height})
+	if m.ph != previewMin {
+		t.Errorf("dragged to the bottom: height %d, want %d", m.ph, previewMin)
+	}
+	m.Update(tea.MouseMotionMsg{X: 10, Y: 2})
+	if m.ph != previewMin {
+		t.Errorf("a move with no button changed the height to %d", m.ph)
+	}
+}

@@ -33,6 +33,15 @@ func (m *Model) mouse(msg tea.MouseMsg) tea.Cmd {
 	listEnd := listTop + m.listHeight()
 	paneTop := listEnd + 1
 	switch msg := msg.(type) {
+	case tea.MouseMotionMsg:
+		if m.dragging {
+			m.dragPane(mo.Y)
+		}
+	case tea.MouseReleaseMsg:
+		if m.dragging {
+			m.dragging = false
+			m.keep()
+		}
 	case tea.MouseWheelMsg:
 		d := 1
 		if msg.Button == tea.MouseWheelUp {
@@ -46,6 +55,11 @@ func (m *Model) mouse(msg tea.MouseMsg) tea.Cmd {
 		}
 	case tea.MouseClickMsg:
 		if msg.Button != tea.MouseLeft {
+			return nil
+		}
+		// The pane's top line is dragged to change its height.
+		if mo.Y == paneTop {
+			m.dragging = true
 			return nil
 		}
 		if mo.Y >= listTop && mo.Y < listEnd {
@@ -70,6 +84,16 @@ func (m *Model) mouse(msg tea.MouseMsg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// dragPane puts the pane's top line on screen line y, as far as the
+// pane's limits and one line of the list allow. The height is kept when
+// the button is let go, as + and - keep it.
+func (m *Model) dragPane(y int) {
+	paneTop := m.listTop() + m.listHeight() + 1
+	most := min(previewMax, m.height-around-m.filterRows()-m.boxRows-1)
+	m.ph = max(previewMin, min(most, m.ph+paneTop-y))
+	m.scroll()
 }
 
 // popupMouse moves through the popup and scrolls it with the wheel. A

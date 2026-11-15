@@ -78,6 +78,7 @@ func helpSections(keys keymap.Map, actions []config.Action, sym config.Symbols) 
 		{keys: []string{"click the owner"}, does: "chooses an owner; ‹ and › step to the previous and next"},
 		{keys: []string{"click local, github"}, does: "switches the columns"},
 		{keys: []string{"click a pane's head"}, does: "folds that part of the pane"},
+		{keys: []string{"drag the pane's top"}, does: "makes the pane taller or shorter, as + and - do"},
 		{keys: []string{"click a key hint"}, does: "presses the key, unless it changes a clone or asks GitHub"},
 		{keys: []string{"click in a popup"}, does: "puts the cursor on an item; a click on it again chooses it"},
 		{keys: []string{"click outside"}, does: "closes the popup"},
