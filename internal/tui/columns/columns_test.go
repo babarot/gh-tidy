@@ -12,14 +12,6 @@ import (
 
 var now = time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
 
-func text(c Cell) string {
-	var b strings.Builder
-	for _, s := range c {
-		b.WriteString(s.Text)
-	}
-	return b.String()
-}
-
 func ctx(counts bool) Ctx {
 	s := config.Default().Symbols
 	s.Counts = counts
@@ -224,5 +216,49 @@ func TestFit(t *testing.T) {
 	}
 	if n := Needs(GitHub, []Column{{Need: model.NeedCI}}); !n.Has(model.NeedNotCloned) {
 		t.Error("the github lens reads repositories not cloned")
+	}
+}
+
+func TestSections(t *testing.T) {
+	if _, bad := PickSections(config.Default().Preview.Sections); len(bad) > 0 {
+		t.Errorf("not sections: %v", bad)
+	}
+	r := row(func(c *model.Clone) {
+		c.Branches[0].Behind = 3
+		c.Head, c.BaseBehind, c.Worktrees[0].Branch = "fix", 2, "fix"
+		c.Branches = append(c.Branches, model.Branch{Name: "fix"})
+		c.Unstaged, c.Untracked = 1, 1
+	})
+	it := Item{Kind: KindClone, Row: r}
+	d := &model.Detail{Incoming: []model.Commit{{Hash: "a1", Subject: "one"}}, Unpushed: []model.Commit{{Hash: "b1", Subject: "mine"}},
+		NeverPushed: true, Files: []model.File{{XY: " M", Path: "f"}, {XY: "??", Path: "n"}}}
+	var heads []string
+	for _, s := range Sections {
+		if p := s.Build(ctx(true), it, d); p != nil {
+			heads = append(heads, text(p.Head))
+		}
+	}
+	want := []string{
+		"<3  on origin/main, not in your main · p brings them in",
+		"NEVER PUSHED  fix exists only on this Mac",
+		"⇣2  on main, not in fix",
+		"*1 %1  uncommitted, on fix",
+	}
+	if !slices.Equal(heads, want) {
+		t.Errorf("heads:\n got %q\nwant %q", heads, want)
+	}
+	p := incoming(ctx(true), it, d)
+	if got := text(p.Lines[0]); got != "  a1 one" || text(p.Lines[1]) != "  … 2 more" {
+		t.Errorf("incoming lines: %q", got)
+	}
+	if p := incoming(ctx(true), it, nil); text(p.Lines[0]) != "  reading…" {
+		t.Error("no reading line while the detail is read")
+	}
+	var labels []string
+	for _, f := range Facts(ctx(true), it, "/src") {
+		labels = append(labels, f.Label+" "+text(f.Value))
+	}
+	if !slices.Contains(labels, "path ~/me/app") || !slices.Contains(labels, "p updates main · fast-forward, not checked out") {
+		t.Errorf("facts: %q", labels)
 	}
 }
