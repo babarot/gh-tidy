@@ -22,7 +22,7 @@ import (
 
 // Version is the format of the files. A file of another version is read
 // as no file.
-const Version = 1
+const Version = 2
 
 // Store is where the files go: CacheDir for the cache and StateDir for the
 // state, each already under the program's own directory.
