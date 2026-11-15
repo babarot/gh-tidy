@@ -21,6 +21,8 @@ type fakeLocal struct {
 	mu     sync.Mutex
 	clones map[string]model.Clone // by path
 	scans  int
+	hold   map[string]chan struct{} // scans of these paths wait for their channel
+	held   chan struct{}            // closed when a scan starts waiting
 }
 
 func (f *fakeLocal) add(owner, name, slug string, edit func(*model.Clone)) {
@@ -67,9 +69,26 @@ func (f *fakeLocal) Find(dir string) ([]string, error) {
 
 func (f *fakeLocal) Scan(_ context.Context, path string) model.Clone {
 	f.mu.Lock()
+	hold, held := f.hold[path], f.held
+	if hold != nil {
+		f.held = nil
+	}
+	f.mu.Unlock()
+	if hold != nil {
+		if held != nil {
+			close(held)
+		}
+		<-hold
+	}
+	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.scans++
 	return f.clones[path]
+}
+
+func (f *fakeLocal) SetDefault(_ context.Context, c model.Clone, name string) model.Clone {
+	c.Default, c.DefaultSource = name, model.DefaultFromGitHub
+	return c
 }
 
 func (f *fakeLocal) RemoteAhead(_ context.Context, path, _, oid string) model.Ahead {
@@ -92,7 +111,9 @@ type fakeGitHub struct {
 	wants    []github.Want
 	timeouts int // batches larger than this many answer ErrTimeout
 	limitErr error
-	block    chan struct{} // when set, List waits for it
+	listErr  error
+	block    map[string]chan struct{} // the lists of these owners wait for their channel
+	heavyGo  chan struct{}            // when set, Heavy waits for it
 }
 
 func newFakeGitHub() *fakeGitHub {
@@ -104,14 +125,20 @@ func newFakeGitHub() *fakeGitHub {
 func (f *fakeGitHub) Host() string { return "github.com" }
 
 func (f *fakeGitHub) Viewer(context.Context) (github.Viewer, github.Rate, error) {
-	return f.viewer, f.rate, nil
+	r := f.rate
+	r.Resource = "graphql" // the viewer is a GraphQL query
+	return f.viewer, r, nil
 }
 
 func (f *fakeGitHub) List(ctx context.Context, owner string, _ github.OwnerKind, prev github.Pages, _ int) (github.Listing, error) {
 	f.mu.Lock()
-	block := f.block
+	block := f.block[strings.ToLower(owner)]
 	f.listed = append(f.listed, owner)
+	listErr := f.listErr
 	f.mu.Unlock()
+	if listErr != nil {
+		return github.Listing{Rate: f.rate}, listErr
+	}
 	if block != nil {
 		select {
 		case <-block:
@@ -125,22 +152,32 @@ func (f *fakeGitHub) List(ctx context.Context, owner string, _ github.OwnerKind,
 	if !ok {
 		return github.Listing{}, github.ErrNoOwner
 	}
+	core := f.rate
+	core.Resource = "core"
 	if len(prev.ETags) > 0 && slices.Equal(prev.ETags, l.Pages.ETags) {
-		return github.Listing{Unchanged: true, Pages: l.Pages, Completeness: l.Completeness, Reason: l.Reason, Rate: f.rate}, nil
+		return github.Listing{Unchanged: true, Pages: l.Pages, Completeness: l.Completeness, Reason: l.Reason, Rate: core}, nil
 	}
-	l.Rate = f.rate
+	l.Rate = core
 	l.Rate.Cost = 1
 	return l, nil
 }
 
 func (f *fakeGitHub) Heavy(_ context.Context, slugs []string, want github.Want) ([]github.HeavyRepo, github.Rate, error) {
 	f.mu.Lock()
+	wait := f.heavyGo
+	f.mu.Unlock()
+	if wait != nil {
+		<-wait
+	}
+	f.mu.Lock()
 	defer f.mu.Unlock()
+	gql := f.rate
+	gql.Resource = "graphql"
 	if f.limitErr != nil {
-		return nil, f.rate, f.limitErr
+		return nil, gql, f.limitErr
 	}
 	if f.timeouts > 0 && len(slugs) > f.timeouts {
-		return nil, f.rate, github.ErrTimeout
+		return nil, gql, github.ErrTimeout
 	}
 	f.asked = append(f.asked, slugs...)
 	f.wants = append(f.wants, want)
@@ -159,9 +196,8 @@ func (f *fakeGitHub) Heavy(_ context.Context, slugs []string, want github.Want) 
 		h.Asked, h.Key, h.Found = asked, model.NewRemoteKey("github.com", name), true
 		out = append(out, h)
 	}
-	r := f.rate
-	r.Cost = 1
-	return out, r, nil
+	gql.Cost = 1
+	return out, gql, nil
 }
 
 func (f *fakeGitHub) setList(owner string, complete github.Completeness, etag string, repos ...string) {
@@ -308,15 +344,20 @@ func TestTheCacheShowsFirst(t *testing.T) {
 	e.Open("me")
 	idle(t, e)
 
-	// The next start: the list blocks, yet the rows are there at once.
-	w.gh.block = make(chan struct{})
+	// The next start: the list and the clone's read wait, yet the rows are
+	// there at once.
+	release := make(chan struct{})
+	w.gh.block = map[string]chan struct{}{"me": release}
+	w.local.mu.Lock()
+	w.local.hold = map[string]chan struct{}{"/src/github.com/me/app": release}
+	w.local.mu.Unlock()
 	e2 := w.engine()
 	e2.Open("me")
 	o := e2.Owner()
 	if !o.FromCache || len(o.Rows) != 2 || o.List != model.ListComplete {
 		t.Fatalf("before reading: from cache %v, %d rows, %v", o.FromCache, len(o.Rows), o.List)
 	}
-	close(w.gh.block)
+	close(release)
 	idle(t, e2)
 	if o := e2.Owner(); o.FromCache {
 		t.Error("still marked as from the cache after reading again")
@@ -331,13 +372,10 @@ func TestOpeningAnotherOwnerDropsTheOldReads(t *testing.T) {
 	w.gh.setList("me", github.Complete, "e1", "app")
 	w.gh.heavy["acme/api"] = github.HeavyRepo{Default: "main", DefaultOid: "a"}
 	w.gh.heavy["me/app"] = github.HeavyRepo{Default: "main", DefaultOid: "b"}
-	w.gh.block = make(chan struct{})
+	w.gh.block = map[string]chan struct{}{"acme": make(chan struct{})} // never released
 	e := w.engine()
 	e.Open("acme") // its list waits
 	e.Open("me")   // and is canceled
-	w.gh.mu.Lock()
-	w.gh.block = nil
-	w.gh.mu.Unlock()
 	idle(t, e)
 	if slices.Contains(w.gh.asked, "acme/api") {
 		t.Errorf("the owner left was still read: %v", w.gh.asked)
@@ -413,12 +451,15 @@ func TestATimeoutSplitsTheBatch(t *testing.T) {
 		names = append(names, n)
 	}
 	w.gh.setList("me", github.Complete, "e1", names...)
-	w.gh.timeouts = 3 // a query of more than three is given up on
 	e := w.engine()
 	e.Open("me")
 	idle(t, e)
+	// All six are read again in one batch, which GitHub gives up on.
+	w.gh.timeouts = 3
+	e.SetNeeds(model.NeedCounts, nil)
+	idle(t, e)
 	for _, r := range e.Owner().Rows {
-		if !r.Heavy.Has {
+		if !r.Heavy.Has || r.Heavy.Value.Fields&model.NeedCounts == 0 {
 			t.Errorf("%s not read after the split", r.Key())
 		}
 	}
@@ -486,5 +527,174 @@ func TestAllShowsEveryCloneAndAsksGitHubNothing(t *testing.T) {
 	}
 	if r := rowOf(o, "/src/github.com/me/app"); r == nil || !r.Heavy.Has {
 		t.Error("all did not take the GitHub values me last read")
+	}
+}
+
+func TestTwoClonesOfOneRepositoryBothGetItsValues(t *testing.T) {
+	w := newWorld(t)
+	w.local.add("me", "app", "me/app", nil)
+	w.local.add("me", "app-copy", "me/app", nil)
+	w.gh.setList("me", github.Complete, "e1", "app")
+	w.gh.heavy["me/app"] = github.HeavyRepo{Default: "main", DefaultOid: "x"}
+	e := w.engine()
+	e.Open("me")
+	idle(t, e)
+	for _, k := range []string{"/src/github.com/me/app", "/src/github.com/me/app-copy"} {
+		r := rowOf(e.Owner(), k)
+		if r == nil || !r.Listed.Has || !r.Heavy.Has {
+			t.Errorf("%s: %+v", k, r)
+		}
+	}
+	if n := strings.Count(strings.Join(w.gh.asked, ","), "me/app"); n != 1 {
+		t.Errorf("the repository was asked for %d times", n)
+	}
+	if len(e.Owner().Rows) != 2 {
+		t.Errorf("%d rows", len(e.Owner().Rows))
+	}
+}
+
+func TestHeavyFieldsAreNotReadTwiceWhileInFlight(t *testing.T) {
+	w := newWorld(t)
+	for _, n := range []string{"a", "b", "c"} {
+		w.local.add("me", n, "me/"+n, nil)
+		w.gh.heavy["me/"+n] = github.HeavyRepo{Default: "main", DefaultOid: n}
+	}
+	w.gh.setList("me", github.Complete, "e1", "a", "b", "c")
+	w.gh.heavyGo = make(chan struct{})
+	e := w.engine()
+	e.Open("me")
+	e.Tick() // asks again while the first read waits
+	e.SetNeeds(0, nil)
+	close(w.gh.heavyGo)
+	idle(t, e)
+	if len(w.gh.asked) != 3 {
+		t.Errorf("asked for %v: read more than once", w.gh.asked)
+	}
+}
+
+func TestAFailedScanKeepsWhatWasRead(t *testing.T) {
+	w := newWorld(t)
+	w.local.add("me", "app", "me/app", nil)
+	w.gh.setList("me", github.Complete, "e1", "app")
+	w.gh.heavy["me/app"] = github.HeavyRepo{Default: "main", DefaultOid: "x"}
+	e := w.engine()
+	e.Open("me")
+	idle(t, e)
+	w.local.add("me", "app", "", func(c *model.Clone) { *c = model.Clone{Key: c.Key, Path: c.Path, Name: "app", Err: "signal: killed"} })
+	e.Open("me")
+	idle(t, e)
+	r := rowOf(e.Owner(), "/src/github.com/me/app")
+	if r == nil || r.Remote != "github.com/me/app" || r.Local.Value.Remote == "" || r.Local.Last != model.Failed || !r.Listed.Has {
+		t.Errorf("after a failed read: %+v", r)
+	}
+	if rowOf(e.Owner(), "github.com/me/app") != nil {
+		t.Error("the repository split off as not cloned")
+	}
+}
+
+func TestAListError(t *testing.T) {
+	w := newWorld(t)
+	w.local.add("me", "app", "me/app", nil)
+	w.gh.listErr = context.DeadlineExceeded
+	e := w.engine()
+	e.Open("me")
+	idle(t, e)
+	if r := rowOf(e.Owner(), "/src/github.com/me/app"); r == nil {
+		t.Error("the clone is gone after the list failed")
+	}
+}
+
+func TestGitHubsDefaultBranchIsWhatTheCloneIsMeasuredOn(t *testing.T) {
+	w := newWorld(t)
+	w.local.add("me", "app", "me/app", func(c *model.Clone) { c.Default, c.DefaultSource = "master", model.DefaultFromGuess })
+	w.gh.setList("me", github.Complete, "e1", "app")
+	w.gh.heavy["me/app"] = github.HeavyRepo{Default: "trunk", DefaultOid: "t"}
+	e := w.engine()
+	e.Open("me")
+	idle(t, e)
+	e.Open("me") // the next read measures on GitHub's default
+	idle(t, e)
+	r := rowOf(e.Owner(), "/src/github.com/me/app")
+	if r.Local.Value.Default != "trunk" || r.Local.Value.DefaultSource != model.DefaultFromGitHub {
+		t.Errorf("clone default = %q (%s)", r.Local.Value.Default, r.Local.Value.DefaultSource)
+	}
+}
+
+func TestARenameHoldsWhenTheCloneIsReadAgain(t *testing.T) {
+	w := newWorld(t)
+	w.local.add("me", "old-name", "me/old-name", nil)
+	w.gh.setList("me", github.Complete, "e1", "new-name")
+	w.gh.renamed["me/old-name"] = "me/new-name"
+	w.gh.heavy["me/new-name"] = github.HeavyRepo{Default: "main", DefaultOid: "n"}
+	e := w.engine()
+	e.Open("me")
+	idle(t, e)
+	w.clock.add(listFresh + time.Second)
+	w.gh.setList("me", github.Complete, "e2", "new-name", "another")
+	e.Open("me")
+	idle(t, e)
+	o := e.Owner()
+	if len(o.Rows) != 2 || rowOf(o, "github.com/me/new-name") != nil {
+		t.Errorf("rows after reading again: %d, a lone new-name row: %v", len(o.Rows), rowOf(o, "github.com/me/new-name") != nil)
+	}
+	if r := rowOf(o, "/src/github.com/me/old-name"); r == nil || r.Remote != "github.com/me/new-name" || !r.Listed.Has {
+		t.Errorf("clone row = %+v", r)
+	}
+}
+
+func TestBudget(t *testing.T) {
+	c := &clock{t: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
+	b := newBudget(c.now, nil)
+	b.log = New(Options{GitHub: newFakeGitHub()}).log
+	reset := c.now().Add(time.Hour)
+	b.saw(github.Rate{Resource: "graphql", Limit: 5000, Remaining: 1000, Reset: reset}, true)
+	b.saw(github.Rate{Resource: "core", Limit: 5000, Remaining: 4900, Reset: reset}, true)
+	if ok, _ := b.allowAuto("graphql", true); ok {
+		t.Error("heavy reads went with GraphQL under its floor")
+	}
+	if ok, _ := b.allowAuto("core", false); !ok {
+		t.Error("the list was held back by GraphQL's count")
+	}
+	// Refusals in a row wait longer each time.
+	rl := &github.RateLimitError{RetryAfter: 10 * time.Second}
+	var waits []time.Duration
+	for range 3 {
+		b.saw(github.Rate{}, false)
+		b.pause(rl)
+		waits = append(waits, b.Paused().Sub(c.now()))
+		c.add(time.Hour)
+	}
+	if waits[0] >= waits[1] || waits[1] >= waits[2] {
+		t.Errorf("waits = %v", waits)
+	}
+	// What gh tidy spends unasked in an hour is capped.
+	b2 := newBudget(c.now, b.log)
+	b2.saw(github.Rate{Cost: ownPerHour}, true)
+	if ok, why := b2.allowAuto("graphql", false); ok || !strings.Contains(why, "share") {
+		t.Errorf("past its share: %v (%s)", ok, why)
+	}
+	c.add(time.Hour + time.Minute)
+	b2.saw(github.Rate{}, true)
+	if ok, _ := b2.allowAuto("graphql", false); !ok {
+		t.Error("the share did not come back after the hour")
+	}
+}
+
+func TestNothingGoesToGitHubWhilePaused(t *testing.T) {
+	w := newWorld(t)
+	w.local.add("me", "app", "me/app", nil)
+	w.gh.setList("me", github.Complete, "e1", "app")
+	e := w.engine()
+	e.budget.pause(&github.RateLimitError{RetryAfter: time.Minute})
+	e.Open("me")
+	idle(t, e)
+	if len(w.gh.listed) != 0 || len(w.gh.asked) != 0 {
+		t.Errorf("asked GitHub while paused: lists %v, repos %v", w.gh.listed, w.gh.asked)
+	}
+	w.clock.add(2 * time.Minute)
+	e.Tick()
+	idle(t, e)
+	if len(w.gh.listed) == 0 {
+		t.Error("the list was not read once the pause ended")
 	}
 }

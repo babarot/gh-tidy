@@ -127,22 +127,41 @@ func (e *Engine) clone(key model.CloneKey) (model.Clone, bool) {
 	return model.Clone{}, false
 }
 
-// rescan reads the clone again after a change, inside its lane, and puts it
-// into every owner holding it.
-func (e *Engine) rescan(ctx context.Context, path string) model.Clone {
-	c := e.local.Scan(ctx, path)
+// rescan reads the clone again after a change, inside its lane, and puts
+// it into every owner holding it or whose directory it sits in: a read of
+// it dropped while the change held the lane is made up for here.
+func (e *Engine) rescan(_ context.Context, path string) model.Clone {
+	c := e.scan(path)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for _, o := range e.owners {
-		if o.rows[string(c.Key)] != nil {
+		if o.rows[string(c.Key)] != nil || e.inOwnerDir(path, o.login) {
 			e.putClone(o, c)
 		}
 	}
 	return c
 }
 
-// Fetch fetches the clones of keys, a few at a time.
-func (e *Engine) Fetch(keys []model.CloneKey) {
+// free returns the keys whose lanes are free, and those taken: a change
+// asked for a clone being changed is refused at once rather than queued,
+// since what decided it may no longer hold when its turn would come.
+func (e *Engine) free(keys []model.CloneKey) (free, busy []model.CloneKey) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, k := range keys {
+		if e.lanes[k] != "" {
+			busy = append(busy, k)
+		} else {
+			free = append(free, k)
+		}
+	}
+	return free, busy
+}
+
+// Fetch fetches the clones of keys, a few at a time, and returns those it
+// refused because a change is in flight in them.
+func (e *Engine) Fetch(keys []model.CloneKey) (busy []model.CloneKey) {
+	keys, busy = e.free(keys)
 	for _, k := range keys {
 		e.netPool.add(prioAsked, nil, func() {
 			if !e.lane(k, "fetching") {
@@ -164,12 +183,15 @@ func (e *Engine) Fetch(keys []model.CloneKey) {
 			e.readHeavyShown()
 		}, nil)
 	}
+	return busy
 }
 
 // Advance fetches each clone of keys and moves its default branch forward
 // to origin's, when policy allows it: only fast-forwards, never the branch
-// being worked on. What is skipped says why.
-func (e *Engine) Advance(keys []model.CloneKey) {
+// being worked on. What is skipped says why. It returns the clones it
+// refused because a change is in flight in them.
+func (e *Engine) Advance(keys []model.CloneKey) (busy []model.CloneKey) {
+	keys, busy = e.free(keys)
 	for _, k := range keys {
 		e.netPool.add(prioAsked, nil, func() {
 			if !e.lane(k, "fetching") {
@@ -180,6 +202,7 @@ func (e *Engine) Advance(keys []model.CloneKey) {
 			e.readHeavyShown()
 		}, nil)
 	}
+	return busy
 }
 
 func (e *Engine) advance(k model.CloneKey) model.Op {
@@ -236,9 +259,14 @@ func (e *Engine) PlanCleanup(key model.CloneKey, opts policy.Cleanup, cwd string
 // lane, when its turn comes, the facts are read again and the plan made
 // again; only what both plans remove goes, and each worktree's changes are
 // read once more right before it is removed. What changed since the
-// confirm is left alone, and said so.
-func (e *Engine) Cleanup(plans map[model.CloneKey]policy.Plan, opts policy.Cleanup, cwd string) {
+// confirm is left alone, and said so. It returns the clones it refused
+// because a change is in flight in them.
+func (e *Engine) Cleanup(plans map[model.CloneKey]policy.Plan, opts policy.Cleanup, cwd string) (busy []model.CloneKey) {
 	for k, confirmed := range plans {
+		if _, b := e.free([]model.CloneKey{k}); len(b) > 0 {
+			busy = append(busy, k)
+			continue
+		}
 		e.localPool.add(prioAsked, nil, func() {
 			if !e.lane(k, "cleaning up") {
 				return
@@ -247,6 +275,7 @@ func (e *Engine) Cleanup(plans map[model.CloneKey]policy.Plan, opts policy.Clean
 			e.leave(k, op)
 		}, nil)
 	}
+	return busy
 }
 
 func (e *Engine) cleanup(k model.CloneKey, confirmed policy.Plan, opts policy.Cleanup, cwd string) model.Op {
@@ -262,10 +291,10 @@ func (e *Engine) cleanup(k model.CloneKey, confirmed policy.Plan, opts policy.Cl
 	}
 	now := policy.DecideCleanup(c, f, opts, cwd)
 	items := policy.StillRemoves(confirmed, now)
+	left := len(confirmed.Remove) - len(items) // what changed since the confirm
 	if opts.Bulk {
 		items = policy.WithoutForce(items)
 	}
-	left := len(confirmed.Remove) - len(items)
 	removed := 0
 	var failure string
 	pruned := false

@@ -94,7 +94,10 @@ type Ahead struct {
 // or by its remote key when it has no clone.
 type Row struct {
 	Clone  CloneKey  // empty for a repository not cloned
-	Remote RemoteKey // empty for a clone without a GitHub origin
+	Remote RemoteKey // empty for a clone without a GitHub origin; GitHub's name for it, after a rename
+	// Origin is the repository the clone's origin names, kept apart from
+	// Remote so that reading the clone again does not undo a rename found.
+	Origin RemoteKey
 
 	Local  Read[Clone]
 	Listed Read[Remote] // from the owner's list

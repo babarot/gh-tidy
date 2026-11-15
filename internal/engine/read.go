@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -23,11 +24,18 @@ func (e *Engine) readOwner(o *owner) {
 	e.begin(o, "clones")
 	e.localPool.add(prioRest, alive, func() {
 		paths, err := e.local.Find(e.ownerDir(login))
-		if err != nil && !os.IsNotExist(err) {
+		switch {
+		case err == nil || os.IsNotExist(err):
+			e.forgetMissing(o, paths)
+		default:
+			// The directory could not be read: what is known of its clones
+			// stays rather than turning into repositories not cloned.
 			e.log.Warn("could not list clones", logging.KeyOwner, login, "err", err.Error())
 		}
-		e.forgetMissing(o, paths)
 		e.scanAll(o, paths, alive, func() {
+			e.mu.Lock()
+			o.fromCache = false
+			e.mu.Unlock()
 			e.end(o, "clones")
 			e.readHeavy(o)
 		})
@@ -45,20 +53,31 @@ func (e *Engine) readAll(o *owner) {
 	alive := e.alive(o, gen)
 	e.begin(o, "clones")
 	e.localPool.add(prioRest, alive, func() {
-		owners, _ := e.local.Owners(e.ownerDir(""))
+		owners, err := e.local.Owners(e.ownerDir(""))
+		if err != nil && !os.IsNotExist(err) {
+			e.log.Warn("could not list owners", "err", err.Error())
+			e.scanAll(o, nil, alive, func() { e.end(o, "clones") })
+			return
+		}
 		var paths []string
+		complete := true
 		for _, login := range owners {
-			ps, _ := e.local.Find(e.ownerDir(login))
+			ps, err := e.local.Find(e.ownerDir(login))
+			if err != nil && !os.IsNotExist(err) {
+				complete = false
+			}
 			paths = append(paths, ps...)
 			e.copyGitHubValues(o, login)
 		}
-		e.forgetMissing(o, paths)
+		if complete {
+			e.forgetMissing(o, paths)
+		}
 		e.scanAll(o, paths, alive, func() { e.end(o, "clones") })
 	}, func() { e.end(o, "clones") })
 }
 
 // copyGitHubValues puts into the All owner's rows what owner login's last
-// read left: in memory, or else on disk.
+// read left: in memory, or else on disk. Rows are copied, never shared.
 func (e *Engine) copyGitHubValues(all *owner, login string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -77,8 +96,9 @@ func (e *Engine) copyGitHubValues(all *owner, login string) {
 			continue // All holds clones only
 		}
 		cp := r
-		if old := all.rows[r.Key()]; old != nil && old.Local.Has {
-			cp.Local = old.Local
+		cp.Op = model.Op{}
+		if old := all.rows[r.Key()]; old != nil {
+			cp.Local, cp.Op = old.Local, old.Op
 		}
 		all.rows[r.Key()] = &cp
 	}
@@ -98,7 +118,7 @@ func (e *Engine) forgetMissing(o *owner, paths []string) {
 			continue
 		}
 		delete(o.rows, k)
-		if r.Listed.Has && o.login != All {
+		if r.Listed.Has && o.login != All && len(e.rowsByRemote(o, r.Remote)) == 0 {
 			left := model.Row{Remote: r.Remote, Listed: r.Listed, Heavy: r.Heavy}
 			o.rows[left.Key()] = &left
 		}
@@ -107,7 +127,9 @@ func (e *Engine) forgetMissing(o *owner, paths []string) {
 }
 
 // scanAll reads each clone, the rows on the screen first, and calls done
-// once every one is back.
+// once every one is back. Reads of the disk are not canceled when the owner
+// is left: they end soon, and what they read is the clone's, whoever shows
+// it.
 func (e *Engine) scanAll(o *owner, paths []string, alive func() bool, done func()) {
 	if len(paths) == 0 {
 		done()
@@ -133,10 +155,10 @@ func (e *Engine) scanAll(o *owner, paths []string, alive func() bool, done func(
 			}
 		}
 		e.localPool.add(prio, alive, func() {
-			c := e.local.Scan(e.ctxOf(o), p)
+			c := e.scan(p)
 			e.mu.Lock()
-			// A change made since the read started makes it older than what
-			// the change read afterwards.
+			// A change started or ended since the read started: what the
+			// change reads afterwards is newer.
 			if e.epoch[key] == epoch && e.lanes[key] == "" {
 				e.putClone(o, c)
 			}
@@ -146,22 +168,80 @@ func (e *Engine) scanAll(o *owner, paths []string, alive func() bool, done func(
 	}
 }
 
+// scan reads the clone at path, measured against GitHub's default branch
+// when GitHub was read: origin/HEAD may be stale, or missing.
+func (e *Engine) scan(path string) model.Clone {
+	c := e.local.Scan(e.ctx, path)
+	if c.Err != "" {
+		return c
+	}
+	e.mu.Lock()
+	def := ""
+	for _, o := range e.owners {
+		if r := o.rows[string(c.Key)]; r != nil && r.Heavy.Has && r.Heavy.Value.Default != "" {
+			def = r.Heavy.Value.Default
+			break
+		}
+	}
+	e.mu.Unlock()
+	if def != "" && (def != c.Default || c.DefaultSource != model.DefaultFromGitHub) {
+		c = e.local.SetDefault(e.ctx, c, def)
+	}
+	return c
+}
+
 // putClone puts a clone read into o, joining it with the row of its
-// repository from the list. Called with e.mu held.
+// repository from the list. A read that failed keeps what was read before.
+// Called with e.mu held.
 func (e *Engine) putClone(o *owner, c model.Clone) {
+	now := e.now()
 	r := o.rows[string(c.Key)]
 	if r == nil {
 		r = &model.Row{Clone: c.Key}
 		o.rows[string(c.Key)] = r
 	}
-	r.Local.Set(c, e.now())
-	if c.Remote != r.Remote {
-		r.Remote = c.Remote
+	if c.Err != "" {
+		r.Local.Fail(c.Err, now)
+		e.changedOwner(o)
+		return
 	}
-	if r.Remote != "" {
-		if lone := o.rows[string(r.Remote)]; lone != nil && lone != r && lone.Clone == "" {
-			r.Listed, r.Heavy = lone.Listed, lone.Heavy
-			delete(o.rows, string(r.Remote))
+	r.Local.Set(c, now)
+	switch {
+	case r.Origin == "" && r.Remote == "":
+		r.Origin, r.Remote = c.Remote, c.Remote
+	case r.Origin == "":
+		r.Origin = c.Remote // a row kept from before origins were kept apart
+	case c.Remote != r.Origin:
+		// The origin itself changed: what GitHub said of the old one is not
+		// this clone's.
+		r.Origin, r.Remote = c.Remote, c.Remote
+		r.Listed, r.Heavy, r.Ahead = model.Read[model.Remote]{}, model.Read[model.Heavy]{}, model.Read[model.Ahead]{}
+	}
+	for _, k := range []model.RemoteKey{r.Remote, r.Origin} {
+		if k == "" {
+			continue
+		}
+		if lone := o.rows[string(k)]; lone != nil && lone != r && lone.Clone == "" {
+			if lone.Listed.Has {
+				r.Listed = lone.Listed
+			}
+			if lone.Heavy.Has && !r.Heavy.Has {
+				r.Heavy = lone.Heavy
+			}
+			delete(o.rows, string(k))
+		}
+	}
+	// Another clone of the same repository may hold what the list and
+	// GitHub said of it already.
+	for _, s := range e.rowsByRemote(o, r.Remote) {
+		if s == r {
+			continue
+		}
+		if !r.Listed.Has && s.Listed.Has {
+			r.Listed = s.Listed
+		}
+		if !r.Heavy.Has && s.Heavy.Has {
+			r.Heavy = s.Heavy
 		}
 	}
 	e.changedOwner(o)
@@ -176,36 +256,45 @@ func (e *Engine) ctxOf(o *owner) context.Context {
 	return e.ctx
 }
 
-// readList reads o's list when it may be read and is not fresh: an owner
-// that is neither the viewer nor one of its organizations is not listed
-// unasked, only its clones are looked up.
+// readList reads o's list when it may be read, is not fresh and is not
+// being read: an owner that is neither the viewer nor one of its
+// organizations is not listed unasked, only its clones are looked up.
 func (e *Engine) readList(o *owner, gen int, alive func() bool) {
 	e.mu.Lock()
 	kind, login, prev := o.kind, o.login, o.pages
-	fresh := !o.listAt.IsZero() && e.now().Sub(o.listAt) < listFresh && !o.fromCache
+	skip := o.listing || !o.listAt.IsZero() && e.now().Sub(o.listAt) < listFresh && !o.fromCache
 	if kind == github.OwnerUser {
 		if o.list == model.ListUnknown {
 			o.list, o.listWhy = model.ListPartial, "not your owner: only your clones are looked up"
 		}
-		fresh = true
+		skip = true
+	}
+	if !skip {
+		o.listing = true
 	}
 	e.mu.Unlock()
-	if fresh {
+	if skip {
 		return
+	}
+	done := func() {
+		e.mu.Lock()
+		o.listing = false
+		e.mu.Unlock()
+		e.end(o, "list")
 	}
 	e.begin(o, "list")
 	e.apiPool.add(prioRest, alive, func() {
-		defer e.end(o, "list")
-		if ok, why := e.budget.allowAuto(false); !ok {
+		defer done()
+		if ok, why := e.budget.allowAuto("core", false); !ok {
 			e.log.Info("list held back", logging.KeyOwner, login, logging.KeyReason, why)
 			return
 		}
 		l, err := e.gh.List(e.ctxOf(o), login, kind, prev, maxListPages)
-		e.budget.saw(l.Rate)
+		e.budget.saw(l.Rate, err == nil)
 		if e.takeList(o, gen, login, l, err) {
 			e.readHeavy(o) // inside the task, so that Idle waits for what it queues
 		}
-	}, func() { e.end(o, "list") })
+	}, done)
 }
 
 // takeList takes the result of reading o's list, and reports whether
@@ -223,6 +312,8 @@ func (e *Engine) takeList(o *owner, gen int, login string, l github.Listing, err
 		return false
 	case errors.Is(err, github.ErrNoOwner):
 		o.list, o.listWhy = model.ListUnreadable, "no such user or organization on GitHub"
+		return false
+	case errors.Is(err, context.Canceled):
 		return false
 	case err != nil:
 		e.log.Warn("list failed", logging.KeyOwner, login, "err", err.Error())
@@ -243,24 +334,22 @@ func (e *Engine) putList(o *owner, l github.Listing) {
 				r.Listed.Tried = now
 			}
 		}
+		e.changedOwner(o)
 		return
 	}
 	listed := map[model.RemoteKey]bool{}
-	byRemote := map[model.RemoteKey]*model.Row{}
-	for _, r := range o.rows {
-		if r.Remote != "" {
-			byRemote[r.Remote] = r
-		}
-	}
 	for _, lr := range l.Repos {
 		listed[lr.Key] = true
-		r := byRemote[lr.Key]
-		if r == nil {
-			r = &model.Row{Remote: lr.Key}
+		rows := e.rowsByRemote(o, lr.Key)
+		if len(rows) == 0 {
+			r := &model.Row{Remote: lr.Key}
 			o.rows[string(lr.Key)] = r
+			rows = []*model.Row{r}
 		}
-		r.Listed.Set(model.Remote{Key: lr.Key, Name: lr.Name, Fork: lr.Fork, Archived: lr.Archived, Private: lr.Private,
-			PushedAt: lr.PushedAt, DefaultBranch: lr.DefaultBranch, Description: lr.Description}, now)
+		for _, r := range rows {
+			r.Listed.Set(model.Remote{Key: lr.Key, Name: lr.Name, Fork: lr.Fork, Archived: lr.Archived, Private: lr.Private,
+				PushedAt: lr.PushedAt, DefaultBranch: lr.DefaultBranch, Description: lr.Description}, now)
+		}
 	}
 	// What a complete list no longer holds is gone from GitHub, as far as
 	// this token can see: not cloned, it goes; cloned, it is no longer listed.
@@ -280,9 +369,10 @@ func (e *Engine) putList(o *owner, l github.Listing) {
 }
 
 // readHeavy reads, by name, the fields the screen needs of o's rows that
-// lack them or whose values went stale: every clone's default branch, and
-// what the columns shown need, of clones and, when they ask, of
-// repositories not cloned. The rows on the screen go first.
+// lack them or whose values went stale, and are not being read already:
+// every clone's default branch, and what the columns shown need, of clones
+// and, when they ask, of repositories not cloned. The rows on the screen go
+// first. Several clones of one repository are read once.
 func (e *Engine) readHeavy(o *owner) {
 	e.mu.Lock()
 	if o.login == All || e.owners[e.shown] != o {
@@ -291,15 +381,20 @@ func (e *Engine) readHeavy(o *owner) {
 	}
 	gen, needs, now := o.gen, e.needs, e.now()
 	want := github.Want{Default: true, CI: needs.Has(model.NeedCI), Counts: needs.Has(model.NeedCounts), Alerts: needs.Has(model.NeedAlerts)}
-	extra := want.CI || want.Counts || want.Alerts
+	fields := fieldsOf(want)
+	extra := fields != 0
+	seen := map[string]bool{}
 	var slugs []string
 	visible := map[string]bool{}
 	for _, r := range o.rows {
-		if r.Remote == "" || r.Local.Has && r.Local.Value.Remote == "" {
+		if r.Remote == "" {
 			continue
 		}
 		if r.Clone == "" && (!needs.Has(model.NeedNotCloned) || !r.Listed.Has || r.Listed.Value.Fork || r.Listed.Value.Archived) {
 			continue
+		}
+		if f, ok := o.inflight[r.Remote]; ok && f&fields == fields {
+			continue // being read already, with what is needed
 		}
 		h := r.Heavy
 		stale := !h.Has || h.Last == model.Failed
@@ -311,19 +406,21 @@ func (e *Engine) readHeavy(o *owner) {
 				stale = true // no list says when it changed: read again by time
 			}
 		}
-		fields := needs &^ model.NeedNotCloned
 		if extra && (h.OlderThan(countsFresh, now) || h.Value.Fields&fields != fields) {
 			stale = true // the fields the screen needs are old, or were never asked for
 		}
-		if h.Last == model.Denied && !extra && h.Has {
+		if h.Last == model.Denied && h.Has && !extra {
 			stale = false
 		}
-		if stale {
-			slug := slugOf(r.Remote)
-			slugs = append(slugs, slug)
-			if e.visible[r.Key()] {
-				visible[slug] = true
-			}
+		slug := slugOf(r.Remote)
+		if !stale || seen[slug] {
+			continue
+		}
+		seen[slug] = true
+		slugs = append(slugs, slug)
+		o.inflight[r.Remote] = fields
+		if e.visible[r.Key()] {
+			visible[slug] = true
 		}
 	}
 	e.mu.Unlock()
@@ -354,15 +451,17 @@ func (e *Engine) readHeavy(o *owner) {
 // queueHeavy reads one batch. A batch GitHub gave up on is split in two and
 // read once more, smaller.
 func (e *Engine) queueHeavy(o *owner, gen int, part []string, want github.Want, prio int, alive func() bool, retry bool) {
+	release := func() { e.release(o, part) }
 	e.begin(o, "GitHub")
 	e.apiPool.add(prio, alive, func() {
 		defer e.end(o, "GitHub")
-		if ok, why := e.budget.allowAuto(true); !ok {
+		if ok, why := e.budget.allowAuto("graphql", true); !ok {
 			e.log.Info("reads held back", logging.KeyOwner, o.login, logging.KeyReason, why, "repos", len(part))
+			release()
 			return
 		}
 		got, rate, err := e.gh.Heavy(e.ctxOf(o), part, want)
-		e.budget.saw(rate)
+		e.budget.saw(rate, err == nil)
 		var rl *github.RateLimitError
 		switch {
 		case errors.Is(err, github.ErrTimeout):
@@ -379,13 +478,25 @@ func (e *Engine) queueHeavy(o *owner, gen int, part []string, want github.Want, 
 			e.budget.pause(rl)
 			e.failHeavy(o, part, rl.Error())
 			return
+		case errors.Is(err, context.Canceled):
+			release() // the owner was left: nothing went wrong with the values
+			return
 		case err != nil:
 			e.failHeavy(o, part, err.Error())
 			return
 		}
 		e.putHeavy(o, got, fieldsOf(want))
 		e.readAhead(o)
-	}, func() { e.end(o, "GitHub") })
+	}, func() { release(); e.end(o, "GitHub") })
+}
+
+// release forgets that the repositories of part are being read.
+func (e *Engine) release(o *owner, part []string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, s := range part {
+		delete(o.inflight, model.NewRemoteKey(e.host, s))
+	}
 }
 
 func (e *Engine) failHeavy(o *owner, part []string, why string) {
@@ -393,39 +504,41 @@ func (e *Engine) failHeavy(o *owner, part []string, why string) {
 	defer e.mu.Unlock()
 	now := e.now()
 	for _, s := range part {
-		if r := e.rowByRemote(o, model.NewRemoteKey(e.host, s)); r != nil {
+		k := model.NewRemoteKey(e.host, s)
+		delete(o.inflight, k)
+		for _, r := range e.rowsByRemote(o, k) {
 			r.Heavy.Fail(why, now)
 		}
 	}
 	e.changedOwner(o)
 }
 
-// putHeavy puts what GitHub said of repositories asked for by name into o.
-// A repository renamed since takes its new name.
+// putHeavy puts what GitHub said of repositories asked for by name into
+// every row of each. A repository renamed since takes its new name; the
+// row keeps its origin apart, so a clone read again does not undo it.
 func (e *Engine) putHeavy(o *owner, got []github.HeavyRepo, fields model.Need) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	now := e.now()
 	for _, h := range got {
-		r := e.rowByRemote(o, h.Asked)
-		if r == nil {
-			continue
-		}
-		switch {
-		case h.Err != "":
-			r.Heavy.Fail(h.Err, now)
-		case !h.Found:
-			r.Heavy.Deny("not visible to this token: deleted, moved, or no access", now)
-		default:
-			if h.Key != h.Asked && r.Clone != "" {
-				if lone := o.rows[string(h.Key)]; lone != nil && lone.Clone == "" {
-					r.Listed = lone.Listed
-					delete(o.rows, string(h.Key))
+		delete(o.inflight, h.Asked)
+		for _, r := range e.rowsByRemote(o, h.Asked) {
+			switch {
+			case h.Err != "":
+				r.Heavy.Fail(h.Err, now)
+			case !h.Found:
+				r.Heavy.Deny("not visible to this token: deleted, moved, or no access", now)
+			default:
+				if h.Key != h.Asked && r.Clone != "" {
+					if lone := o.rows[string(h.Key)]; lone != nil && lone.Clone == "" {
+						r.Listed = lone.Listed
+						delete(o.rows, string(h.Key))
+					}
+					r.Remote = h.Key
 				}
-				r.Remote = h.Key
+				r.Heavy.Set(model.Heavy{Key: h.Key, Found: true, PushedAt: h.PushedAt, Default: h.Default, DefaultOid: h.DefaultOid, CI: h.CI,
+					Issues: h.Issues, PRs: h.PRs, Alerts: h.Alerts, AlertsOff: h.AlertsOff, AlertsDenied: h.AlertsDenied, Fields: fields}, now)
 			}
-			r.Heavy.Set(model.Heavy{Key: h.Key, Found: true, PushedAt: h.PushedAt, Default: h.Default, DefaultOid: h.DefaultOid, CI: h.CI,
-				Issues: h.Issues, PRs: h.PRs, Alerts: h.Alerts, AlertsOff: h.AlertsOff, AlertsDenied: h.AlertsDenied, Fields: fields}, now)
 		}
 	}
 	e.changedOwner(o)
@@ -446,18 +559,24 @@ func fieldsOf(w github.Want) model.Need {
 	return n
 }
 
-// rowByRemote finds o's row of a repository. Called with e.mu held.
-func (e *Engine) rowByRemote(o *owner, k model.RemoteKey) *model.Row {
+// rowsByRemote finds o's rows of a repository: its clones, or the row of
+// the repository not cloned. Called with e.mu held.
+func (e *Engine) rowsByRemote(o *owner, k model.RemoteKey) []*model.Row {
+	if k == "" {
+		return nil
+	}
+	var out []*model.Row
 	for _, r := range o.rows {
-		if r.Remote == k {
-			return r
+		if r.Remote == k || r.Origin == k {
+			out = append(out, r)
 		}
 	}
-	return nil
+	return out
 }
 
 // readAhead decides, for each clone whose pair of commits (GitHub's, and
-// its origin/<default>) changed since, whether GitHub is ahead of it.
+// its origin/<default>) changed since, whether GitHub is ahead of it,
+// measured on GitHub's default branch.
 func (e *Engine) readAhead(o *owner) {
 	e.mu.Lock()
 	gen := o.gen
@@ -468,20 +587,20 @@ func (e *Engine) readAhead(o *owner) {
 	}
 	var jobs []job
 	for k, r := range o.rows {
-		if !r.Local.Has || !r.Heavy.Has || r.Heavy.Value.DefaultOid == "" || r.Local.Value.Default == "" {
+		if !r.Local.Has || !r.Heavy.Has || r.Heavy.Value.DefaultOid == "" || r.Heavy.Value.Default == "" {
 			continue
 		}
 		c, h := r.Local.Value, r.Heavy.Value
 		if r.Ahead.Has && r.Ahead.Value.Remote == h.DefaultOid && r.Ahead.Value.Local == c.DefaultOid {
 			continue
 		}
-		jobs = append(jobs, job{key: k, path: c.Path, name: c.Default, oid: h.DefaultOid})
+		jobs = append(jobs, job{key: k, path: c.Path, name: h.Default, oid: h.DefaultOid})
 	}
 	e.mu.Unlock()
 	alive := e.alive(o, gen)
 	for _, j := range jobs {
 		e.localPool.add(prioRest, alive, func() {
-			a := e.local.RemoteAhead(e.ctxOf(o), j.path, j.name, j.oid)
+			a := e.local.RemoteAhead(e.ctx, j.path, j.name, j.oid)
 			e.mu.Lock()
 			if r := o.rows[j.key]; r != nil {
 				r.Ahead.Set(a, e.now())
@@ -490,6 +609,27 @@ func (e *Engine) readAhead(o *owner) {
 			e.mu.Unlock()
 		}, nil)
 	}
+}
+
+// Tick reads again what went stale in the owner shown, and what was held
+// back by the budget: the screen calls it on its clock, since the engine
+// keeps none.
+func (e *Engine) Tick() {
+	e.mu.Lock()
+	o := e.owners[e.shown]
+	if o == nil || o.login == All {
+		e.mu.Unlock()
+		return
+	}
+	gen := o.gen
+	e.mu.Unlock()
+	e.readList(o, gen, e.alive(o, gen))
+	e.readHeavy(o)
+}
+
+// inOwnerDir reports whether the clone at path sits in login's directory.
+func (e *Engine) inOwnerDir(path, login string) bool {
+	return login == All || filepath.Dir(path) == e.ownerDir(login)
 }
 
 // slugOf is owner/name of a remote key.

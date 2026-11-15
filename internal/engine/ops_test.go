@@ -145,15 +145,43 @@ func TestOneChangeAtATimeInAClone(t *testing.T) {
 
 func TestAReadStartedBeforeAChangeIsDropped(t *testing.T) {
 	w, _, e := opsWorld(t)
-	before := rowOf(e.Owner(), string(app)).Local.Value
+	// A read of the clone starts, and waits.
+	hold, held := make(chan struct{}), make(chan struct{})
+	w.local.mu.Lock()
+	w.local.hold, w.local.held = map[string]chan struct{}{string(app): hold}, held
+	w.local.mu.Unlock()
+	w.local.add("me", "app", "me/app", func(c *model.Clone) { c.Head = "before-the-change" })
+	e.Open("me")
+	<-held // the read has started
+	// A change starts and ends meanwhile, and reads the clone afterwards.
 	if !e.lane(app, "pulling") {
 		t.Fatal("no lane")
 	}
-	w.local.add("me", "app", "me/app", func(c *model.Clone) { c.Head = "half-way" })
-	e.Open("me") // reads the clone while the change holds its lane
+	w.local.add("me", "app", "me/app", func(c *model.Clone) { c.Head = "after-the-change" })
+	w.local.mu.Lock()
+	w.local.hold = nil
+	w.local.mu.Unlock()
+	e.leave(app, model.Op{Result: "pulled"})
+	e.rescan(context.Background(), string(app))
+	// The read begun before ends last, with what it saw then.
+	w.local.add("me", "app", "me/app", func(c *model.Clone) { c.Head = "before-the-change" })
+	close(hold)
 	idle(t, e)
-	if got := rowOf(e.Owner(), string(app)).Local.Value; got.Head != before.Head {
-		t.Errorf("a read during a change was taken: head %q", got.Head)
+	if got := rowOf(e.Owner(), string(app)).Local.Value.Head; got != "after-the-change" {
+		t.Errorf("head = %q: a read begun before the change put back an older state", got)
+	}
+}
+
+func TestAChangeToABusyCloneIsRefused(t *testing.T) {
+	_, _, e := opsWorld(t)
+	if !e.lane(app, "pulling") {
+		t.Fatal("no lane")
+	}
+	if busy := e.Advance([]model.CloneKey{app}); len(busy) != 1 {
+		t.Errorf("busy = %v", busy)
+	}
+	if busy := e.Cleanup(map[model.CloneKey]policy.Plan{app: {}}, policy.Cleanup{}, ""); len(busy) != 1 {
+		t.Errorf("busy = %v", busy)
 	}
 }
 
@@ -173,19 +201,29 @@ func TestCleanupLeavesWhatChangedSinceTheConfirm(t *testing.T) {
 	if err != nil || len(plan.Remove) != 3 {
 		t.Fatalf("plan: %+v, %v", plan.Remove, err)
 	}
-	// After the confirm, an agent starts working in busy-now.
+	// After the confirm, an agent starts working in busy-now, and done is
+	// no longer merged (its branch moved): the plan made again leaves it.
 	ch.dirty["/wt/busy-now"] = 2
+	ch.mu.Lock()
+	ch.cleanup.Merged = map[string]bool{"main": true, "busy-now": true}
+	ch.mu.Unlock()
 	e.Cleanup(map[model.CloneKey]policy.Plan{app: plan}, opts, "")
 	idle(t, e)
 	if slices.Contains(ch.calls, "remove /wt/busy-now") {
 		t.Errorf("a worktree with changes since the confirm was removed: %v", ch.calls)
 	}
-	if !slices.Contains(ch.calls, "remove /wt/done") || !slices.Contains(ch.calls, "force-delete squashed") {
+	if slices.Contains(ch.calls, "remove /wt/done") {
+		t.Errorf("a worktree no longer merged when its turn came was removed: %v", ch.calls)
+	}
+	if !slices.Contains(ch.calls, "force-delete squashed") {
 		t.Errorf("calls = %v", ch.calls)
 	}
-	if r := rowOf(e.Owner(), string(app)); !strings.Contains(r.Op.Result, "left 1") {
+	if r := rowOf(e.Owner(), string(app)); !strings.Contains(r.Op.Result, "left 2") {
 		t.Errorf("op = %+v", r.Op)
 	}
+	ch.mu.Lock()
+	ch.cleanup.Merged = map[string]bool{"main": true, "done": true, "busy-now": true}
+	ch.mu.Unlock()
 
 	// D across clones never forces a branch.
 	ch.calls = nil

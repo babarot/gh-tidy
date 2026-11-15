@@ -27,6 +27,8 @@ type Local interface {
 	Owners(dir string) ([]string, error)
 	Find(dir string) ([]string, error)
 	Scan(ctx context.Context, path string) model.Clone
+	// SetDefault measures c against name, GitHub's default branch.
+	SetDefault(ctx context.Context, c model.Clone, name string) model.Clone
 	RemoteAhead(ctx context.Context, path, name, remoteOid string) model.Ahead
 }
 
@@ -121,8 +123,10 @@ type owner struct {
 	pages     github.Pages
 	fromCache bool
 	version   int
-	pending   map[string]int // work of each kind in flight, for the header
-	writes    int            // changes in flight: an owner with one is not let go
+	pending   map[string]int                 // work of each kind in flight, for the header
+	writes    int                            // changes in flight: an owner with one is not let go
+	inflight  map[model.RemoteKey]model.Need // repositories being read by name, with the fields asked for
+	listing   bool                           // the list is being read
 }
 
 // New returns an engine. Call Start before anything else.
@@ -155,7 +159,7 @@ func (e *Engine) Start(ctx context.Context) error {
 		e.change = noChanger{}
 	}
 	v, rate, err := e.gh.Viewer(ctx)
-	e.budget.saw(rate)
+	e.budget.saw(rate, err == nil)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if err != nil {
@@ -209,19 +213,24 @@ func (e *Engine) SetNeeds(needs model.Need, visible []string) {
 // and it is read again. Reads of the owner shown before are dropped;
 // changes in flight go on.
 func (e *Engine) Open(login string) {
+	if strings.EqualFold(login, All) {
+		login = All
+	}
 	e.mu.Lock()
-	if prev := e.owners[e.shown]; prev != nil && !strings.EqualFold(prev.login, login) && prev.cancel != nil {
-		prev.cancel()
+	if prev := e.owners[e.shown]; prev != nil && prev.cancel != nil {
+		prev.cancel() // the owner left, or opened again: a new reading starts
 	}
 	key := strings.ToLower(login)
 	o := e.owners[key]
 	if o == nil {
-		o = &owner{login: login, rows: map[string]*model.Row{}, pending: map[string]int{}}
+		o = &owner{login: login, rows: map[string]*model.Row{}, pending: map[string]int{}, inflight: map[model.RemoteKey]model.Need{}}
 		e.owners[key] = o
 		e.loadCache(o)
 	}
 	o.kind = e.kindOf(login)
 	o.gen++
+	o.inflight = map[model.RemoteKey]model.Need{}
+	o.listing = false
 	o.ctx, o.cancel = context.WithCancel(e.ctx)
 	e.shown = key
 	e.touch(key)
@@ -324,7 +333,7 @@ func (e *Engine) end(o *owner, kind string) {
 	}
 	e.changedOwner(o)
 	var c store.OwnerCache
-	save := done && e.store != nil && o.login != All
+	save := done && e.store != nil && o.login != All && e.known
 	if save {
 		c = e.cacheOf(o)
 	}
