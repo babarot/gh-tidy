@@ -13,10 +13,11 @@ This page is written from the code (`go test ./internal/config -run TestConfigur
 # root = ""
 
 [owners]
-# The owners offered are the viewer, the viewer's organizations and the
-# owners with clones under root. Offer these too, as "owner" or "host/owner".
+# The owners offered are the viewer, the viewer's organizations and the owners
+# with clones under root.
+# Offer these owners too, as "owner" or "host/owner".
 # add = []
-# Leave these out, written the same way.
+# Leave these owners out, written the same way.
 # hide = []
 
 [tui]
@@ -27,31 +28,44 @@ This page is written from the code (`go test ./internal/config -run TestConfigur
 
 [columns]
 # The columns of each set, in order. v switches between the sets.
-# local: repo, main, checked_out, changes, worktrees, fetched.
-# github: repo, issues, prs, dependabot, ci, pushed, visibility, main.
+# The local set, of: repo, main, checked_out, changes, worktrees, fetched.
 # local = ["repo", "main", "checked_out", "changes", "worktrees", "fetched"]
+# The github set, of: repo, issues, prs, dependabot, ci, pushed, visibility,
+# main.
 # github = ["repo", "issues", "prs", "dependabot", "ci", "pushed", "visibility", "main"]
 
 [preview]
 # The parts of the pane below the list, in order: incoming (commits on
-# origin's default branch that p brings in), unpushed, behind_main (commits
-# on the default branch the checked out branch lacks), changes (the files
+# origin's default branch that p brings in), unpushed, behind_main (commits on
+# the default branch the checked out branch lacks), changes (the files
 # changed), stash and worktrees. A part with nothing to show is left out.
 # sections = ["incoming", "unpushed", "behind_main", "changes", "stash", "worktrees"]
 
 [symbols]
-# The marks the list writes, after zsh-mini-prompt. Change them to match
-# your prompt; each must be one cell wide per character.
+# The marks the list writes, after zsh-mini-prompt. Change them to match your
+# prompt; each must be one cell wide per character, and an empty one writes
+# nothing.
+# Files changed, not staged.
 # unstaged = "*"
+# Files staged.
 # staged = "+"
+# Files not tracked.
 # untracked = "%"
+# Stash entries.
 # stash = "$"
+# Behind: commits to bring in.
 # behind = "<"
+# Ahead: commits not pushed.
 # ahead = ">"
+# Behind and ahead, when counts are not written.
 # diverged = "<>"
+# Even with what it follows.
 # synced = "="
+# A branch behind the default branch.
 # behind_main = "⇣"
+# GitHub has commits not fetched yet.
 # github_ahead = "?"
+# Worktrees besides the main one.
 # worktree = "⌥"
 # Write how many after a mark (*3); false writes the mark alone (*).
 # counts = true
@@ -63,8 +77,8 @@ This page is written from the code (`go test ./internal/config -run TestConfigur
 # squash merge), with git branch -D.
 # delete_gone = false
 # How d removes a worktree it decided to remove, as a command and its
-# arguments, run in the repository. It must pass {path}. For worktrees made
-# by another tool, its own command can do it, so the tool forgets it too.
+# arguments, run in the repository. It must pass {path}. For worktrees made by
+# another tool, its own command can do it, so the tool forgets it too.
 # worktree_remove = ["git", "worktree", "remove", "{path}"]
 
 [keys]
