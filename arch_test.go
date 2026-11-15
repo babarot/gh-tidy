@@ -26,6 +26,7 @@ var layers = []layer{
 	{"internal/version", 0, nil, nil, "The release version"},
 	{"internal/logging", 0, nil, nil, "The slog logger, the log file and its attribute keys"},
 	{"internal/theme", 0, nil, nil, "The color schemes, named by what the TUI uses each color for"},
+	{"internal/model", 0, nil, nil, "The values passed between packages: a clone's state, the facts decisions are made from, the keys of rows"},
 	{"internal/gittest", 0, nil, nil, "Real git repositories in a test's temporary directory; imported by tests only"},
 	{"internal/gitx", 1, nil, nil, "Running git without taking a lock, and parsing its porcelain output"},
 	{"internal/config", 1, []string{"internal/theme"}, []string{"github.com/pelletier/go-toml/v2"}, "Reading the config file and reporting its mistakes"},

@@ -8,6 +8,7 @@ gh-tidy is split into packages by layer. A package imports only packages of lowe
 | 0 | `internal/version` | The release version | - | - |
 | 0 | `internal/logging` | The slog logger, the log file and its attribute keys | - | - |
 | 0 | `internal/theme` | The color schemes, named by what the TUI uses each color for | - | - |
+| 0 | `internal/model` | The values passed between packages: a clone's state, the facts decisions are made from, the keys of rows | - | - |
 | 0 | `internal/gittest` | Real git repositories in a test's temporary directory; imported by tests only | - | - |
 | 1 | `internal/gitx` | Running git without taking a lock, and parsing its porcelain output | - | - |
 | 1 | `internal/config` | Reading the config file and reporting its mistakes | `internal/theme` | `github.com/pelletier/go-toml/v2` |
