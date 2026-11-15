@@ -76,7 +76,7 @@ func (m *Model) mouse(msg tea.MouseMsg) tea.Cmd {
 // cursor is on chooses it, so that one stray click chooses nothing; a
 // click on what is read does nothing, so a confirm never runs by mouse;
 // a click outside the box closes it. Nothing reaches the screen under
-// the popup (gh-desk ADR-053).
+// the popup (ADR-006).
 func (m *Model) popupMouse(msg tea.MouseMsg) tea.Cmd {
 	p := m.popup
 	mo := msg.Mouse()

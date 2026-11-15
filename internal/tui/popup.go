@@ -1,7 +1,6 @@
 package tui
 
-// The popup layer, after gh-desk's (its ADR-053, 079, 121, 125, 126, 127):
-// a popup declares the parts it holds (a list to choose from, a body to
+// The popup layer (ADR-006): a popup declares the parts it holds (a list to choose from, a body to
 // read, a question to confirm), and this layer reads the keys and the
 // mouse the same way for every popup, and writes its hints from the
 // keymap. One popup shows at a time; esc steps back one level; the key
@@ -170,7 +169,7 @@ func (m *Model) helpPopup() *popup {
 
 // popupHints are the popup's keys, from what it holds and the keymap.
 // writes keeps only the keys that change something, and esc, for the key
-// line under the popup (gh-desk ADR-126).
+// line under the popup.
 func (m *Model) popupHints(writes bool) []hint {
 	p := m.popup
 	var hs []hint

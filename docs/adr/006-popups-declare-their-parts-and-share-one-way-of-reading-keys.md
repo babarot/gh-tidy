@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-gh-tidy's popups (choosing an owner, the confirms before `P`, `d`, `D` and an action, the list of keys) each read their keys in their own code and wrote their hints by hand. The confirm wrote "esc" itself, the list of keys closed on `?` and `q`, and a single click chose an item. gh-desk had the same start and settled on a shared popup layer (its ADR-053, 079, 121, 125, 126, 127), which gh-tidy copies, adapted to how it draws.
+gh-tidy's popups (choosing an owner, the confirms before `P`, `d`, `D` and an action, the list of keys) each read their keys in their own code and wrote their hints by hand. The confirm wrote "esc" itself, the list of keys closed on `?` and `q`, a single click chose an item, and a key changed under `[keys]` left the hints as they were. Each popup added would have read esc, the cursor and the confirm a little differently again.
 
 ## Decision
 
