@@ -28,4 +28,4 @@ gh-tidy keeps one GitHub owner's local clones up to date and clear of finished w
 
 `make check` must pass before a change lands in main: golangci-lint (pinned in `mise.toml`), `go mod tidy -diff`, gofmt and `go test -race ./...`. CI runs the same.
 
-Tests build real repositories with git in a temporary directory (`internal/gittest`): a bare remote, clones of it, worktrees. The TUI tests drive the model with key presses and read the screen with ANSI stripped; the model's timers are off in tests, so every command returns. `TIDY_LIVE=1 go test ./internal/github/` asks GitHub for real.
+Tests build real repositories with git in a temporary directory (`internal/gittest`): a bare remote, clones of it, worktrees. The TUI tests drive the model with key presses and read the screen with ANSI stripped; the model's timers are off in tests, so every command returns. `TIDY_LIVE=1 go test ./internal/github/` asks GitHub for real; with `TIDY_LIVE_ORG=<org>` it also reads an organization and prints counts only. The other GitHub tests run against a made-up GitHub behind the client's transport (`internal/github/fake_test.go`).

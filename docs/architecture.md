@@ -15,7 +15,7 @@ gh-tidy is split into packages by layer. A package imports only packages of lowe
 | 1 | `internal/config` | Reading the config file and reporting its mistakes | `internal/theme` | `github.com/pelletier/go-toml/v2` |
 | 2 | `internal/repo` | One clone's state, read from git alone | `internal/gitx` | - |
 | 2 | `internal/local` | A clone's state and the facts about it, read from git, and the changes made to it with git | `internal/gitx`, `internal/model` | - |
-| 2 | `internal/github` | GitHub's GraphQL API through gh's authentication | - | `github.com/cli/go-gh/v2` |
+| 2 | `internal/github` | Reading GitHub through gh's authentication: owners' lists by REST with conditional requests, repositories' fields by GraphQL, the rate limit of every response | `internal/logging`, `internal/model` | `github.com/cli/go-gh/v2` |
 | 3 | `internal/locate` | The root, and what to open from where gh tidy starts | `internal/gitx`, `internal/repo` | - |
 | 3 | `internal/cleanup` | What d removes and keeps, and removing it | `internal/config`, `internal/gitx`, `internal/repo` | - |
 | 4 | `internal/tui` | The terminal UI | `internal/cleanup`, `internal/config`, `internal/github`, `internal/gitx`, `internal/locate`, `internal/repo`, `internal/theme` | `charm.land/bubbletea/v2`, `charm.land/lipgloss/v2`, `github.com/charmbracelet/x/ansi` |
@@ -26,7 +26,7 @@ Standard library packages that reach outside the process:
 | Package | Only in |
 |---|---|
 | `net` | - |
-| `net/http` | - |
+| `net/http` | `internal/github` |
 | `net/rpc` | - |
 | `net/smtp` | - |
 | `os/exec` | `internal/cleanup`, `internal/gittest`, `internal/gitx`, `internal/tui` |
