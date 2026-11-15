@@ -14,6 +14,7 @@ gh-tidy is split into packages by layer. A package imports only packages of lowe
 | 1 | `internal/policy` | Deciding what to do with a clone from facts: moving its default branch, what d removes, how a worktree is judged, attention | `internal/model` | - |
 | 1 | `internal/config` | Reading the config file and reporting its mistakes | `internal/theme` | `github.com/pelletier/go-toml/v2` |
 | 2 | `internal/repo` | One clone's state, read from git alone | `internal/gitx` | - |
+| 2 | `internal/local` | A clone's state and the facts about it, read from git, and the changes made to it with git | `internal/gitx`, `internal/model` | - |
 | 2 | `internal/github` | GitHub's GraphQL API through gh's authentication | - | `github.com/cli/go-gh/v2` |
 | 3 | `internal/locate` | The root, and what to open from where gh tidy starts | `internal/gitx`, `internal/repo` | - |
 | 3 | `internal/cleanup` | What d removes and keeps, and removing it | `internal/config`, `internal/gitx`, `internal/repo` | - |
