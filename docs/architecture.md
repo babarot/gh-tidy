@@ -17,6 +17,7 @@ gh-tidy is split into packages by layer. A package imports only packages of lowe
 | 2 | `internal/local` | A clone's state and the facts about it, read from git, and the changes made to it with git | `internal/gitx`, `internal/model` | - |
 | 2 | `internal/store` | The files kept between starts: each owner's table as last read (the cache) and the user's choices (the state) | `internal/model` | - |
 | 2 | `internal/github` | Reading GitHub through gh's authentication: owners' lists by REST with conditional requests, repositories' fields by GraphQL, the rate limit of every response | `internal/logging`, `internal/model` | `github.com/cli/go-gh/v2` |
+| 3 | `internal/engine` | What gh-tidy knows of owners and clones, and the only one changing it: what to read and when, limits on each kind of outside access, the rate limit budget, each clone's lane for changes; no Bubble Tea | `internal/github`, `internal/logging`, `internal/model`, `internal/policy`, `internal/store` | - |
 | 3 | `internal/locate` | The root, and what to open from where gh tidy starts | `internal/gitx`, `internal/repo` | - |
 | 3 | `internal/cleanup` | What d removes and keeps, and removing it | `internal/config`, `internal/gitx`, `internal/repo` | - |
 | 4 | `internal/tui` | The terminal UI | `internal/cleanup`, `internal/config`, `internal/github`, `internal/gitx`, `internal/locate`, `internal/repo`, `internal/theme` | `charm.land/bubbletea/v2`, `charm.land/lipgloss/v2`, `github.com/charmbracelet/x/ansi` |

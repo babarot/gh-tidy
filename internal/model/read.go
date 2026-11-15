@@ -76,6 +76,9 @@ type Heavy struct {
 	Alerts       int
 	AlertsOff    bool
 	AlertsDenied bool
+	// Fields says which of the fields beyond the default branch this read
+	// asked for: one the screen needs and this read lacks is not known.
+	Fields Need
 }
 
 // Ahead is whether GitHub's default branch has commits a clone has not
@@ -97,6 +100,19 @@ type Row struct {
 	Listed Read[Remote] // from the owner's list
 	Heavy  Read[Heavy]  // asked for by name
 	Ahead  Read[Ahead]
+
+	// Op is what is being done to the clone, or what was done, until the
+	// user puts the results away. Not kept between starts.
+	Op Op `json:"-"`
+}
+
+// Op is a change being made to a clone or its result.
+type Op struct {
+	Doing  string // "fetching", "updating main", ...; empty when done
+	Result string // what happened, once done
+	Failed bool
+	// Skipped says nothing was changed, and Result says why.
+	Skipped bool
 }
 
 // Key is the row's key: its clone's, or its remote's without a clone.
@@ -139,3 +155,21 @@ type Owner struct {
 	Reading string
 	Version int
 }
+
+// Need is what the columns and preview sections on the screen need read
+// from GitHub, beyond what every clone needs (its default branch's name
+// and commit, for MAIN and for GitHub being ahead). The screen hands the
+// union of what it shows to the engine, which reads only that.
+type Need uint8
+
+const (
+	NeedCI     Need = 1 << iota // the checks on the default branch
+	NeedCounts                  // open issues and pull requests
+	NeedAlerts                  // open Dependabot alerts
+	// NeedNotCloned reads the needed fields of repositories not cloned too,
+	// as the github columns do.
+	NeedNotCloned
+)
+
+// Has reports whether n includes m.
+func (n Need) Has(m Need) bool { return n&m != 0 }

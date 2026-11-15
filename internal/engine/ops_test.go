@@ -1,0 +1,198 @@
+package engine
+
+import (
+	"context"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/babarot/gh-tidy/internal/github"
+	"github.com/babarot/gh-tidy/internal/model"
+	"github.com/babarot/gh-tidy/internal/policy"
+)
+
+// fakeChanger records the changes asked for and answers facts as told.
+type fakeChanger struct {
+	mu       sync.Mutex
+	advance  model.AdvanceFacts
+	cleanup  model.CleanupFacts
+	dirty    map[string]int // worktree path to changes, read right before removing
+	calls    []string
+	block    chan struct{} // when set, Fetch waits for it
+	fetching chan struct{} // when set, closed once Fetch starts
+}
+
+func (f *fakeChanger) record(s string) { f.mu.Lock(); f.calls = append(f.calls, s); f.mu.Unlock() }
+
+func (f *fakeChanger) Fetch(ctx context.Context, path string) error {
+	f.mu.Lock()
+	block, started := f.block, f.fetching
+	f.fetching = nil
+	f.mu.Unlock()
+	if started != nil {
+		close(started)
+	}
+	if block != nil {
+		<-block
+	}
+	f.record("fetch " + path)
+	return nil
+}
+func (f *fakeChanger) AdvanceFacts(_ context.Context, path, name string, src model.DefaultSource) model.AdvanceFacts {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	a := f.advance
+	a.Default, a.DefaultSource = name, src
+	return a
+}
+func (f *fakeChanger) FastForwardRef(_ context.Context, path, name string) error {
+	f.record("ff-ref " + name)
+	return nil
+}
+func (f *fakeChanger) MergeFastForward(_ context.Context, wt, name string) error {
+	f.record("ff-merge " + wt)
+	return nil
+}
+func (f *fakeChanger) CleanupFacts(context.Context, model.Clone) (model.CleanupFacts, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.cleanup, nil
+}
+func (f *fakeChanger) WorktreeDirty(_ context.Context, wt string) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.dirty[wt], nil
+}
+func (f *fakeChanger) RemoveWorktree(_ context.Context, path, wt, branch string) error {
+	f.record("remove " + wt)
+	return nil
+}
+func (f *fakeChanger) BranchExists(context.Context, string, string) bool { return true }
+func (f *fakeChanger) DeleteMergedBranch(_ context.Context, path, branch, base string) error {
+	f.record("delete " + branch)
+	return nil
+}
+func (f *fakeChanger) DeleteBranch(_ context.Context, path, branch string) error {
+	f.record("force-delete " + branch)
+	return nil
+}
+func (f *fakeChanger) PruneWorktrees(context.Context, string) error { f.record("prune"); return nil }
+
+func opsWorld(t *testing.T) (*world, *fakeChanger, *Engine) {
+	w := newWorld(t)
+	w.local.add("me", "app", "me/app", nil)
+	w.gh.setList("me", github.Complete, "e1", "app")
+	ch := &fakeChanger{dirty: map[string]int{}}
+	e := New(Options{Root: root, Local: w.local, Change: ch, GitHub: w.gh, Store: w.store, Now: w.clock.now})
+	if err := e.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	e.Open("me")
+	idle(t, e)
+	return w, ch, e
+}
+
+const app = model.CloneKey("/src/github.com/me/app")
+
+func TestAdvanceMovesTheDefaultBranch(t *testing.T) {
+	_, ch, e := opsWorld(t)
+	ch.advance = model.AdvanceFacts{LocalExists: true, RemoteExists: true, Upstream: "origin/main", Behind: 3, FastForward: true, Holders: 0}
+	e.Advance([]model.CloneKey{app})
+	idle(t, e)
+	if !slices.Contains(ch.calls, "ff-ref main") {
+		t.Errorf("calls = %v", ch.calls)
+	}
+	if r := rowOf(e.Owner(), string(app)); r.Op.Result != "main updated ↓3" || r.Op.Failed || r.Op.Doing != "" {
+		t.Errorf("op = %+v", r.Op)
+	}
+	e.ClearResults()
+	if r := rowOf(e.Owner(), string(app)); r.Op != (model.Op{}) {
+		t.Errorf("results not put away: %+v", r.Op)
+	}
+}
+
+func TestAdvanceSaysWhyItSkips(t *testing.T) {
+	_, ch, e := opsWorld(t)
+	ch.advance = model.AdvanceFacts{LocalExists: true, RemoteExists: true, Upstream: "origin/main", Behind: 3, FastForward: true, CheckedOut: "/src/github.com/me/app", Holders: 1, Dirty: 2}
+	e.Advance([]model.CloneKey{app})
+	idle(t, e)
+	for _, c := range ch.calls {
+		if strings.HasPrefix(c, "ff-") {
+			t.Errorf("moved under uncommitted changes: %v", ch.calls)
+		}
+	}
+	if r := rowOf(e.Owner(), string(app)); !r.Op.Skipped || !strings.Contains(r.Op.Result, "uncommitted") {
+		t.Errorf("op = %+v", r.Op)
+	}
+}
+
+func TestOneChangeAtATimeInAClone(t *testing.T) {
+	_, ch, e := opsWorld(t)
+	ch.block, ch.fetching = make(chan struct{}), make(chan struct{})
+	started := ch.fetching
+	e.Fetch([]model.CloneKey{app})
+	<-started
+	if e.lane(app, "another") {
+		t.Error("a second change took the lane of a clone being fetched")
+	}
+	close(ch.block)
+	idle(t, e)
+	if !e.lane(app, "after") {
+		t.Error("the lane was not given back")
+	}
+}
+
+func TestAReadStartedBeforeAChangeIsDropped(t *testing.T) {
+	w, _, e := opsWorld(t)
+	before := rowOf(e.Owner(), string(app)).Local.Value
+	if !e.lane(app, "pulling") {
+		t.Fatal("no lane")
+	}
+	w.local.add("me", "app", "me/app", func(c *model.Clone) { c.Head = "half-way" })
+	e.Open("me") // reads the clone while the change holds its lane
+	idle(t, e)
+	if got := rowOf(e.Owner(), string(app)).Local.Value; got.Head != before.Head {
+		t.Errorf("a read during a change was taken: head %q", got.Head)
+	}
+}
+
+func TestCleanupLeavesWhatChangedSinceTheConfirm(t *testing.T) {
+	w, ch, e := opsWorld(t)
+	w.local.add("me", "app", "me/app", func(c *model.Clone) {
+		c.Worktrees = []model.Worktree{{Path: "/src/github.com/me/app", Branch: "main", Main: true},
+			{Path: "/wt/done", Branch: "done"}, {Path: "/wt/busy-now", Branch: "busy-now"}}
+		c.Branches = []model.Branch{{Name: "main"}, {Name: "done"}, {Name: "busy-now"}, {Name: "squashed", Upstream: "origin/squashed", Gone: true}}
+	})
+	e.Open("me")
+	idle(t, e)
+	ch.cleanup = model.CleanupFacts{Base: "origin/main", Merged: map[string]bool{"main": true, "done": true, "busy-now": true},
+		WorkedOn: map[string]bool{"done": true, "busy-now": true, "squashed": true}}
+	opts := policy.Cleanup{DeleteGone: true}
+	plan, err := e.PlanCleanup(app, opts, "")
+	if err != nil || len(plan.Remove) != 3 {
+		t.Fatalf("plan: %+v, %v", plan.Remove, err)
+	}
+	// After the confirm, an agent starts working in busy-now.
+	ch.dirty["/wt/busy-now"] = 2
+	e.Cleanup(map[model.CloneKey]policy.Plan{app: plan}, opts, "")
+	idle(t, e)
+	if slices.Contains(ch.calls, "remove /wt/busy-now") {
+		t.Errorf("a worktree with changes since the confirm was removed: %v", ch.calls)
+	}
+	if !slices.Contains(ch.calls, "remove /wt/done") || !slices.Contains(ch.calls, "force-delete squashed") {
+		t.Errorf("calls = %v", ch.calls)
+	}
+	if r := rowOf(e.Owner(), string(app)); !strings.Contains(r.Op.Result, "left 1") {
+		t.Errorf("op = %+v", r.Op)
+	}
+
+	// D across clones never forces a branch.
+	ch.calls = nil
+	bulk := policy.Cleanup{DeleteGone: true, Bulk: true}
+	e.Cleanup(map[model.CloneKey]policy.Plan{app: plan}, bulk, "")
+	idle(t, e)
+	if slices.Contains(ch.calls, "force-delete squashed") {
+		t.Errorf("D forced a branch: %v", ch.calls)
+	}
+}
