@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -232,5 +233,89 @@ func TestCleanupLeavesWhatChangedSinceTheConfirm(t *testing.T) {
 	idle(t, e)
 	if slices.Contains(ch.calls, "force-delete squashed") {
 		t.Errorf("D forced a branch: %v", ch.calls)
+	}
+}
+
+type fakeCloner struct {
+	mu    sync.Mutex
+	local *fakeLocal
+	err   error
+	asked []string
+}
+
+func (f *fakeCloner) Clone(_ context.Context, host, slug, dir string) error {
+	f.mu.Lock()
+	f.asked = append(f.asked, host+" "+slug+" "+dir)
+	err := f.err
+	f.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	owner, name, _ := strings.Cut(slug, "/")
+	f.local.add(owner, name, slug, nil)
+	return nil
+}
+
+func TestCloneMakesTheRowAClone(t *testing.T) {
+	w := newWorld(t)
+	w.local.add("me", "app", "me/app", nil)
+	w.gh.setList("me", github.Complete, "e1", "app", "tool")
+	cl := &fakeCloner{local: w.local}
+	e := New(Options{Root: root, Local: w.local, GitHub: w.gh, Store: w.store, Cloner: cl, Now: w.clock.now})
+	if err := e.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	e.Open("me")
+	idle(t, e)
+	dir, err := e.Clone("github.com/me/tool")
+	if err != nil || dir != "/src/github.com/me/tool" {
+		t.Fatalf("Clone = %q, %v", dir, err)
+	}
+	idle(t, e)
+	if r := rowOf(e.Owner(), "/src/github.com/me/tool"); r == nil || r.Op.Result != "cloned" || !r.Listed.Has {
+		t.Fatalf("row after clone = %+v", r)
+	}
+	if r := rowOf(e.Owner(), "github.com/me/tool"); r != nil {
+		t.Error("the row of the repository not cloned stayed")
+	}
+	if _, err := e.Clone("github.com/me/app"); err == nil {
+		t.Error("cloned a row that is a clone")
+	}
+	cl.err = errors.New("fatal: could not\nRepository not found")
+	w.gh.setList("me", github.Complete, "e2", "app", "tool", "gone")
+	e.ReadList()
+	idle(t, e)
+	if _, err := e.Clone("github.com/me/gone"); err != nil {
+		t.Fatal(err)
+	}
+	idle(t, e)
+	if r := rowOf(e.Owner(), "github.com/me/gone"); r == nil || !r.Op.Failed || r.Op.Result != "Repository not found" {
+		t.Errorf("failed clone row = %+v", r)
+	}
+}
+
+func TestReadListReadsAnOwnerNotYours(t *testing.T) {
+	w := newWorld(t)
+	w.local.add("bigorg", "tool", "bigorg/tool", nil)
+	w.gh.setList("bigorg", github.Complete, "b1", "tool", "other")
+	e := w.engine()
+	e.Open("bigorg")
+	idle(t, e)
+	e.ReadList()
+	idle(t, e)
+	if !slices.Contains(w.gh.listed, "bigorg") {
+		t.Fatal("L did not read the list")
+	}
+	if o := e.Owner(); o.List != model.ListComplete || rowOf(o, "github.com/bigorg/other") == nil {
+		t.Errorf("list %v, %d rows", o.List, len(o.Rows))
+	}
+}
+
+func TestRereadForgetsAGoneClone(t *testing.T) {
+	_, _, e := opsWorld(t)
+	e.Reread(t.TempDir() + "/nowhere")
+	idle(t, e)
+	if rowOf(e.Owner(), string(app)) == nil {
+		t.Error("a clone still there was forgotten")
 	}
 }

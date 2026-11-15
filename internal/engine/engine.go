@@ -45,6 +45,11 @@ type GitHub interface {
 	Heavy(ctx context.Context, slugs []string, want github.Want) ([]github.HeavyRepo, github.Rate, error)
 }
 
+// Cloner clones a repository into a directory.
+type Cloner interface {
+	Clone(ctx context.Context, host, slug, dir string) error
+}
+
 // Store keeps owners between starts; nil keeps nothing (--no-cache).
 type Store interface {
 	LoadOwner(host, viewer, owner string) (store.OwnerCache, bool, error)
@@ -62,7 +67,10 @@ const (
 	apiAtOnce     = 2  // requests to GitHub's API; GitHub asks for them one after another
 	heavyBatch    = 10 // repositories a GraphQL query asks for by name
 	maxListPages  = 20 // pages of an owner's list read unasked
-	keepOwners    = 4  // owners kept in memory besides the one shown
+	// askedListPages bounds a list the user asked for: far past any
+	// owner's, only against a list that never ends.
+	askedListPages = 1000
+	keepOwners     = 4 // owners kept in memory besides the one shown
 )
 
 // How long values stay fresh before they are read again unasked.
@@ -80,6 +88,8 @@ type Options struct {
 	Change Changer
 	GitHub GitHub
 	Store  Store
+	// Cloner clones a repository; nil refuses to.
+	Cloner Cloner
 	Logger *slog.Logger
 	Now    func() time.Time
 }
@@ -92,6 +102,7 @@ type Engine struct {
 	change Changer
 	gh     GitHub
 	store  Store
+	cloner Cloner
 	log    *slog.Logger
 	now    func() time.Time
 
@@ -146,6 +157,7 @@ type owner struct {
 	writes    int                      // changes in flight: an owner with one is not let go
 	inflight  map[model.RemoteKey]mark // repositories being read by name
 	listing   int                      // the generation whose list is being read; 0 when none
+	asked     bool                     // the user asked for the list: read it whole, whoever the owner is
 }
 
 // mark is a repository being read by name: the fields asked for, and the
@@ -167,7 +179,7 @@ func New(o Options) *Engine {
 	if log == nil {
 		log = logging.Discard()
 	}
-	e := &Engine{root: o.Root, host: o.GitHub.Host(), local: o.Local, change: o.Change, gh: o.GitHub, store: o.Store, log: log, now: now,
+	e := &Engine{root: o.Root, host: o.GitHub.Host(), local: o.Local, change: o.Change, gh: o.GitHub, store: o.Store, cloner: o.Cloner, log: log, now: now,
 		lanes: map[model.CloneKey]string{}, epoch: map[model.CloneKey]int64{},
 		details: map[detailKey]model.Detail{}, detailing: map[detailKey]bool{}, reads: map[model.CloneKey]int64{},
 		localPool: newPool(runtime.NumCPU(), idle), netPool: newPool(networkAtOnce, idle), apiPool: newPool(apiAtOnce, idle),

@@ -314,9 +314,9 @@ func (e *Engine) ctxOf(o *owner) context.Context {
 // organizations is not listed unasked, only its clones are looked up.
 func (e *Engine) readList(o *owner, gen int, alive func() bool) {
 	e.mu.Lock()
-	kind, login, prev := o.kind, o.login, o.pages
+	kind, login, prev, asked := o.kind, o.login, o.pages, o.asked
 	skip := o.listing != 0 || !o.listAt.IsZero() && e.now().Sub(o.listAt) < listFresh && !o.fromCache
-	if kind == github.OwnerUser {
+	if kind == github.OwnerUser && !asked {
 		if o.list == model.ListUnknown {
 			o.list, o.listWhy = model.ListPartial, "not your owner: only your clones are looked up"
 		}
@@ -337,14 +337,23 @@ func (e *Engine) readList(o *owner, gen int, alive func() bool) {
 		e.mu.Unlock()
 		e.end(o, "list")
 	}
+	prio, pages := prioRest, maxListPages
+	if asked {
+		prio, pages = prioAsked, askedListPages
+	}
 	e.begin(o, "list")
-	e.apiPool.add(prioRest, alive, func() {
+	e.apiPool.add(prio, alive, func() {
 		defer done()
-		if ok, why := e.budget.allowAuto("core", false); !ok {
-			e.log.Info("list held back", logging.KeyOwner, login, logging.KeyReason, why)
+		if !asked {
+			if ok, why := e.budget.allowAuto("core", false); !ok {
+				e.log.Info("list held back", logging.KeyOwner, login, logging.KeyReason, why)
+				return
+			}
+		} else if until := e.budget.Paused(); !until.IsZero() {
+			e.log.Info("list held back", logging.KeyOwner, login, logging.KeyReason, "waiting out a GitHub rate limit")
 			return
 		}
-		l, err := e.gh.List(e.ctxOf(o), login, kind, prev, maxListPages)
+		l, err := e.gh.List(e.ctxOf(o), login, kind, prev, pages)
 		e.budget.saw(l.Rate, err == nil)
 		if e.takeList(o, gen, login, l, err) {
 			e.readHeavy(o) // inside the task, so that Idle waits for what it queues

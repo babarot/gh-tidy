@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/babarot/gh-tidy/internal/logging"
 	"github.com/babarot/gh-tidy/internal/model"
@@ -376,4 +378,107 @@ func lastLine(err error) string {
 		s = s[i+1:]
 	}
 	return s
+}
+
+// ReadList reads the list of the owner shown, whole, though gh tidy does
+// not read it unasked (an owner that is not the viewer's): the user asked.
+func (e *Engine) ReadList() {
+	e.mu.Lock()
+	o := e.owners[e.shown]
+	if o == nil || o.login == All {
+		e.mu.Unlock()
+		return
+	}
+	o.asked, o.listAt = true, time.Time{}
+	if o.list == model.ListPartial {
+		o.list, o.listWhy = model.ListUnknown, ""
+	}
+	gen := o.gen
+	e.mu.Unlock()
+	e.notify()
+	e.readList(o, gen, e.alive(o, gen))
+}
+
+// ErrNoCloner is returned by Clone from an engine built without a way to
+// clone.
+var ErrNoCloner = errors.New("gh tidy was built without a way to clone")
+
+// Clone clones the repository of the row key (a repository not cloned) of
+// the owner shown into <root>/<host>/<owner>/<name>, and reads it as a
+// clone: the row becomes the clone's. It returns where it clones to.
+func (e *Engine) Clone(key model.RemoteKey) (string, error) {
+	if e.cloner == nil {
+		return "", ErrNoCloner
+	}
+	e.mu.Lock()
+	o := e.owners[e.shown]
+	var r *model.Row
+	if o != nil {
+		r = o.rows[string(key)]
+	}
+	if r == nil || r.Clone != "" || o.login == All {
+		e.mu.Unlock()
+		return "", errors.New("not a repository to clone")
+	}
+	name := r.Listed.Value.Name
+	if name == "" {
+		name = string(key)[strings.LastIndex(string(key), "/")+1:]
+	}
+	login := o.login
+	e.mu.Unlock()
+	dir := filepath.Join(e.ownerDir(login), name)
+	ck := model.NewCloneKey(dir)
+	if _, err := os.Stat(dir); err == nil {
+		return dir, fmt.Errorf("%s already exists", abbrevHome(dir))
+	}
+	e.netPool.add(prioAsked, nil, func() {
+		if !e.lane(ck, "cloning") {
+			return
+		}
+		// The row is the remote's until the clone is read: show it there.
+		e.mu.Lock()
+		r.Op = model.Op{Doing: "cloning"}
+		e.changedOwner(o)
+		e.mu.Unlock()
+		op := model.Op{Result: "cloned"}
+		if err := e.cloner.Clone(e.ctx, e.host, login+"/"+name, dir); err != nil {
+			op = model.Op{Result: lastLine(err), Failed: true}
+		}
+		e.logChange("clone", dir, op)
+		e.mu.Lock()
+		r.Op = model.Op{}
+		if op.Failed {
+			r.Op = op
+		}
+		e.changedOwner(o)
+		e.mu.Unlock()
+		if !op.Failed {
+			e.rescan(e.ctx, dir)
+		}
+		e.leave(ck, op)
+		e.readHeavyShown()
+	}, nil)
+	return dir, nil
+}
+
+// Reread reads the clone at path again after something other than gh
+// tidy may have changed it (an action), or forgets it when it is gone.
+func (e *Engine) Reread(path string) {
+	key := model.NewCloneKey(path)
+	e.localPool.add(prioAsked, nil, func() {
+		if _, err := os.Stat(path); err != nil {
+			e.mu.Lock()
+			o := e.owners[e.shown]
+			e.mu.Unlock()
+			if o != nil {
+				e.readOwner(o)
+			}
+			return
+		}
+		if !e.lane(key, "reading") {
+			return
+		}
+		e.rescan(e.ctx, path)
+		e.leave(key, model.Op{})
+	}, nil)
 }
