@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -145,7 +146,9 @@ func (e *Engine) scanAll(o *owner, paths []string, alive func() bool, done func(
 			prio = prioVisible
 		}
 		e.mu.Unlock()
+		k := e.track.add("clones", 1, "clone", filepath.Base(p), o.login)
 		finish := func() {
+			k.end("", false) // dropped; a read that ran has ended already
 			e.mu.Lock()
 			left--
 			last := left == 0
@@ -155,7 +158,13 @@ func (e *Engine) scanAll(o *owner, paths []string, alive func() bool, done func(
 			}
 		}
 		e.localPool.add(prio, alive, func() {
+			k.start()
 			s := e.scan(p)
+			if s.clone.Err != "" {
+				k.end("failed", true)
+			} else {
+				k.end("read", false)
+			}
 			e.mu.Lock()
 			// A change started or ended since the read started: what the
 			// change reads afterwards is newer.
@@ -329,7 +338,9 @@ func (e *Engine) readList(o *owner, gen int, alive func() bool) {
 	if skip {
 		return
 	}
+	k := e.track.add("GitHub", 1, "github", "list "+login, login)
 	done := func() {
+		k.end("", false) // dropped; a read that ran has ended already
 		e.mu.Lock()
 		if o.listing == gen {
 			o.listing = 0
@@ -344,17 +355,28 @@ func (e *Engine) readList(o *owner, gen int, alive func() bool) {
 	e.begin(o, "list")
 	e.apiPool.add(prio, alive, func() {
 		defer done()
+		k.start()
 		if !asked {
 			if ok, why := e.budget.allowAuto("core", false); !ok {
 				e.log.Info("list held back", logging.KeyOwner, login, logging.KeyReason, why)
+				k.end("held back", false)
 				return
 			}
 		} else if until := e.budget.Paused(); !until.IsZero() {
 			e.log.Info("list held back", logging.KeyOwner, login, logging.KeyReason, "waiting out a GitHub rate limit")
+			k.end("held back", false)
 			return
 		}
 		l, err := e.gh.List(e.ctxOf(o), login, kind, prev, pages)
 		e.budget.saw(l.Rate, err == nil)
+		// A page answered 304 costs nothing, and saves a point only when the
+		// whole list is unchanged: one changed page has every page read again.
+		saved := 0
+		if err == nil && l.Unchanged {
+			saved = len(l.Pages.ETags)
+		}
+		e.track.spent(l.Rate.Cost, saved)
+		k.end(listNote(l, err))
 		if e.takeList(o, gen, login, l, err) {
 			e.readHeavy(o) // inside the task, so that Idle waits for what it queues
 		}
@@ -444,6 +466,10 @@ func (e *Engine) readHeavy(o *owner) {
 		return
 	}
 	gen, needs, now := o.gen, e.needs, e.now()
+	// r asked for everything again: every field is stale, and the reads
+	// are asked for, not held back by the budget gh tidy keeps for itself.
+	force := o.refresh
+	o.refresh = false
 	want := github.Want{Default: true, CI: needs.Has(model.NeedCI), Counts: needs.Has(model.NeedCounts), Alerts: needs.Has(model.NeedAlerts)}
 	fields := fieldsOf(want)
 	extra := fields != 0
@@ -463,6 +489,8 @@ func (e *Engine) readHeavy(o *owner) {
 		h := r.Heavy
 		var stale bool
 		switch {
+		case force:
+			stale = true
 		case h.Last == model.Denied:
 			// GitHub would not give it: asked again only after a while, so
 			// that what a token cannot see is not asked for on every tick.
@@ -509,7 +537,10 @@ func (e *Engine) readHeavy(o *owner) {
 		if visible[part[0]] {
 			prio = prioVisible
 		}
-		e.queueHeavy(o, gen, part, want, prio, alive, true)
+		if force {
+			prio = prioAsked
+		}
+		e.queueHeavy(o, gen, part, want, prio, alive, true, force)
 	}
 	if len(slugs) == 0 {
 		e.readAhead(o)
@@ -518,26 +549,37 @@ func (e *Engine) readHeavy(o *owner) {
 
 // queueHeavy reads one batch. A batch GitHub gave up on is split in two and
 // read once more, smaller.
-func (e *Engine) queueHeavy(o *owner, gen int, part []string, want github.Want, prio int, alive func() bool, retry bool) {
+func (e *Engine) queueHeavy(o *owner, gen int, part []string, want github.Want, prio int, alive func() bool, retry, asked bool) {
 	release := func() { e.release(o, part, gen) }
+	k := e.track.add("GitHub", len(part), "github", fmt.Sprintf("fields · %d repositories", len(part)), o.login)
 	e.begin(o, "GitHub")
 	e.apiPool.add(prio, alive, func() {
 		defer e.end(o, "GitHub")
-		if ok, why := e.budget.allowAuto("graphql", true); !ok {
+		k.start()
+		held := false
+		if asked {
+			held = !e.budget.Paused().IsZero()
+		} else if ok, why := e.budget.allowAuto("graphql", true); !ok {
 			e.log.Info("reads held back", logging.KeyOwner, o.login, logging.KeyReason, why, "repos", len(part))
+			held = true
+		}
+		if held {
+			k.end("held back", false)
 			release()
 			return
 		}
 		got, rate, err := e.gh.Heavy(e.ctxOf(o), part, want)
 		e.budget.saw(rate, err == nil)
+		e.track.spent(rate.Cost, 0)
+		k.end(heavyNote(rate, err))
 		var rl *github.RateLimitError
 		switch {
 		case errors.Is(err, github.ErrTimeout):
 			e.budget.shrink()
 			if retry && len(part) > 1 {
 				h := len(part) / 2
-				e.queueHeavy(o, gen, part[:h], want, prio, alive, false)
-				e.queueHeavy(o, gen, part[h:], want, prio, alive, false)
+				e.queueHeavy(o, gen, part[:h], want, prio, alive, false, asked)
+				e.queueHeavy(o, gen, part[h:], want, prio, alive, false, asked)
 				return
 			}
 			e.failHeavy(o, gen, part, "GitHub took too long")
@@ -560,7 +602,38 @@ func (e *Engine) queueHeavy(o *owner, gen int, part []string, want github.Want, 
 			return
 		}
 		e.readAhead(o)
-	}, func() { release(); e.end(o, "GitHub") })
+	}, func() { k.end("", false); release(); e.end(o, "GitHub") })
+}
+
+// listNote and heavyNote say how a read went, without an error's text.
+func listNote(l github.Listing, err error) (string, bool) {
+	var rl *github.RateLimitError
+	switch {
+	case errors.As(err, &rl):
+		return "rate limited", true
+	case errors.Is(err, context.Canceled):
+		return "", false
+	case err != nil:
+		return "failed", true
+	case l.Unchanged:
+		return "304 not modified", false
+	}
+	return fmt.Sprintf("%d repositories", len(l.Repos)), false
+}
+
+func heavyNote(rate github.Rate, err error) (string, bool) {
+	var rl *github.RateLimitError
+	switch {
+	case errors.Is(err, github.ErrTimeout):
+		return "GitHub gave up", true
+	case errors.As(err, &rl):
+		return "rate limited", true
+	case errors.Is(err, context.Canceled):
+		return "", false
+	case err != nil:
+		return "failed", true
+	}
+	return fmt.Sprintf("cost %d", rate.Cost), false
 }
 
 // release forgets that the repositories of part are being read by

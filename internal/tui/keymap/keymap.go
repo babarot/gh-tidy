@@ -70,6 +70,8 @@ var Defaults = []Def{
 	{"cleanup", ScopeList, []string{"d"}, "clean up"},
 	{"cleanup_all", ScopeList, []string{"D"}, "clean up all"},
 	{"clone", ScopeList, []string{"c"}, "clone"},
+	// Reads the clones and GitHub again, all of them, fresh or not.
+	{"refresh", ScopeList, []string{"r"}, "read again"},
 	// Reads the list of an owner gh tidy does not read on its own.
 	{"list", ScopeList, []string{"L"}, "read the list"},
 	{"open_browser", ScopeList, []string{"o"}, "open on GitHub"},

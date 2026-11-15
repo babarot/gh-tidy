@@ -30,7 +30,8 @@ type task struct {
 type pool struct {
 	mu      sync.Mutex
 	n       int
-	running int
+	running int // workers
+	busy    int // tasks running
 	queue   []task
 	seq     int64
 	idle    *idleGroup
@@ -71,14 +72,25 @@ func (p *pool) work() {
 		}
 		t := p.queue[0]
 		p.queue = p.queue[1:]
+		p.busy++
 		p.mu.Unlock()
 		if t.alive == nil || t.alive() {
 			t.run()
 		} else if t.dropped != nil {
 			t.dropped()
 		}
+		p.mu.Lock()
+		p.busy--
+		p.mu.Unlock()
 		p.idle.add(-1)
 	}
+}
+
+// stats are how many tasks run and how many wait.
+func (p *pool) stats() (running, queued int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.busy, len(p.queue)
 }
 
 // drop removes the queued tasks that are no longer wanted.
@@ -109,6 +121,8 @@ type idleGroup struct {
 	mu   sync.Mutex
 	n    int
 	cond *sync.Cond
+	// onIdle, when set, is called each time no work is left.
+	onIdle func()
 }
 
 func newIdleGroup() *idleGroup {
@@ -120,10 +134,15 @@ func newIdleGroup() *idleGroup {
 func (g *idleGroup) add(d int) {
 	g.mu.Lock()
 	g.n += d
-	if g.n == 0 {
+	idle := g.n == 0
+	if idle {
 		g.cond.Broadcast()
 	}
+	f := g.onIdle
 	g.mu.Unlock()
+	if idle && f != nil {
+		f()
+	}
 }
 
 // wait returns when no work is left, or ctx ends.

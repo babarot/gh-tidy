@@ -128,6 +128,9 @@ func (m *Model) operate(k string) (tea.Cmd, bool) {
 			return m.say(seg{err.Error(), roleWarn}), true
 		}
 		return m.say(seg{"cloning into " + m.short(dir), roleAccent}), true
+	case on("refresh"):
+		m.eng.Refresh()
+		return m.say(seg{"reading " + m.owner + " again", roleAccent}), true
 	case on("list"):
 		if m.snap.All {
 			return m.say(seg{"choose one owner to read its list", roleMuted}), true

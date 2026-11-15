@@ -75,6 +75,7 @@ gh tidy reads GitHub on its own only within a share of your rate limit, leaving 
 | `d` | clean up the clone (below; asks first) |
 | `D` | clean up every clone's finished worktrees (asks first) |
 | `c` | clone the repository selected |
+| `r` | read the clones and GitHub again, all of them |
 | `L` | read the list of an owner that is not yours |
 | `o` / `y` / `Y` / `R` | open on GitHub / copy the path / copy the URL / reveal in Finder |
 | `esc` | put away the results shown on rows |

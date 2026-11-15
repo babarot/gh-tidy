@@ -109,6 +109,7 @@ type Engine struct {
 	localPool, netPool, apiPool *pool
 	idle                        *idleGroup
 	budget                      *budget
+	track                       *tracker
 
 	mu      sync.Mutex
 	ctx     context.Context
@@ -158,6 +159,7 @@ type owner struct {
 	inflight  map[model.RemoteKey]mark // repositories being read by name
 	listing   int                      // the generation whose list is being read; 0 when none
 	asked     bool                     // the user asked for the list: read it whole, whoever the owner is
+	refresh   bool                     // r asked to read everything again: the next heavy read takes every row
 }
 
 // mark is a repository being read by name: the fields asked for, and the
@@ -185,6 +187,8 @@ func New(o Options) *Engine {
 		localPool: newPool(runtime.NumCPU(), idle), netPool: newPool(networkAtOnce, idle), apiPool: newPool(apiAtOnce, idle),
 		idle: idle, owners: map[string]*owner{}, visible: map[string]bool{}, changed: make(chan struct{}, 1)}
 	e.budget = newBudget(now, log)
+	e.track = newTracker(now)
+	idle.onIdle = e.track.idled
 	return e
 }
 
@@ -275,6 +279,7 @@ func (e *Engine) Open(login string) {
 	e.shown = key
 	e.touch(key)
 	e.mu.Unlock()
+	e.track.load()
 	e.localPool.drop()
 	e.apiPool.drop()
 	e.notify()

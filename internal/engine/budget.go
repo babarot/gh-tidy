@@ -106,6 +106,24 @@ func (b *budget) allowAuto(resource string, heavy bool) (bool, string) {
 	return true, ""
 }
 
+// lowest is the resource with the smaller share of its points left, as
+// last seen: what the screen shows of the rate limit.
+func (b *budget) lowest() (known bool, remaining, limit int, reset time.Time, resource string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	now := b.now()
+	share := 2.0
+	for name, p := range b.pools {
+		if p.limit == 0 || now.After(p.reset) {
+			continue
+		}
+		if s := float64(p.lowest) / float64(p.limit); s < share {
+			share, known, remaining, limit, reset, resource = s, true, p.lowest, p.limit, p.reset, name
+		}
+	}
+	return
+}
+
 // pause stops every request after GitHub refused one for a rate limit:
 // as long as GitHub says, longer each time it happens again.
 func (b *budget) pause(e *github.RateLimitError) {
