@@ -62,6 +62,7 @@ func Run(cmd string, args []string, stderr io.Writer) error {
 		fs.PrintDefaults()
 	}
 	showVersion := fs.Bool("version", false, "print the version")
+	printConfig := fs.Bool("print-config", false, "print every setting at its default, commented out, to start a config file from")
 	asJSON := fs.Bool("json", false, "print the owner's clones as JSON, read from disk alone, instead of opening the list")
 	debug := fs.Bool("debug", false, "log at debug level (also GH_TIDY_LOG_LEVEL)")
 	if err := fs.Parse(args); err != nil {
@@ -69,6 +70,10 @@ func Run(cmd string, args []string, stderr io.Writer) error {
 			return nil
 		}
 		return err
+	}
+	if *printConfig {
+		fmt.Fprint(os.Stdout, config.Template)
+		return nil
 	}
 	if *showVersion {
 		fmt.Fprintln(stderr, Name, version.Version)

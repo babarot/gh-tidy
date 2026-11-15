@@ -1,6 +1,7 @@
 package config
 
 import (
+	"flag"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -93,14 +94,36 @@ func TestParseErrors(t *testing.T) {
 	}
 }
 
-func TestLoadWritesTemplate(t *testing.T) {
+func TestLoadWritesNothing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gh-tidy", "config.toml")
 	f, err := Load(path)
 	if err != nil || !reflect.DeepEqual(f, Default()) {
 		t.Fatalf("Load = %+v, %v", f, err)
 	}
-	if b, err := os.ReadFile(path); err != nil || string(b) != Template {
-		t.Errorf("template not written: %v", err)
+	if _, err := os.Stat(path); err == nil {
+		t.Error("a file was written")
+	}
+}
+
+// docs/configuration.md shows the template; go test -run TestConfigurationDoc
+// -update writes it again.
+var update = flag.Bool("update", false, "rewrite docs/configuration.md")
+
+func TestConfigurationDoc(t *testing.T) {
+	path := filepath.Join("..", "..", "docs", "configuration.md")
+	want := "# Configuration\n\n" +
+		"gh tidy reads `~/.config/gh-tidy/config.toml` (or `$XDG_CONFIG_HOME/gh-tidy/config.toml`). Every setting is optional: one left out takes its default. A mistake is reported with where it is in the file, and a setting that is no longer read says why.\n\n" +
+		"This page is written from the code (`go test ./internal/config -run TestConfigurationDoc -update`). `gh tidy --print-config` prints the same, to start a file from.\n\n" +
+		"```toml\n" + Template + "```\n"
+	if *update {
+		if err := os.WriteFile(path, []byte(want), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != want {
+		t.Errorf("docs/configuration.md is not the template; run go test ./internal/config -run TestConfigurationDoc -update")
 	}
 }
 

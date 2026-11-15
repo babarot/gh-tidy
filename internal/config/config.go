@@ -1,7 +1,6 @@
-// Package config reads ~/.config/gh-tidy/config.toml. The file is written
-// on first run with every setting commented out at its default, so a default
-// changed later still applies until the user picks a value. A mistake is
-// reported where it is in the file rather than ignored.
+// Package config reads ~/.config/gh-tidy/config.toml. A setting the file
+// leaves out takes its default, so a default changed later still applies.
+// A mistake is reported where it is in the file rather than ignored.
 package config
 
 import (
@@ -158,15 +157,14 @@ func Path() string {
 	return filepath.Join(dir, "gh-tidy", "config.toml")
 }
 
-// Load reads the file at path over the defaults, writing the template there
-// first when there is no file.
+// Load reads the file at path over the defaults; without a file, the
+// defaults. Nothing is written: a file written once would keep the
+// defaults of that version in its comments, and lack the settings added
+// later (gh-desk ADR-092). gh tidy --print-config prints the template.
 func Load(path string) (File, error) {
 	f := Default()
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err == nil {
-			_ = os.WriteFile(path, []byte(Template), 0o644)
-		}
 		return f, nil
 	}
 	if err != nil {
@@ -293,7 +291,8 @@ func Expand(argv []string, vars map[string]string) []string {
 	return out
 }
 
-// Template is the file written on first run.
+// Template is every setting at its default, commented out, with what it
+// does: what --print-config prints, and docs/configuration.md shows.
 const Template = `# gh tidy settings. Uncomment a line to change it.
 
 [core]
