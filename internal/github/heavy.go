@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/babarot/gh-tidy/internal/logging"
 	"github.com/babarot/gh-tidy/internal/model"
 )
 
@@ -40,7 +41,8 @@ type HeavyRepo struct {
 	Alerts       int
 	AlertsOff    bool
 	AlertsDenied bool
-	// Err is another error GitHub reported for this repository.
+	// Err is another error GitHub reported for this repository, or for one
+	// of its fields; the fields are then not known, whatever they hold.
 	Err string
 }
 
@@ -81,6 +83,18 @@ func (c *Client) Heavy(ctx context.Context, slugs []string, want Want) ([]HeavyR
 			rate.Cost = rl.Cost
 		}
 	}
+	c.log.Debug("github heavy", "repos", len(slugs), logging.KeyGQLCost, rate.Cost, logging.KeyGQLRemaining, rate.Remaining)
+	// An error tied to none of the repositories asked for means the query
+	// failed as a whole: no repository may be read as missing from it.
+	aliases := map[string]bool{}
+	for i := range slugs {
+		aliases[fmt.Sprintf("r%d", i)] = true
+	}
+	for _, e := range errs {
+		if a, ok := e.Path[0].(string); !ok || !aliases[a] {
+			return nil, rate, &StatusError{Status: 200, Message: e.Message}
+		}
+	}
 	out := make([]HeavyRepo, len(slugs))
 	for i, s := range slugs {
 		h := &out[i]
@@ -93,19 +107,24 @@ func (c *Client) Heavy(ctx context.Context, slugs []string, want Want) ([]HeavyR
 				continue
 			}
 		}
+		notFound := false
 		for _, e := range errs {
-			if len(e.Path) == 0 || e.Path[0] != alias {
+			if e.Path[0] != alias {
 				continue
 			}
 			switch {
 			case len(e.Path) == 1 && e.Type == "NOT_FOUND":
+				notFound = true
 			case len(e.Path) > 1 && e.Path[1] == "vulnerabilityAlerts":
 				h.AlertsDenied = true
 			default:
-				h.Err = e.Message
+				h.Err = e.Message // a field GitHub could not read: its value is not known
 			}
 		}
 		if n == nil {
+			if !notFound && h.Err == "" {
+				h.Err = "GitHub did not answer for it"
+			}
 			continue
 		}
 		h.Found, h.Key, h.PushedAt = true, model.NewRemoteKey(c.host, n.NameWithOwner), n.PushedAt

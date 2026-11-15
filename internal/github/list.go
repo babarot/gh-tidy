@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -27,8 +28,11 @@ const (
 type Completeness int
 
 const (
+	// Unknown is a list not read: the zero value, so that a list returned
+	// with an error never claims to be complete.
+	Unknown Completeness = iota
 	// Complete is every repository the token may see.
-	Complete Completeness = iota
+	Complete
 	// Partial is some of them; Reason says why the rest are missing. A
 	// repository not in a partial list may still exist.
 	Partial
@@ -63,11 +67,15 @@ type Listing struct {
 	Rate Rate
 }
 
-// Pages is what a list read before leaves for asking again conditionally:
-// each page's ETag. A read goes on until a page holds fewer than a full
-// page, so the last ETag also covers repositories added at the end.
+// Pages is what a list read before leaves for asking it again
+// conditionally: each page's ETag, whether the read ended on a short page
+// (so the last ETag also covers repositories added at the end), and how
+// complete the list was, which an unchanged answer carries forward.
 type Pages struct {
-	ETags []string
+	ETags        []string
+	Ended        bool
+	Completeness Completeness
+	Reason       string
 }
 
 const perPage = 100
@@ -79,11 +87,25 @@ const perPage = 100
 // from pages read at different times. At most maxPages pages are read; a
 // longer list is Partial.
 func (c *Client) List(ctx context.Context, owner string, kind OwnerKind, prev Pages, maxPages int) (Listing, error) {
-	if len(prev.ETags) > 0 {
+	l, err := c.list(ctx, owner, kind, prev, maxPages)
+	if err != nil {
+		l.Completeness, l.Repos = Unknown, nil
+	}
+	return l, err
+}
+
+func (c *Client) list(ctx context.Context, owner string, kind OwnerKind, prev Pages, maxPages int) (Listing, error) {
+	// A list cut off at the page limit, asked for with more pages now, is
+	// read whole: its pages answering 304 would say nothing of the rest.
+	if len(prev.ETags) > 0 && (prev.Ended || maxPages <= len(prev.ETags)) {
 		l, changed, err := c.listPages(ctx, owner, kind, prev, maxPages)
 		if err != nil || !changed {
 			return l, err
 		}
+		cost := l.Rate.Cost
+		l, _, err = c.listPages(ctx, owner, kind, Pages{}, maxPages)
+		l.Rate.Cost += cost
+		return l, err
 	}
 	l, _, err := c.listPages(ctx, owner, kind, Pages{}, maxPages)
 	return l, err
@@ -93,16 +115,18 @@ func (c *Client) List(ctx context.Context, owner string, kind OwnerKind, prev Pa
 // reports whether any page changed. A conditional pass stops at the first
 // changed page.
 func (c *Client) listPages(ctx context.Context, owner string, kind OwnerKind, prev Pages, maxPages int) (Listing, bool, error) {
-	l := Listing{}
+	l := Listing{Completeness: Complete}
+	seen := map[model.RemoteKey]bool{}
 	etags := prev.ETags
 	conditional := len(etags) > 0
 	for page := 1; ; page++ {
 		if page > maxPages {
 			l.Completeness = Partial
 			l.Reason = fmt.Sprintf("more than %d repositories; read the rest when asked", maxPages*perPage)
+			l.Pages.Completeness, l.Pages.Reason = l.Completeness, l.Reason
 			return l, true, nil
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.restBase+listPath(owner, kind, page), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.restBase+listPath(url.PathEscape(owner), kind, page), nil)
 		if err != nil {
 			return l, false, err
 		}
@@ -131,10 +155,13 @@ func (c *Client) listPages(ctx context.Context, owner string, kind OwnerKind, pr
 				continue
 			}
 			l.Unchanged = true
+			l.Pages.Ended, l.Pages.Completeness, l.Pages.Reason = prev.Ended, prev.Completeness, prev.Reason
+			l.Completeness, l.Reason = prev.Completeness, prev.Reason
 			return l, false, nil
 		}
 		if conditional {
 			_ = resp.Body.Close()
+			rate.Cost = l.Rate.Cost + 1           // this changed page cost a point
 			return Listing{Rate: rate}, true, nil // read every page again
 		}
 		if resp.StatusCode == http.StatusNotFound {
@@ -156,7 +183,13 @@ func (c *Client) listPages(ctx context.Context, owner string, kind OwnerKind, pr
 		l.Rate.Cost++
 		l.Pages.ETags = append(l.Pages.ETags, etag)
 		for _, r := range repos {
-			l.Repos = append(l.Repos, r.listed(c.host))
+			// A repository added or removed while the pages are read moves
+			// the others across pages; a repository is listed once.
+			lr := r.listed(c.host)
+			if !seen[lr.Key] {
+				seen[lr.Key] = true
+				l.Repos = append(l.Repos, lr)
+			}
 		}
 		if partial {
 			l.Completeness, l.Reason = Partial, "this token is not authorized for the organization's SSO; only some repositories came back"
@@ -165,6 +198,7 @@ func (c *Client) listPages(ctx context.Context, owner string, kind OwnerKind, pr
 			if kind == OwnerUser && l.Completeness == Complete {
 				l.Completeness, l.Reason = Partial, "another user's public repositories only"
 			}
+			l.Pages.Ended, l.Pages.Completeness, l.Pages.Reason = true, l.Completeness, l.Reason
 			return l, true, nil
 		}
 	}
@@ -212,9 +246,17 @@ func (c *Client) Viewer(ctx context.Context) (Viewer, Rate, error) {
 		}
 		RateLimit struct{ Cost int }
 	}
-	_, rate, err := c.graphql(ctx, "viewer", `query { viewer { login organizations(first: 100) { nodes { login } } } rateLimit { cost } }`, &d)
+	errs, rate, err := c.graphql(ctx, "viewer", `query { viewer { login organizations(first: 100) { nodes { login } } } rateLimit { cost } }`, &d)
 	if err != nil {
 		return Viewer{}, rate, err
+	}
+	// Without the viewer, every owner would read as another user's.
+	if len(errs) > 0 || d.Viewer.Login == "" {
+		msg := "GitHub did not say who is signed in"
+		if len(errs) > 0 {
+			msg += ": " + errs[0].Message
+		}
+		return Viewer{}, rate, errors.New(msg)
 	}
 	rate.Cost = d.RateLimit.Cost
 	v := Viewer{Login: d.Viewer.Login}

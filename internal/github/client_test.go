@@ -215,3 +215,93 @@ func TestViewer(t *testing.T) {
 		}
 	}
 }
+
+func TestUnchangedCarriesCompletenessForward(t *testing.T) {
+	f := newFake()
+	f.addRepos("someone", "tool")
+	c := f.client(t)
+	ctx := context.Background()
+	l, err := c.List(ctx, "someone", OwnerUser, Pages{}, 5)
+	if err != nil || l.Completeness != Partial {
+		t.Fatalf("first read: %v, %v", l.Completeness, err)
+	}
+	again, err := c.List(ctx, "someone", OwnerUser, l.Pages, 5)
+	if err != nil || !again.Unchanged || again.Completeness != Partial || again.Reason != l.Reason {
+		t.Errorf("unchanged: %v %v (%q), %v", again.Unchanged, again.Completeness, again.Reason, err)
+	}
+}
+
+func TestACutOffListIsReadWholeWhenAskedForMore(t *testing.T) {
+	f := newFake()
+	for i := range 250 {
+		f.addRepos("big", fmt.Sprintf("r%03d", i))
+	}
+	c := f.client(t)
+	ctx := context.Background()
+	l, err := c.List(ctx, "big", OwnerOrg, Pages{}, 2)
+	if err != nil || l.Completeness != Partial || len(l.Repos) != 200 {
+		t.Fatalf("cut off: %v, %d repos, %v", l.Completeness, len(l.Repos), err)
+	}
+	if again, _ := c.List(ctx, "big", OwnerOrg, l.Pages, 2); !again.Unchanged || again.Completeness != Partial {
+		t.Errorf("asked again within the limit: unchanged %v, %v", again.Unchanged, again.Completeness)
+	}
+	all, err := c.List(ctx, "big", OwnerOrg, l.Pages, 10)
+	if err != nil || all.Unchanged || all.Completeness != Complete || len(all.Repos) != 250 {
+		t.Errorf("asked for the rest: unchanged %v, %v, %d repos, %v", all.Unchanged, all.Completeness, len(all.Repos), err)
+	}
+}
+
+func TestCostCountsThePageThatShowedAChange(t *testing.T) {
+	f := newFake()
+	for i := range 150 {
+		f.addRepos("me", fmt.Sprintf("r%03d", i))
+	}
+	c := f.client(t)
+	ctx := context.Background()
+	l, _ := c.List(ctx, "me", OwnerViewer, Pages{}, 5)
+	f.repos["me"][0].Description = "changed"
+	before := f.remaining
+	again, err := c.List(ctx, "me", OwnerViewer, l.Pages, 5)
+	if err != nil || again.Rate.Cost != before-f.remaining {
+		t.Errorf("cost %d, points used %d, %v", again.Rate.Cost, before-f.remaining, err)
+	}
+}
+
+func TestAListReadWithAnErrorIsNotComplete(t *testing.T) {
+	f := newFake()
+	l, err := f.client(t).List(context.Background(), "nobody", OwnerOrg, Pages{}, 2)
+	if err == nil || l.Completeness == Complete {
+		t.Errorf("list of a missing owner: %v, %v", l.Completeness, err)
+	}
+}
+
+func TestHeavyNeverReadsAFailureAsMissing(t *testing.T) {
+	ctx := context.Background()
+	t.Run("the whole query failed", func(t *testing.T) {
+		f := newFake()
+		f.nodes["me/app"] = fakeNode{def: "main"}
+		f.failWhole = true
+		got, _, err := f.client(t).Heavy(ctx, []string{"me/app"}, Want{Default: true})
+		if err == nil || got != nil {
+			t.Errorf("a failed query: %+v, %v", got, err)
+		}
+	})
+	t.Run("no answer for one", func(t *testing.T) {
+		f := newFake()
+		f.nodes["me/a"] = fakeNode{def: "main"}
+		f.nodes["me/b"] = fakeNode{def: "main"}
+		f.dropAlias = map[string]bool{"r1": true}
+		got, _, err := f.client(t).Heavy(ctx, []string{"me/a", "me/b"}, Want{Default: true})
+		if err != nil || !got[0].Found || got[1].Found || got[1].Err == "" {
+			t.Errorf("no answer for b: %+v, %v", got, err)
+		}
+	})
+}
+
+func TestViewerThatCannotBeReadIsAnError(t *testing.T) {
+	f := newFake()
+	f.viewerFails = true
+	if _, _, err := f.client(t).Viewer(context.Background()); err == nil {
+		t.Error("a viewer GitHub would not give came back without an error")
+	}
+}

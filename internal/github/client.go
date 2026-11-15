@@ -39,13 +39,20 @@ type Options struct {
 	Logger    *slog.Logger
 }
 
+// requestTimeout bounds one request: a constant, past GitHub's own limit
+// of ten seconds on a query.
+const requestTimeout = 30 * time.Second
+
 // NewClient returns a client for opts.Host, github.com when empty.
 func NewClient(opts Options) (*Client, error) {
 	host := opts.Host
 	if host == "" {
 		host = "github.com"
 	}
-	hc, err := api.NewHTTPClient(api.ClientOptions{Host: host, Transport: opts.Transport, AuthToken: opts.AuthToken, Headers: map[string]string{"Accept": "application/vnd.github+json"}})
+	// LogIgnoreEnv: GH_DEBUG would have go-gh write requests to stderr,
+	// under the TUI. Timeout bounds a request whose caller set no deadline.
+	hc, err := api.NewHTTPClient(api.ClientOptions{Host: host, Transport: opts.Transport, AuthToken: opts.AuthToken,
+		Headers: map[string]string{"Accept": "application/vnd.github+json"}, LogIgnoreEnv: true, Timeout: requestTimeout})
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +197,9 @@ func message(body []byte) string {
 }
 
 // graphql posts query and decodes its data into out, returning the errors
-// GitHub put beside the data: a query answers with what it could read.
+// GitHub put beside the data: a query answers with what it could read. An
+// error not tied to a part of the query means the query as a whole
+// failed, and is returned as the error.
 func (c *Client) graphql(ctx context.Context, op, query string, out any) ([]gqlError, Rate, error) {
 	body, _ := json.Marshal(map[string]any{"query": query})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.gqlURL, bytes.NewReader(body))
@@ -220,6 +229,8 @@ func (c *Client) graphql(ctx context.Context, op, query string, out any) ([]gqlE
 			return nil, rate, &RateLimitError{Primary: true, Reset: rate.Reset, Rate: rate}
 		case strings.Contains(strings.ToLower(e.Message), "secondary rate limit"):
 			return nil, rate, &RateLimitError{Rate: rate}
+		case len(e.Path) == 0:
+			return nil, rate, &StatusError{Status: http.StatusOK, Message: e.Message}
 		}
 	}
 	if len(r.Data) > 0 && string(r.Data) != "null" {

@@ -32,6 +32,9 @@ type fake struct {
 	// What to do to the next requests, and what was asked.
 	timeouts, secondary int
 	primaryOut          bool
+	failWhole           bool            // GraphQL answers data null and an error with no path
+	dropAlias           map[string]bool // aliases left out of the data with no error
+	viewerFails         bool
 	queries             []string
 	remaining           int
 	requests            int
@@ -167,6 +170,14 @@ func (f *fake) graphql(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, `{"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded"}]}`)
 		return
 	}
+	if f.failWhole {
+		_, _ = io.WriteString(w, `{"data":null,"errors":[{"message":"Something went wrong while executing your query."}]}`)
+		return
+	}
+	if strings.Contains(req.Query, "viewer {") && f.viewerFails {
+		_, _ = io.WriteString(w, `{"data":{"viewer":null},"errors":[{"type":"INSUFFICIENT_SCOPES","path":["viewer"],"message":"needs read:org"}]}`)
+		return
+	}
 	if strings.Contains(req.Query, "viewer {") {
 		var orgs []map[string]string
 		for _, o := range f.orgs {
@@ -184,6 +195,9 @@ func (f *fake) graphql(w http.ResponseWriter, r *http.Request) {
 			end = ms[i+1][0]
 		}
 		alias, slug, fields := req.Query[m[2]:m[3]], strings.ToLower(req.Query[m[4]:m[5]]+"/"+req.Query[m[6]:m[7]]), req.Query[m[1]:end]
+		if f.dropAlias[alias] {
+			continue
+		}
 		if to, ok := f.renamed[slug]; ok {
 			slug = to
 		}
