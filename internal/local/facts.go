@@ -38,21 +38,33 @@ func AdvanceFacts(ctx context.Context, path, name string, source model.DefaultSo
 		_, err := git("merge-base", "--is-ancestor", local, remote)
 		f.FastForward = err == nil
 	}
+	common, _ := git("rev-parse", "--path-format=absolute", "--git-common-dir")
 	if out, err := git("worktree", "list", "--porcelain", "-z"); err == nil {
-		for _, w := range gitx.ParseWorktrees(out) {
-			if w.Branch != name || w.Prunable {
+		for i, gw := range gitx.ParseWorktrees(out) {
+			w := model.Worktree{Path: gw.Path, Branch: gw.Branch, Main: i == 0, Prunable: gw.Prunable}
+			if w.Branch == "" && !w.Prunable {
+				w.Occupies = occupied(gitDir(w, common))
+			}
+			if w.Holds() != name {
+				continue
+			}
+			f.Holders++
+			if w.Prunable {
+				f.HeldByMissing = true
+				continue
+			}
+			if f.CheckedOut != "" {
 				continue
 			}
 			f.CheckedOut = w.Path
-			if s, err := gitx.Run(ctx, w.Path, "status", "--porcelain", "-z"); err == nil {
+			// Only changes to tracked files are in the way: a fast-forward
+			// merge refuses by itself to overwrite an untracked file.
+			if s, err := gitx.Run(ctx, w.Path, "status", "--porcelain", "-z", "--untracked-files=no"); err == nil {
 				f.Dirty = strings.Count(s, "\x00")
 			} else {
 				f.Dirty = -1 // unreadable counts as in the way
 			}
-			if dir, err := gitx.Run(ctx, w.Path, "rev-parse", "--absolute-git-dir"); err == nil {
-				f.InProgress = inProgress(dir)
-			}
-			break
+			f.InProgress = inProgress(gitDir(w, common))
 		}
 	}
 	return f

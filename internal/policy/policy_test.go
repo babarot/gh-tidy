@@ -32,7 +32,9 @@ func TestDecideAdvance(t *testing.T) {
 		{"not a fast-forward", with(func(f *model.AdvanceFacts) { f.FastForward = false }), AdvanceSkip, "rebase or merge"},
 		{"changes where checked out", with(func(f *model.AdvanceFacts) { f.CheckedOut, f.Dirty = "/wt", 2 }), AdvanceSkip, "2 uncommitted changes"},
 		{"unreadable where checked out", with(func(f *model.AdvanceFacts) { f.CheckedOut, f.Dirty = "/wt", -1 }), AdvanceSkip, "could not be read"},
-		{"rebase where checked out", with(func(f *model.AdvanceFacts) { f.CheckedOut, f.InProgress = "/wt", "rebase" }), AdvanceSkip, "rebase is in progress"},
+		{"rebase where checked out", with(func(f *model.AdvanceFacts) { f.CheckedOut, f.InProgress, f.Holders = "/wt", "rebase", 1 }), AdvanceSkip, "rebase is in progress"},
+		{"checked out in two worktrees", with(func(f *model.AdvanceFacts) { f.CheckedOut, f.Holders = "/wt", 2 }), AdvanceSkip, "in 2 worktrees"},
+		{"held by a missing worktree", with(func(f *model.AdvanceFacts) { f.Holders, f.HeldByMissing = 1, true }), AdvanceSkip, "cannot find"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			got := DecideAdvance(c.f)
@@ -130,6 +132,28 @@ func TestDecideCleanup(t *testing.T) {
 	}
 }
 
+func TestDecideCleanupBulkAndOccupiedBranches(t *testing.T) {
+	c, f := cleanupClone()
+	c.DefaultSource = model.DefaultFromOriginHEAD
+	p := DecideCleanup(c, f, Cleanup{DeleteGone: true, Bulk: true}, "")
+	if slices.ContainsFunc(p.Remove, func(it Item) bool { return it.Force }) {
+		t.Error("D deletes a branch that is not merged")
+	}
+	c.DefaultSource = model.DefaultFromGuess
+	if p := DecideCleanup(c, f, Cleanup{Bulk: true}, ""); len(p.Remove) != 0 {
+		t.Errorf("D removes from a clone whose default branch is guessed: %v", names(p.Remove))
+	}
+	if p := DecideCleanup(c, f, Cleanup{}, ""); len(p.Remove) == 0 {
+		t.Error("d on one clone with a guessed default removes nothing")
+	}
+	// A rebase stopped in a worktree holds merged-branch though git lists
+	// the worktree as detached: the branch is not d's to delete.
+	c.Worktrees = append(c.Worktrees, model.Worktree{Path: "/wt/rebasing-merged", Occupies: "merged-branch", InProgress: "rebase"})
+	if slices.Contains(names(DecideCleanup(c, f, Cleanup{}, "").Remove), "merged-branch") {
+		t.Error("a branch held by a stopped rebase is removed")
+	}
+}
+
 func TestStillRemovesLeavesWhatChanged(t *testing.T) {
 	c, f := cleanupClone()
 	confirmed := DecideCleanup(c, f, Cleanup{}, "")
@@ -150,7 +174,7 @@ func TestJudge(t *testing.T) {
 	made, touched := now.Add(-48*time.Hour), now.Add(-3*time.Hour)
 	old := now.Add(-40 * 24 * time.Hour)
 	c := model.Clone{Branches: []model.Branch{{Name: "done"}, {Name: "new"}, {Name: "dirty"}, {Name: "idle", Upstream: "origin/idle"},
-		{Name: "unpushed", Upstream: "origin/unpushed", Ahead: 2}, {Name: "local", Upstream: ""}, {Name: "recent", Upstream: "origin/recent"}}}
+		{Name: "unpushed", Upstream: "origin/unpushed", Ahead: 2}, {Name: "local", Upstream: ""}, {Name: "recent", Upstream: "origin/recent"}, {Name: "squashed", Upstream: "origin/squashed", Gone: true}}}
 	f := model.CleanupFacts{Merged: map[string]bool{"done": true, "new": true}, WorkedOn: map[string]bool{"done": true, "dirty": true, "idle": true, "unpushed": true, "local": true, "recent": true}}
 	w := func(branch string, edit func(*model.Worktree)) model.Worktree {
 		x := model.Worktree{Branch: branch, Created: made, Active: touched}
@@ -174,6 +198,8 @@ func TestJudge(t *testing.T) {
 		{"never pushed, long untouched", w("local", func(x *model.Worktree) { x.Active = old; x.AheadMain = 1 }), VerdictBusy, old},
 		{"clean, touched lately", w("recent", nil), VerdictBusy, touched},
 		{"merged but a merge in progress", w("done", func(x *model.Worktree) { x.InProgress = "merge" }), VerdictBusy, touched},
+		{"detached, long untouched", w("", func(x *model.Worktree) { x.Active = old }), VerdictBusy, old},
+		{"upstream deleted, own commits, long untouched", w("squashed", func(x *model.Worktree) { x.Active = old; x.AheadMain, x.Measured = 1, true }), VerdictBusy, old},
 	} {
 		v, since := Judge(c, tc.w, f, now)
 		if v != tc.want || !since.Equal(tc.since) {

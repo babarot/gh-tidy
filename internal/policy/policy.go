@@ -65,6 +65,12 @@ func DecideAdvance(f model.AdvanceFacts) Advance {
 		return Advance{Action: AdvanceCurrent, Why: "up to date"}
 	case !f.FastForward:
 		return skip(f.Default + " has commits origin/" + f.Default + " does not; rebase or merge it yourself")
+	case f.HeldByMissing:
+		return skip(f.Default + " is held by a worktree whose directory git cannot find (moved, or on a disk not mounted)")
+	case f.Holders > 1:
+		// Moving it in one worktree leaves the others' index behind the
+		// branch, and their next commit would undo what came in.
+		return skip(fmt.Sprintf("%s is checked out in %d worktrees", f.Default, f.Holders))
 	case f.CheckedOut == "":
 		return Advance{Action: AdvanceRef, Commits: f.Behind}
 	case f.InProgress != "":
@@ -78,11 +84,15 @@ func DecideAdvance(f model.AdvanceFacts) Advance {
 	return Advance{Action: AdvanceMerge, Worktree: f.CheckedOut, Commits: f.Behind}
 }
 
-// Cleanup is what the user may ask d not to touch, and whether branches
-// whose upstream is gone but which are not merged go too.
+// Cleanup is what the user may ask d not to touch, whether branches whose
+// upstream is gone but which are not merged go too, and whether this is one
+// clone of many cleaned up at once (D).
 type Cleanup struct {
 	Protect    []string
 	DeleteGone bool
+	// Bulk is D: it never deletes a branch that is not merged, and leaves a
+	// clone whose default branch is only guessed alone.
+	Bulk bool
 }
 
 // What an item of a cleanup plan is.
@@ -119,11 +129,15 @@ type Plan struct {
 // unless DeleteGone asks for branches whose upstream is gone.
 func DecideCleanup(c model.Clone, f model.CleanupFacts, opts Cleanup, cwd string) Plan {
 	p := Plan{Base: f.Base}
+	if opts.Bulk && !c.DefaultSource.Trusted() {
+		p.Keep = append(p.Keep, Item{Kind: ItemBranch, Why: "default branch only guessed; clean up this clone with d"})
+		return p
+	}
 	protected := func(b string) bool { return b == c.Default || b == c.Head || slices.Contains(opts.Protect, b) }
 	checkedOut := map[string]bool{}
 	for _, w := range c.Worktrees {
-		if w.Branch != "" {
-			checkedOut[w.Branch] = true
+		if b := w.Holds(); b != "" {
+			checkedOut[b] = true
 		}
 	}
 	for _, w := range c.Worktrees {
@@ -167,7 +181,7 @@ func DecideCleanup(c model.Clone, f model.CleanupFacts, opts Cleanup, cwd string
 		switch {
 		case f.Merged[b.Name]:
 			p.Remove = append(p.Remove, Item{Kind: ItemBranch, Branch: b.Name, Why: "merged"})
-		case b.Gone && opts.DeleteGone:
+		case b.Gone && opts.DeleteGone && !opts.Bulk:
 			p.Remove = append(p.Remove, Item{Kind: ItemBranch, Branch: b.Name, Why: "upstream gone · branch -D", Force: true})
 		case b.Gone:
 			p.Keep = append(p.Keep, Item{Kind: ItemBranch, Branch: b.Name, Why: "upstream gone but not merged (squash merge?); delete_gone = true removes it"})
@@ -226,7 +240,8 @@ func Judge(c model.Clone, w model.Worktree, f model.CleanupFacts, now time.Time)
 		return VerdictNew, w.Created
 	case merged && w.Dirty == 0 && w.InProgress == "":
 		return VerdictDone, w.Active
-	case w.Dirty != 0 || w.InProgress != "" || unpushed(c, w):
+	case w.Dirty != 0 || w.InProgress != "" || w.Holds() == "" || unpushed(c, w):
+		// A detached worktree has no branch to tell what is pushed: busy.
 		return VerdictBusy, w.Active
 	case !w.Active.IsZero() && now.Sub(w.Active) > idleAfter:
 		return VerdictIdle, w.Active
@@ -234,15 +249,16 @@ func Judge(c model.Clone, w model.Worktree, f model.CleanupFacts, now time.Time)
 	return VerdictBusy, w.Active
 }
 
-// unpushed reports whether the worktree's branch has commits its upstream
-// does not, or has commits of its own and no upstream at all.
+// unpushed reports whether the worktree's branch may have commits that
+// exist nowhere else: ahead of its upstream, or with no upstream (or one
+// deleted) and commits the default branch lacks, or not measured at all.
 func unpushed(c model.Clone, w model.Worktree) bool {
-	i := slices.IndexFunc(c.Branches, func(b model.Branch) bool { return b.Name == w.Branch })
+	i := slices.IndexFunc(c.Branches, func(b model.Branch) bool { return b.Name == w.Holds() })
 	if i < 0 {
-		return false
+		return true
 	}
 	b := c.Branches[i]
-	return b.Ahead > 0 || (b.Upstream == "" && w.AheadMain > 0)
+	return b.Ahead > 0 || ((b.Upstream == "" || b.Gone) && (w.AheadMain > 0 || !w.Measured))
 }
 
 // Attention ranks how much a clone needs looking at, highest first: work

@@ -3,9 +3,11 @@ package local
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/babarot/gh-tidy/internal/gittest"
@@ -20,6 +22,7 @@ type world struct {
 	t                   *testing.T
 	base, remote, clone string
 	pusher              string
+	pushed              int // commits pushed so far, so each has its own content
 }
 
 func newWorld(t *testing.T) *world {
@@ -40,8 +43,9 @@ func newWorld(t *testing.T) *world {
 // push moves the remote's main ahead by n commits.
 func (w *world) push(n int) {
 	gittest.Git(w.t, w.pusher, "pull", "-q")
-	for i := range n {
-		gittest.Commit(w.t, w.pusher, "p", "pushed "+string(rune('a'+i)))
+	for range n {
+		w.pushed++
+		gittest.Commit(w.t, w.pusher, "p", fmt.Sprintf("pushed %d", w.pushed))
 	}
 	gittest.Git(w.t, w.pusher, "push", "-q", "origin", "main")
 }
@@ -289,6 +293,84 @@ func TestAdvanceSkips(t *testing.T) {
 			t.Error("a main branch was created")
 		}
 	})
+}
+
+func TestAdvanceSkipsWhatHoldsMainUnseen(t *testing.T) {
+	t.Run("a rebase stopped on main", func(t *testing.T) {
+		w := newWorld(t)
+		w.push(1)
+		gittest.Git(t, w.clone, "pull", "-q")
+		w.push(1)
+		// git lists the worktree as detached while the rebase waits.
+		t.Setenv("GIT_SEQUENCE_EDITOR", "true")
+		if err := gittestTry(w.clone, "rebase", "-q", "--exec", "false", "HEAD~1"); err == nil {
+			t.Fatal("the rebase did not stop")
+		}
+		if d := advance(t, w.clone); d.Action != policy.AdvanceSkip || !strings.Contains(d.Why, "rebase") {
+			t.Fatalf("decision = %+v", d)
+		}
+	})
+	t.Run("a bisect started on main", func(t *testing.T) {
+		w := newWorld(t)
+		w.push(2)
+		gittest.Git(t, w.clone, "pull", "-q")
+		gittest.Git(t, w.clone, "bisect", "start")
+		gittest.Git(t, w.clone, "bisect", "bad", "HEAD")
+		gittest.Git(t, w.clone, "bisect", "good", "HEAD~2")
+		w.push(1)
+		if d := advance(t, w.clone); d.Action != policy.AdvanceSkip || !strings.Contains(d.Why, "bisect") {
+			t.Fatalf("decision = %+v", d)
+		}
+	})
+	t.Run("main checked out in two worktrees", func(t *testing.T) {
+		w := newWorld(t)
+		gittest.Git(t, w.clone, "worktree", "add", "-q", "--force", filepath.Join(w.base, "second"), "main")
+		w.push(1)
+		if d := advance(t, w.clone); d.Action != policy.AdvanceSkip || !strings.Contains(d.Why, "2 worktrees") {
+			t.Fatalf("decision = %+v", d)
+		}
+	})
+	t.Run("main held by a worktree that was moved", func(t *testing.T) {
+		w := newWorld(t)
+		gittest.Git(t, w.clone, "checkout", "-q", "-b", "feature")
+		wt := filepath.Join(w.base, "main-wt")
+		gittest.Git(t, w.clone, "worktree", "add", "-q", wt, "main")
+		if err := os.Rename(wt, wt+"-moved"); err != nil {
+			t.Fatal(err)
+		}
+		before := w.oid(w.clone, "main")
+		w.push(1)
+		if d := advance(t, w.clone); d.Action != policy.AdvanceSkip || !strings.Contains(d.Why, "cannot find") {
+			t.Fatalf("decision = %+v", d)
+		}
+		if w.oid(w.clone, "main") != before {
+			t.Error("main moved under a worktree that may be in use")
+		}
+	})
+	t.Run("untracked files are not in the way", func(t *testing.T) {
+		w := newWorld(t)
+		write(t, filepath.Join(w.clone, "notes.txt"), "mine\n")
+		w.push(1)
+		if d := advance(t, w.clone); d.Action != policy.AdvanceMerge {
+			t.Fatalf("decision = %+v", d)
+		}
+		if got, _ := os.ReadFile(filepath.Join(w.clone, "notes.txt")); string(got) != "mine\n" {
+			t.Error("the untracked file was touched")
+		}
+	})
+}
+
+func TestScanSeesTheBranchABisectHolds(t *testing.T) {
+	w := newWorld(t)
+	w.push(2)
+	gittest.Git(t, w.clone, "pull", "-q")
+	gittest.Git(t, w.clone, "bisect", "start")
+	gittest.Git(t, w.clone, "bisect", "bad", "HEAD")
+	gittest.Git(t, w.clone, "bisect", "good", "HEAD~2")
+	m := Scan(context.Background(), w.clone).Worktrees[0]
+	if m.Branch != "" || m.Holds() != "main" || m.InProgress != "bisect" {
+		t.Errorf("main worktree: branch %q, holds %q, in progress %q", m.Branch, m.Holds(), m.InProgress)
+	}
 }
 
 func TestCleanupFacts(t *testing.T) {

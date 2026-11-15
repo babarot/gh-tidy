@@ -116,6 +116,9 @@ func Scan(ctx context.Context, path string) model.Clone {
 		}
 		dir := gitDir(*w, common)
 		w.InProgress = inProgress(dir)
+		if w.Branch == "" {
+			w.Occupies = occupied(dir)
+		}
 		if !w.Main {
 			w.Created, w.Active = headLogTimes(dir)
 		}
@@ -243,6 +246,29 @@ func inProgress(dir string) string {
 		return "bisect"
 	}
 	return ""
+}
+
+// occupied is the branch a rebase or a bisect stopped in the worktree
+// whose git directory is dir will come back to; empty when none.
+func occupied(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	read := func(name string) string {
+		b, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(b))
+	}
+	for _, f := range []string{"rebase-merge/head-name", "rebase-apply/head-name"} {
+		if b, ok := strings.CutPrefix(read(f), "refs/heads/"); ok {
+			return b
+		}
+	}
+	// BISECT_START holds the branch bisect started from, or a commit when
+	// it started detached; a commit matches no branch name.
+	return strings.TrimPrefix(read("BISECT_START"), "refs/heads/")
 }
 
 // headLogTimes reads when a linked worktree was made and when a commit or

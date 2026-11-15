@@ -89,6 +89,10 @@ type Worktree struct {
 	// InProgress is an operation stopped half way in it: "rebase", "merge",
 	// "cherry-pick", "revert" or "bisect"; empty when none.
 	InProgress string
+	// Occupies is the branch a rebase or a bisect stopped in it will come
+	// back to. git lists such a worktree as detached, but the branch is as
+	// good as checked out there.
+	Occupies string
 	// AheadMain is how many commits the worktree's branch has that the
 	// default branch does not, and BehindMain the other way; Measured says
 	// they were counted.
@@ -98,6 +102,15 @@ type Worktree struct {
 	// checkout last happened in it, from its own HEAD log; zero when not
 	// known. Only for linked worktrees.
 	Created, Active time.Time
+}
+
+// Holds is the branch the worktree holds: checked out, or waiting for a
+// rebase or a bisect to come back to it.
+func (w Worktree) Holds() string {
+	if w.Branch != "" {
+		return w.Branch
+	}
+	return w.Occupies
 }
 
 // Clone is one clone's state, read from git alone.
@@ -180,11 +193,18 @@ type AdvanceFacts struct {
 	// ancestor of origin/<Default>.
 	Behind      int
 	FastForward bool
-	// CheckedOut is the worktree the default branch is checked out in;
-	// empty when none. Dirty and InProgress are that worktree's.
+	// CheckedOut is the worktree that holds the default branch (checked
+	// out, or waiting for a rebase or a bisect to come back to it); empty
+	// when none. Dirty (changes to tracked files; -1 when unreadable) and
+	// InProgress are that worktree's.
 	CheckedOut string
 	Dirty      int
 	InProgress string
+	// Holders is how many worktrees hold the default branch, and
+	// HeldByMissing whether one of them is a worktree whose directory git
+	// cannot find (moved, or on a disk not mounted): it may still be in use.
+	Holders       int
+	HeldByMissing bool
 }
 
 // CleanupFacts are what deciding what d removes from a clone needs, read
