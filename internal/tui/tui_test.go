@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/babarot/gh-tidy/internal/config"
 	"github.com/babarot/gh-tidy/internal/engine"
@@ -734,5 +736,51 @@ func TestAStalePlanIsNotShown(t *testing.T) {
 	m.Update(msg)
 	if !strings.Contains(strings.Join(popupText(m), "\n"), "update all") {
 		t.Errorf("the plan replaced the popup open:\n%s", strings.Join(popupText(m), "\n"))
+	}
+}
+
+func TestALongConfirmKeepsItsKeysInSight(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	var body []drawn
+	for i := range 100 {
+		body = append(body, drawn{parts: []cell{{text: fmt.Sprintf("remove branch-%d", i)}}})
+	}
+	m.popup = m.confirmPopup("clean up", body, func(*Model) tea.Cmd { return nil })
+	lines := popupText(m)
+	if len(lines) > m.height-m.popupTop() {
+		t.Errorf("the popup is %d lines, past the screen's %d", len(lines), m.height)
+	}
+	if !strings.Contains(lines[len(lines)-2], "y yes · esc cancel") || !strings.Contains(lines[len(lines)-1], "more") {
+		t.Errorf("the keys or what is left went out of sight:\n%s", strings.Join(lines, "\n"))
+	}
+	press(w, m, "down")
+	if !strings.Contains(strings.Join(popupText(m), "\n"), "remove branch-1") || strings.Contains(popupText(m)[1], "branch-0 ") {
+		t.Error("down does not scroll the body")
+	}
+}
+
+func TestThePopupLinesUpOverWideCharacters(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	m.popup = m.helpPopup()
+	ls := m.screen()
+	// A line under the popup holds characters two cells wide across its
+	// left edge, whichever cell the edge falls on.
+	for i := range ls {
+		ls[i] = drawn{parts: []cell{{text: strings.Repeat("あ", m.width/2)}}}
+	}
+	box := m.popupLines()
+	left := (m.width - width(box[0].parts)) / 2
+	for i, s := range m.overlay(ls) {
+		got := ansi.Strip(s)
+		if ansi.StringWidth(got) != m.width {
+			t.Fatalf("line %d is %d cells wide, not %d", i, ansi.StringWidth(got), m.width)
+		}
+		if j := i - m.popupTop(); j > 0 && j < len(box)-1 {
+			if c := ansi.Cut(got, left, left+1); c != "│" {
+				t.Errorf("line %d: the box's edge is %q at cell %d", i, c, left)
+			}
+		}
 	}
 }

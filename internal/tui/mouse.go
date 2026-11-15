@@ -101,7 +101,7 @@ func (m *Model) popupMouse(msg tea.MouseMsg) tea.Cmd {
 			row-- // the query line
 		}
 		items := p.shown()
-		from := max(0, p.sel-max(3, m.height/2)+1)
+		from := max(0, p.sel-m.popupRows()+1)
 		if i := from + row; row >= 0 && i < len(items) {
 			m.popup = nil
 			return p.choose(m, items[i])

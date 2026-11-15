@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -23,9 +24,12 @@ type popup struct {
 	sel    int
 	choose func(m *Model, item string) tea.Cmd
 
-	// A body to read, scrolled by top.
-	body []drawn
-	top  int
+	// A body to read, scrolled by top, and a footer below it that does
+	// not scroll: what the confirm keys do stays in sight however long
+	// the body is.
+	body   []drawn
+	top    int
+	footer []drawn
 
 	// confirm runs what the popup asks about, on the confirm keys.
 	confirm func(m *Model) tea.Cmd
@@ -64,9 +68,9 @@ func (m *Model) ownerPopup() *popup {
 
 // confirmPopup asks before a change: the confirm keys run it, esc does not.
 func (m *Model) confirmPopup(title string, body []drawn, run func(*Model) tea.Cmd) *popup {
-	body = append(body, drawn{}, drawn{parts: []cell{{text: m.keys.First("confirm"), role: roleAccent, bold: true}, {text: " " + m.keys.Help("confirm"), role: rolePrompt},
-		{text: " · ", role: roleBorder}, {text: "esc", role: roleAccent, bold: true}, {text: " cancel", role: roleMuted}}})
-	return &popup{title: title, width: 100, body: body, confirm: run,
+	footer := []drawn{{}, {parts: []cell{{text: m.keys.First("confirm"), role: roleAccent, bold: true}, {text: " " + m.keys.Help("confirm"), role: rolePrompt},
+		{text: " · ", role: roleBorder}, {text: "esc", role: roleAccent, bold: true}, {text: " cancel", role: roleMuted}}}}
+	return &popup{title: title, width: 100, body: body, footer: footer, confirm: run,
 		hints: []hint{{m.keys.First("confirm"), m.keys.Help("confirm")}, {"esc", "cancel"}}}
 }
 
@@ -151,10 +155,12 @@ func (m *Model) popupLines() []drawn {
 	w := min(p.width, m.width-4)
 	inner := w - 4
 	var body []drawn
-	maxRows := max(3, m.height/2)
+	maxRows := m.popupRows()
+	more := 0
 	if p.body != nil {
 		p.top = max(0, min(p.top, max(0, len(p.body)-maxRows)))
 		body = p.body[p.top:min(len(p.body), p.top+maxRows)]
+		more = len(p.body) - p.top - len(body)
 	} else {
 		if p.query != "" || len(p.items) > 8 {
 			body = append(body, drawn{parts: []cell{{text: "/ ", role: roleAccent}, {text: p.query, role: rolePrompt}, {text: "▏", role: roleAccent}}})
@@ -175,27 +181,57 @@ func (m *Model) popupLines() []drawn {
 	}
 	title := "─ " + p.title + " "
 	out := []drawn{{parts: []cell{{text: "╭" + title + strings.Repeat("─", max(0, w-2-ansi.StringWidth(title))) + "╮", role: roleAccent}}}}
-	for _, b := range body {
+	for _, b := range append(body, p.footer...) {
 		out = append(out, drawn{parts: append(append([]cell{{text: "│ ", role: roleAccent}}, cut(b.parts, inner)...), cell{text: " │", role: roleAccent})})
 	}
-	return append(out, drawn{parts: []cell{{text: "╰" + strings.Repeat("─", w-2) + "╯", role: roleAccent}}})
+	tail := ""
+	if more > 0 {
+		tail = fmt.Sprintf(" ↓ %d more · %s ", more, m.keys.First("down"))
+	}
+	return append(out, drawn{parts: []cell{{text: "╰" + strings.Repeat("─", max(0, w-2-ansi.StringWidth(tail))) + tail + "╯", role: roleAccent}}})
+}
+
+// popupTop is the screen line the popup's box starts on.
+func (m *Model) popupTop() int { return max(0, m.height/4-2) }
+
+// popupRows is how many lines of its body or items the popup shows: what
+// fits below its top, less its borders and footer.
+func (m *Model) popupRows() int {
+	n := 0
+	if m.popup != nil {
+		n = len(m.popup.footer)
+	}
+	return max(3, m.height-m.popupTop()-2-n-1)
 }
 
 // overlay draws the popup over the screen, dimmed beneath it.
 func (m *Model) overlay(ls []drawn) []string {
 	box := m.popupLines()
-	top := max(0, m.height/4-2)
+	top := m.popupTop()
 	left := max(0, (m.width-width(box[0].parts))/2)
 	m.popup.y0, m.popup.x0 = top+1, left
 	out := make([]string, len(ls))
 	for i, l := range ls {
 		out[i] = m.st.paint(l, true)
 		if j := i - top; j >= 0 && j < len(box) {
+			// Cut by cells: a character two cells wide across an edge is
+			// replaced by spaces, so that the box starts and ends where it
+			// should.
 			text := plain(l)
-			before := ansi.Cut(text, 0, left)
-			after := ansi.Cut(text, left+width(box[j].parts), m.width)
+			bw := width(box[j].parts)
+			before := fitCells(ansi.Cut(text, 0, left), left)
+			after := fitCells(ansi.Cut(text, left+bw, m.width), max(0, m.width-left-bw))
 			out[i] = m.st.paint(drawn{parts: []cell{{text: before}}}, true) + m.st.paint(box[j], false) + m.st.paint(drawn{parts: []cell{{text: after}}}, true)
 		}
 	}
 	return out
+}
+
+// fitCells makes s exactly w cells wide: cut when longer, padded when
+// shorter.
+func fitCells(s string, w int) string {
+	if ansi.StringWidth(s) > w {
+		s = ansi.Truncate(s, w, "")
+	}
+	return s + strings.Repeat(" ", max(0, w-ansi.StringWidth(s)))
 }
