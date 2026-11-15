@@ -71,8 +71,12 @@ func (m *Model) mouse(msg tea.MouseMsg) tea.Cmd {
 	return nil
 }
 
-// popupMouse moves through the popup and chooses with a click; a click
-// outside it closes it.
+// popupMouse moves through the popup and scrolls it with the wheel. A
+// click on an item puts the cursor on it, and a click on the item the
+// cursor is on chooses it, so that one stray click chooses nothing; a
+// click on what is read does nothing, so a confirm never runs by mouse;
+// a click outside the box closes it. Nothing reaches the screen under
+// the popup (ADR-006).
 func (m *Model) popupMouse(msg tea.MouseMsg) tea.Cmd {
 	p := m.popup
 	mo := msg.Mouse()
@@ -82,30 +86,32 @@ func (m *Model) popupMouse(msg tea.MouseMsg) tea.Cmd {
 		if msg.Button == tea.MouseWheelUp {
 			d = -1
 		}
-		if p.body != nil {
-			p.top = max(0, p.top+d)
-		} else {
-			p.sel = max(0, min(len(p.shown())-1, p.sel+d))
+		switch {
+		case p.list != nil:
+			p.list.sel = max(0, min(len(p.list.shown())-1, p.list.sel+d))
+		case p.body != nil:
+			p.body.top = max(0, min(p.body.top+d, max(0, len(p.body.lines)-m.rows())))
 		}
 	case tea.MouseClickMsg:
+		if msg.Button != tea.MouseLeft {
+			return nil
+		}
 		lines := m.popupLines()
-		if mo.Y < p.y0-1 || mo.Y >= p.y0-1+len(lines) || mo.X < p.x0 || mo.X >= p.x0+width(lines[0].parts) {
+		row := mo.Y - p.top
+		if row < 0 || row >= len(lines) || mo.X < p.x0 || mo.X >= p.x0+width(lines[0].parts) {
 			m.popup = nil
 			return nil
 		}
-		if p.body != nil {
+		if p.list == nil || row >= len(p.lines) || p.lines[row] < 0 {
 			return nil
 		}
-		row := mo.Y - p.y0
-		if p.query != "" || len(p.items) > 8 {
-			row-- // the query line
+		i := p.lines[row]
+		if i != p.list.sel {
+			p.list.sel = i
+			return nil
 		}
-		items := p.shown()
-		from := max(0, p.sel-m.popupRows()+1)
-		if i := from + row; row >= 0 && i < len(items) {
-			m.popup = nil
-			return p.choose(m, items[i])
-		}
+		m.popup = nil
+		return p.list.choose(m, p.list.shown()[i])
 	}
 	return nil
 }

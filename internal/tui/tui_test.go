@@ -751,9 +751,9 @@ func TestALongConfirmKeepsItsKeysInSight(t *testing.T) {
 	for i := range 100 {
 		body = append(body, drawn{parts: []cell{{text: fmt.Sprintf("remove branch-%d", i)}}})
 	}
-	m.popup = m.confirmPopup("clean up", body, func(*Model) tea.Cmd { return nil })
+	m.open(m.confirmPopup("clean up", body, func(*Model) tea.Cmd { return nil }))
 	lines := popupText(m)
-	if len(lines) > m.height-m.popupTop() {
+	if len(lines) > m.height-m.popup.top {
 		t.Errorf("the popup is %d lines, past the screen's %d", len(lines), m.height)
 	}
 	if !strings.Contains(lines[len(lines)-2], "y yes · esc cancel") || !strings.Contains(lines[len(lines)-1], "more") {
@@ -768,7 +768,7 @@ func TestALongConfirmKeepsItsKeysInSight(t *testing.T) {
 func TestThePopupLinesUpOverWideCharacters(t *testing.T) {
 	w := newWorld(t)
 	m := w.model(nil)
-	m.popup = m.helpPopup()
+	m.open(m.helpPopup())
 	ls := m.screen()
 	// A line under the popup holds characters two cells wide across its
 	// left edge, whichever cell the edge falls on.
@@ -782,7 +782,7 @@ func TestThePopupLinesUpOverWideCharacters(t *testing.T) {
 		if ansi.StringWidth(got) != m.width {
 			t.Fatalf("line %d is %d cells wide, not %d", i, ansi.StringWidth(got), m.width)
 		}
-		if j := i - m.popupTop(); j > 0 && j < len(box)-1 {
+		if j := i - m.popup.top; j > 0 && j < len(box)-1 {
 			if c := ansi.Cut(got, left, left+1); c != "│" {
 				t.Errorf("line %d: the box's edge is %q at cell %d", i, c, left)
 			}
@@ -828,5 +828,211 @@ func TestThemes(t *testing.T) {
 			m := w.model(func(o *Options) { o.Config.TUI.Theme = name })
 			golden(t, "theme-"+name, m)
 		})
+	}
+}
+
+// Every popup reads the keys the same way: nav moves, esc steps back one
+// level, the key that opened it does not close it, and quit is not read.
+func TestPopupsReadKeysAlike(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		open   func(*Model) *popup
+		reopen string // the key that opens it
+	}{
+		{"owner", (*Model).ownerPopup, "O"},
+		{"help", (*Model).helpPopup, "?"},
+		{"confirm", func(m *Model) *popup {
+			var body []drawn
+			for i := range 60 {
+				body = append(body, drawn{parts: []cell{{text: fmt.Sprintf("line %d", i)}}})
+			}
+			return m.confirmPopup("clean up", body, func(*Model) tea.Cmd { return nil })
+		}, "P"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newWorld(t)
+			m := w.model(nil)
+			m.open(tc.open(m))
+			p := m.popup
+			if p.list != nil {
+				p.list.sel = 0 // the owner shown may be the last
+			}
+			pos := func() int {
+				if p.list != nil {
+					return p.list.sel
+				}
+				return p.body.top
+			}
+			before := pos()
+			press(w, m, "down")
+			if pos() == before {
+				t.Error("down did not move")
+			}
+			press(w, m, tc.reopen)
+			if m.popup == nil {
+				t.Errorf("%s closed the popup it opened", tc.reopen)
+			}
+			press(w, m, "q")
+			if m.popup == nil {
+				t.Error("q closed the popup")
+			}
+			press(w, m, "esc")
+			if m.popup != nil && p.list != nil && p.list.query != "" {
+				t.Error("esc did not clear what was typed")
+			}
+			press(w, m, "esc")
+			if m.popup != nil {
+				t.Error("esc did not close the popup")
+			}
+		})
+	}
+}
+
+// The popup's hints come from the keymap, and the key line under it says
+// only what writes, and esc.
+func TestPopupHintsFollowTheKeys(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(func(o *Options) { o.Config.Keys = map[string]any{"confirm": "x", "choose": "tab"} })
+	m.open(m.confirmPopup("clean up", []drawn{{parts: []cell{{text: "remove a"}}}}, func(*Model) tea.Cmd { return nil }))
+	if s := strings.Join(popupText(m), "\n"); !strings.Contains(s, "x yes · esc cancel") {
+		t.Errorf("confirm foot:\n%s", s)
+	}
+	if line := plain(m.hintLine(0)); !strings.Contains(line, "x yes") || !strings.Contains(line, "esc cancel") {
+		t.Errorf("key line under the confirm: %q", line)
+	}
+	m.open(m.ownerPopup())
+	if s := strings.Join(popupText(m), "\n"); !strings.Contains(s, "tab choose") {
+		t.Errorf("owner foot:\n%s", s)
+	}
+	if line := plain(m.hintLine(0)); strings.Contains(line, "choose") || !strings.Contains(line, "esc close") {
+		t.Errorf("key line under the owner popup says what does not write: %q", line)
+	}
+}
+
+// One click puts the cursor on an item; a click on the item the cursor is
+// on chooses it. A click on what a confirm says does nothing; a click
+// outside closes.
+func TestPopupMouse(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	m.open(m.ownerPopup())
+	m.render()
+	p := m.popup
+	row := -1
+	for i, it := range p.lines {
+		if it >= 0 && it != p.list.sel {
+			row = i
+			break
+		}
+	}
+	click := func(x, y int) { m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: x, Y: y}); m.render() }
+	click(p.x0+4, p.top+row)
+	if m.popup == nil || p.list.sel != p.lines[row] {
+		t.Fatalf("the first click chose, or did not move: popup %v", m.popup != nil)
+	}
+	chosen := p.list.shown()[p.list.sel]
+	click(p.x0+4, p.top+row)
+	if m.popup != nil || m.owner != chosen {
+		t.Errorf("the second click did not choose %s (owner %s)", chosen, m.owner)
+	}
+
+	ran := false
+	m.open(m.confirmPopup("clean up", []drawn{{parts: []cell{{text: "remove a"}}}}, func(*Model) tea.Cmd { ran = true; return nil }))
+	m.render()
+	for y := m.popup.top; y < m.popup.top+len(m.popup.lines); y++ {
+		click(m.popup.x0+4, y)
+	}
+	if ran || m.popup == nil {
+		t.Errorf("a click inside the confirm ran it (%v) or closed it", ran)
+	}
+	click(0, 0)
+	if m.popup != nil {
+		t.Error("a click outside did not close the popup")
+	}
+}
+
+// A popup opens a quarter down the screen, or in the middle when it is too
+// tall for that, and stays where it opened while what it holds changes.
+func TestPopupStandsWhereItOpened(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	m.open(m.ownerPopup())
+	if m.popup.top != m.height/4-2 {
+		t.Errorf("a short popup at line %d", m.popup.top)
+	}
+	top := m.popup.top
+	press(w, m, "z")
+	if m.popup.top != top {
+		t.Error("the popup moved as its list narrowed")
+	}
+	var body []drawn
+	for range 100 {
+		body = append(body, drawn{})
+	}
+	m.open(m.confirmPopup("clean up", body, func(*Model) tea.Cmd { return nil }))
+	if m.popup.top >= m.height/4-2 {
+		t.Errorf("a tall popup at line %d, not higher", m.popup.top)
+	}
+}
+
+// Scrolling a long confirm keeps every line of what it asks about.
+func TestScrollingAConfirmKeepsItsLines(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	var body []drawn
+	for i := range 100 {
+		body = append(body, drawn{parts: []cell{{text: fmt.Sprintf("remove branch-%d", i)}}})
+	}
+	m.open(m.confirmPopup("clean up", body, func(*Model) tea.Cmd { return nil }))
+	for range 40 {
+		press(w, m, "down")
+		m.render()
+	}
+	for i, l := range m.popup.body.lines {
+		if got, want := plain(l), fmt.Sprintf("remove branch-%d", i); got != want {
+			t.Fatalf("line %d is %q, not %q", i, got, want)
+		}
+	}
+}
+
+// In a list longer than the popup, the item under the mouse stays under it
+// after the first click, so the second click chooses it.
+func TestClickingALongList(t *testing.T) {
+	w := newWorld(t)
+	owners := []string{"acme", "mika"}
+	for i := range 60 {
+		owners = append(owners, fmt.Sprintf("owner-%02d", i))
+	}
+	m := w.model(func(o *Options) { o.Owners, o.Owner = owners, "owner-59" })
+	m.open(m.ownerPopup())
+	m.render()
+	p := m.popup
+	row := -1
+	for i, it := range p.lines {
+		if it >= 0 && it != p.list.sel {
+			row = i
+			break
+		}
+	}
+	want := p.list.shown()[p.lines[row]]
+	for range 2 {
+		m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: p.x0 + 4, Y: p.top + row})
+		m.render()
+	}
+	if m.popup != nil || m.owner != want {
+		t.Errorf("chose %s, not %s, the item clicked", m.owner, want)
+	}
+}
+
+// A list narrowed to nothing takes the keys that move and choose.
+func TestAnEmptyListTakesKeys(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	m.open(m.ownerPopup())
+	for _, k := range []string{"z", "z", "z", "down", "G", "enter"} {
+		m.popupKey(k)
+	}
+	if m.popup == nil {
+		t.Error("enter on nothing closed the popup")
 	}
 }

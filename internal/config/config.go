@@ -160,7 +160,7 @@ func Path() string {
 // Load reads the file at path over the defaults; without a file, the
 // defaults. Nothing is written: a file written once would keep the
 // defaults of that version in its comments, and lack the settings added
-// later (gh-desk ADR-092). gh tidy --print-config prints the template.
+// later. gh tidy --print-config prints the template.
 func Load(path string) (File, error) {
 	f := Default()
 	data, err := os.ReadFile(path)
@@ -360,8 +360,8 @@ const Template = `# gh tidy settings. Uncomment a line to change it.
 # action's own, or [] to turn it off. ctrl+c and esc are fixed.
 # quit = "q"
 # help = "?"
-# up = ["up", "k"]
-# down = ["down", "j"]
+# up = ["up", "k", "ctrl+p"]
+# down = ["down", "j", "ctrl+n"]
 # top = ["home", "g"]
 # bottom = ["end", "G"]
 # page_up = ["pgup", "ctrl+b"]

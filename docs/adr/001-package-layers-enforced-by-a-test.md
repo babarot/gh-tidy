@@ -8,7 +8,7 @@ Accepted
 
 gh-tidy is being rebuilt from a working prototype into a tool meant to last. It is growing parts that tangle easily: reading many clones with git, reading one or more owners' repositories from GitHub under a rate limit shared with other tools, a cache on disk, bulk operations that change clones (pulling, removing worktrees), and a TUI over all of it. The prototype kept most of its state and its concurrency in the TUI's model, so the rules that keep the user's work safe (what `p` refuses, what `d` keeps) could only be tested with real repositories and a model driven by key presses.
 
-gh-desk, a sibling tool by the same author, found the same pressure and settled it by layering its packages and checking every import with a test. Untangling packages after the fact cost it several rounds of moving state out of its TUI.
+Untangling packages after the fact is costly: state that every file of a TUI can write has to be moved out part by part, each move touching everything that reads it. Setting the layers before the parts grow, and checking every import with a test, keeps that from building up.
 
 ## Decision
 

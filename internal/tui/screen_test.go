@@ -2,7 +2,7 @@ package tui
 
 // The golden files hold what the terminal shows: the screen's text, and
 // for each line the runs of cells with the same look (colors and
-// attributes), compared by how they look, as gh-desk does (its ADR-085).
+// attributes), compared by how they look.
 // A 24-bit color may differ by one in a channel; an escape other than SGR
 // fails the test; the foreground and boldness of blank cells are not
 // compared.

@@ -50,7 +50,7 @@ func TestApply(t *testing.T) {
 		{
 			name:  "set key takes it from a default nav key",
 			set:   map[string]any{"fetch": "j"},
-			check: map[Action][]string{"fetch": {"j"}, "down": {"down"}},
+			check: map[Action][]string{"fetch": {"j"}, "down": {"down", "ctrl+n"}},
 		},
 		{
 			name:  "scopes that do not meet keep their keys",
