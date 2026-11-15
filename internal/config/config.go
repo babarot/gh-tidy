@@ -12,9 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"unicode"
 
-	"github.com/charmbracelet/x/ansi"
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/babarot/gh-tidy/internal/theme"
@@ -82,13 +80,6 @@ type Symbols struct {
 	Worktree    string `toml:"worktree"`
 	// Counts writes how many after a mark (*3), or the mark alone (*).
 	Counts bool `toml:"counts"`
-}
-
-// Each returns the marks with their names in the file, for checking them.
-func (s Symbols) Each() [][2]string {
-	return [][2]string{{"unstaged", s.Unstaged}, {"staged", s.Staged}, {"untracked", s.Untracked}, {"stash", s.Stash},
-		{"behind", s.Behind}, {"ahead", s.Ahead}, {"diverged", s.Diverged}, {"synced", s.Synced},
-		{"behind_main", s.BehindMain}, {"github_ahead", s.GitHubAhead}, {"worktree", s.Worktree}}
 }
 
 // Core is where clones are and how they are read.
@@ -232,33 +223,8 @@ func removedSettings(data []byte) error {
 }
 
 func (f File) validate() error {
-	var errs []error
+	errs := []error{checkSettings(f)}
 	bad := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) }
-	if !theme.Valid(f.TUI.Theme) {
-		bad("[tui] theme %q is not one of %s", f.TUI.Theme, theme.NamesString())
-	}
-	for _, o := range slices.Concat(f.Owners.Add, f.Owners.Hide) {
-		if n := strings.Count(o, "/"); o == "" || n > 1 || strings.HasPrefix(o, "/") || strings.HasSuffix(o, "/") {
-			bad("[owners] %q is not \"owner\" or \"host/owner\"", o)
-		}
-	}
-	if len(f.Columns.Local) == 0 || len(f.Columns.GitHub) == 0 {
-		bad("[columns] local and github must each name a column")
-	}
-	for _, kv := range f.Symbols.Each() {
-		name, v := kv[0], kv[1]
-		switch {
-		case strings.ContainsFunc(v, func(r rune) bool { return unicode.IsSpace(r) || !unicode.IsPrint(r) }):
-			bad("[symbols] %s %q has a space or a character that is not printed", name, v)
-		case ansi.StringWidth(v) != len([]rune(v)):
-			bad("[symbols] %s %q has a character two cells wide, which would put the columns out of line", name, v)
-		}
-	}
-	if len(f.Cleanup.WorktreeRemove) == 0 {
-		bad("[cleanup] worktree_remove must name a command")
-	} else if !slices.Contains(f.Cleanup.WorktreeRemove, "{path}") {
-		bad("[cleanup] worktree_remove must pass {path}")
-	}
 	for i, a := range f.Actions {
 		where := fmt.Sprintf("[[actions]] #%d", i+1)
 		if a.Name != "" {
@@ -293,69 +259,11 @@ func Expand(argv []string, vars map[string]string) []string {
 
 // Template is every setting at its default, commented out, with what it
 // does: what --print-config prints, and docs/configuration.md shows.
-const Template = `# gh tidy settings. Uncomment a line to change it.
+var Template = template()
 
-[core]
-# Where clones live, laid out as <host>/<owner>/<repo>. Empty (default) reads
-# git config ghq.root, then ~/ghq.
-# root = ""
-
-[owners]
-# The owners offered are the viewer, the viewer's organizations and the
-# owners with clones under root. Offer these too, as "owner" or "host/owner".
-# add = []
-# Leave these out, written the same way.
-# hide = []
-
-[tui]
-# Color scheme: "auto" (default) picks catppuccin-mocha on a dark terminal and
-# catppuccin-latte on a light one. Also: tokyo-night, dracula, nord,
-# gruvbox-dark, and ansi (the terminal's own 16 colors).
-# theme = "auto"
-
-[columns]
-# The columns of each set, in order. v switches between the sets.
-# local: repo, main, checked_out, changes, worktrees, fetched.
-# github: repo, issues, prs, dependabot, ci, pushed, visibility, main.
-# local = ["repo", "main", "checked_out", "changes", "worktrees", "fetched"]
-# github = ["repo", "issues", "prs", "dependabot", "ci", "pushed", "visibility", "main"]
-
-[preview]
-# The parts of the pane below the list, in order: incoming (commits on
-# origin's default branch that p brings in), unpushed, behind_main (commits
-# on the default branch the checked out branch lacks), changes (the files
-# changed), stash and worktrees. A part with nothing to show is left out.
-# sections = ["incoming", "unpushed", "behind_main", "changes", "stash", "worktrees"]
-
-[symbols]
-# The marks the list writes, after zsh-mini-prompt. Change them to match
-# your prompt; each must be one cell wide per character.
-# unstaged = "*"
-# staged = "+"
-# untracked = "%"
-# stash = "$"
-# behind = "<"
-# ahead = ">"
-# diverged = "<>"
-# synced = "="
-# behind_main = "⇣"
-# github_ahead = "?"
-# worktree = "⌥"
-# Write how many after a mark (*3); false writes the mark alone (*).
-# counts = true
-
-[cleanup]
-# Branches d never deletes, besides the default branch and the current one.
-# protect = []
-# Also delete branches whose upstream is gone but which are not merged (a
-# squash merge), with git branch -D.
-# delete_gone = false
-# How d removes a worktree it decided to remove, as a command and its
-# arguments, run in the repository. It must pass {path}. For worktrees made
-# by another tool, its own command can do it, so the tool forgets it too.
-# worktree_remove = ["git", "worktree", "remove", "{path}"]
-
-[keys]
+// keysTemplate is [keys] in the template, every action at its default
+// keys; a test keeps it the keymap's.
+const keysTemplate = `[keys]
 # Which keys do what, by action: a key or a list of keys, replacing the
 # action's own, or [] to turn it off. ctrl+c and esc are fixed.
 # quit = "q"
@@ -394,8 +302,11 @@ const Template = `# gh tidy settings. Uncomment a line to change it.
 # confirm = ["y", "enter"]
 # accept = "enter"
 # erase = "backspace"
+`
 
-# Custom commands, run on the selected repository or worktree. run is the
+// actionsTemplate is [[actions]] in the template: an example, not a
+// default, so it stays commented.
+const actionsTemplate = `# Custom commands, run on the selected repository or worktree. run is the
 # command and its arguments; these are replaced in each argument:
 # {path}, {repo} (owner/name), {owner}, {name}, {branch}, {default}, {url}.
 #
