@@ -72,8 +72,8 @@ This page is written from the code (`go test ./internal/config -run TestConfigur
 # action's own, or [] to turn it off. ctrl+c and esc are fixed.
 # quit = "q"
 # help = "?"
-# up = ["up", "k"]
-# down = ["down", "j"]
+# up = ["up", "k", "ctrl+p"]
+# down = ["down", "j", "ctrl+n"]
 # top = ["home", "g"]
 # bottom = ["end", "G"]
 # page_up = ["pgup", "ctrl+b"]

@@ -9,6 +9,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -50,6 +51,10 @@ type popupList struct {
 	filter bool
 	query  string
 	sel    int
+	// top is the first item shown. It moves only when the cursor leaves
+	// what is shown, so that a click never moves the items under the
+	// mouse.
+	top    int
 	choose func(m *Model, item string) tea.Cmd
 }
 
@@ -242,22 +247,22 @@ func (m *Model) popupKey(k string) tea.Cmd {
 		n := len(l.shown())
 		switch {
 		case on("choose"):
-			if l.sel < n {
+			if l.sel >= 0 && l.sel < n {
 				m.popup = nil
 				return l.choose(m, l.shown()[l.sel])
 			}
 		case nav("up"):
 			l.sel = max(0, l.sel-1)
 		case nav("down"):
-			l.sel = min(n-1, l.sel+1)
+			l.sel = max(0, min(n-1, l.sel+1))
 		case nav("top"):
 			l.sel = 0
 		case nav("bottom"):
-			l.sel = n - 1
+			l.sel = max(0, n-1)
 		case nav("page_up"):
 			l.sel = max(0, l.sel-page)
 		case nav("page_down"):
-			l.sel = min(n-1, l.sel+page)
+			l.sel = max(0, min(n-1, l.sel+page))
 		case l.filter && on("erase"):
 			if r := []rune(l.query); len(r) > 0 {
 				l.query, l.sel = string(r[:len(r)-1]), 0
@@ -309,7 +314,14 @@ func (m *Model) popupLines() []drawn {
 		shown := l.shown()
 		l.sel = max(0, min(l.sel, len(shown)-1))
 		n := max(1, rows-len(content))
-		from := max(0, l.sel-n+1)
+		if l.sel < l.top {
+			l.top = l.sel
+		}
+		if l.sel >= l.top+n {
+			l.top = l.sel - n + 1
+		}
+		l.top = max(0, min(l.top, max(0, len(shown)-n)))
+		from := l.top
 		for i := from; i < min(len(shown), from+n); i++ {
 			if i == l.sel {
 				content = append(content, drawn{parts: []cell{{text: "▎ ", role: roleAccent}, {text: shown[i], role: roleStrong, bold: true}}})
@@ -326,7 +338,9 @@ func (m *Model) popupLines() []drawn {
 	case p.body != nil:
 		b := p.body
 		b.top = max(0, min(b.top, max(0, len(b.lines)-rows)))
-		content = b.lines[b.top:min(len(b.lines), b.top+rows)]
+		// A copy: the foot is appended below, and must not write over the
+		// lines of the body past what is shown.
+		content = slices.Clone(b.lines[b.top:min(len(b.lines), b.top+rows)])
 		above, below = b.top, len(b.lines)-b.top-len(content)
 		for range content {
 			items = append(items, -1)

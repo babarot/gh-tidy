@@ -47,8 +47,10 @@ var Defaults = []Def{
 	{"quit", ScopeGlobal, []string{"q"}, "quit"},
 	{"help", ScopeGlobal, []string{"?"}, "keys"},
 
-	{"up", ScopeNav, []string{"up", "k"}, "up"},
-	{"down", ScopeNav, []string{"down", "j"}, "down"},
+	// ctrl+p and ctrl+n move as the arrows and k and j do, also in a
+	// popup's filter, which types k and j.
+	{"up", ScopeNav, []string{"up", "k", "ctrl+p"}, "up"},
+	{"down", ScopeNav, []string{"down", "j", "ctrl+n"}, "down"},
 	{"top", ScopeNav, []string{"home", "g"}, "top"},
 	{"bottom", ScopeNav, []string{"end", "G"}, "bottom"},
 	{"page_up", ScopeNav, []string{"pgup", "ctrl+b"}, "page up"},

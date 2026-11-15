@@ -974,3 +974,65 @@ func TestPopupStandsWhereItOpened(t *testing.T) {
 		t.Errorf("a tall popup at line %d, not higher", m.popup.top)
 	}
 }
+
+// Scrolling a long confirm keeps every line of what it asks about.
+func TestScrollingAConfirmKeepsItsLines(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	var body []drawn
+	for i := range 100 {
+		body = append(body, drawn{parts: []cell{{text: fmt.Sprintf("remove branch-%d", i)}}})
+	}
+	m.open(m.confirmPopup("clean up", body, func(*Model) tea.Cmd { return nil }))
+	for range 40 {
+		press(w, m, "down")
+		m.render()
+	}
+	for i, l := range m.popup.body.lines {
+		if got, want := plain(l), fmt.Sprintf("remove branch-%d", i); got != want {
+			t.Fatalf("line %d is %q, not %q", i, got, want)
+		}
+	}
+}
+
+// In a list longer than the popup, the item under the mouse stays under it
+// after the first click, so the second click chooses it.
+func TestClickingALongList(t *testing.T) {
+	w := newWorld(t)
+	owners := []string{"acme", "mika"}
+	for i := range 60 {
+		owners = append(owners, fmt.Sprintf("owner-%02d", i))
+	}
+	m := w.model(func(o *Options) { o.Owners, o.Owner = owners, "owner-59" })
+	m.open(m.ownerPopup())
+	m.render()
+	p := m.popup
+	row := -1
+	for i, it := range p.lines {
+		if it >= 0 && it != p.list.sel {
+			row = i
+			break
+		}
+	}
+	want := p.list.shown()[p.lines[row]]
+	for range 2 {
+		m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: p.x0 + 4, Y: p.top + row})
+		m.render()
+	}
+	if m.popup != nil || m.owner != want {
+		t.Errorf("chose %s, not %s, the item clicked", m.owner, want)
+	}
+}
+
+// A list narrowed to nothing takes the keys that move and choose.
+func TestAnEmptyListTakesKeys(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	m.open(m.ownerPopup())
+	for _, k := range []string{"z", "z", "z", "down", "G", "enter"} {
+		m.popupKey(k)
+	}
+	if m.popup == nil {
+		t.Error("enter on nothing closed the popup")
+	}
+}

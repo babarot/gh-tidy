@@ -360,8 +360,8 @@ const Template = `# gh tidy settings. Uncomment a line to change it.
 # action's own, or [] to turn it off. ctrl+c and esc are fixed.
 # quit = "q"
 # help = "?"
-# up = ["up", "k"]
-# down = ["down", "j"]
+# up = ["up", "k", "ctrl+p"]
+# down = ["down", "j", "ctrl+n"]
 # top = ["home", "g"]
 # bottom = ["end", "G"]
 # page_up = ["pgup", "ctrl+b"]
