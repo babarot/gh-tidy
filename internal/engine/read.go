@@ -262,7 +262,7 @@ func (e *Engine) ctxOf(o *owner) context.Context {
 func (e *Engine) readList(o *owner, gen int, alive func() bool) {
 	e.mu.Lock()
 	kind, login, prev := o.kind, o.login, o.pages
-	skip := o.listing || !o.listAt.IsZero() && e.now().Sub(o.listAt) < listFresh && !o.fromCache
+	skip := o.listing != 0 || !o.listAt.IsZero() && e.now().Sub(o.listAt) < listFresh && !o.fromCache
 	if kind == github.OwnerUser {
 		if o.list == model.ListUnknown {
 			o.list, o.listWhy = model.ListPartial, "not your owner: only your clones are looked up"
@@ -270,7 +270,7 @@ func (e *Engine) readList(o *owner, gen int, alive func() bool) {
 		skip = true
 	}
 	if !skip {
-		o.listing = true
+		o.listing = gen
 	}
 	e.mu.Unlock()
 	if skip {
@@ -278,7 +278,9 @@ func (e *Engine) readList(o *owner, gen int, alive func() bool) {
 	}
 	done := func() {
 		e.mu.Lock()
-		o.listing = false
+		if o.listing == gen {
+			o.listing = 0
+		}
 		e.mu.Unlock()
 		e.end(o, "list")
 	}
@@ -387,30 +389,34 @@ func (e *Engine) readHeavy(o *owner) {
 	var slugs []string
 	visible := map[string]bool{}
 	for _, r := range o.rows {
-		if r.Remote == "" {
-			continue
+		if r.Remote == "" || !strings.HasPrefix(string(r.Remote), e.host+"/") {
+			continue // no origin, or one on another host than the one read
 		}
 		if r.Clone == "" && (!needs.Has(model.NeedNotCloned) || !r.Listed.Has || r.Listed.Value.Fork || r.Listed.Value.Archived) {
 			continue
 		}
-		if f, ok := o.inflight[r.Remote]; ok && f&fields == fields {
+		if m, ok := o.inflight[r.Remote]; ok && m.fields&fields == fields {
 			continue // being read already, with what is needed
 		}
 		h := r.Heavy
-		stale := !h.Has || h.Last == model.Failed
-		if r.Clone != "" && h.Has {
-			switch {
-			case r.Listed.Has && (!r.Listed.Value.PushedAt.Equal(h.Value.PushedAt) || r.Listed.Value.DefaultBranch != h.Value.Default):
-				stale = true // pushed, or the default branch changed, since it was read
-			case !r.Listed.Has && h.OlderThan(unlistedOids, now):
-				stale = true // no list says when it changed: read again by time
-			}
-		}
-		if extra && (h.OlderThan(countsFresh, now) || h.Value.Fields&fields != fields) {
+		var stale bool
+		switch {
+		case h.Last == model.Denied:
+			// GitHub would not give it: asked again only after a while, so
+			// that what a token cannot see is not asked for on every tick.
+			stale = now.Sub(h.Tried) > unlistedOids
+		case h.Last == model.Failed:
+			stale = now.Sub(h.Tried) > retryFailed
+		case !h.Has:
+			stale = true
+		case r.Clone != "" && r.Listed.Has && !r.Listed.Value.PushedAt.Equal(h.Value.PushedAt):
+			stale = true // pushed since it was read
+		case r.Clone != "" && r.Listed.Has && h.Value.Default != "" && r.Listed.Value.DefaultBranch != h.Value.Default:
+			stale = true // the default branch changed; an empty repository has none to compare
+		case r.Clone != "" && !r.Listed.Has && h.OlderThan(unlistedOids, now):
+			stale = true // no list says when it changed: read again by time
+		case extra && (h.OlderThan(countsFresh, now) || h.Value.Fields&fields != fields):
 			stale = true // the fields the screen needs are old, or were never asked for
-		}
-		if h.Last == model.Denied && h.Has && !extra {
-			stale = false
 		}
 		slug := slugOf(r.Remote)
 		if !stale || seen[slug] {
@@ -418,7 +424,7 @@ func (e *Engine) readHeavy(o *owner) {
 		}
 		seen[slug] = true
 		slugs = append(slugs, slug)
-		o.inflight[r.Remote] = fields
+		o.inflight[r.Remote] = mark{fields: fields, gen: gen}
 		if e.visible[r.Key()] {
 			visible[slug] = true
 		}
@@ -451,7 +457,7 @@ func (e *Engine) readHeavy(o *owner) {
 // queueHeavy reads one batch. A batch GitHub gave up on is split in two and
 // read once more, smaller.
 func (e *Engine) queueHeavy(o *owner, gen int, part []string, want github.Want, prio int, alive func() bool, retry bool) {
-	release := func() { e.release(o, part) }
+	release := func() { e.release(o, part, gen) }
 	e.begin(o, "GitHub")
 	e.apiPool.add(prio, alive, func() {
 		defer e.end(o, "GitHub")
@@ -485,17 +491,26 @@ func (e *Engine) queueHeavy(o *owner, gen int, part []string, want github.Want, 
 			e.failHeavy(o, part, err.Error())
 			return
 		}
-		e.putHeavy(o, got, fieldsOf(want))
+		if again := e.putHeavy(o, got, fieldsOf(want)); len(again) > 0 {
+			// GitHub named another default branch than the clone was
+			// measured on: measure those clones again now.
+			e.scanAll(o, again, alive, func() { e.readAhead(o) })
+			return
+		}
 		e.readAhead(o)
 	}, func() { release(); e.end(o, "GitHub") })
 }
 
-// release forgets that the repositories of part are being read.
-func (e *Engine) release(o *owner, part []string) {
+// release forgets that the repositories of part are being read by
+// generation gen; a newer generation's marks stay.
+func (e *Engine) release(o *owner, part []string, gen int) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for _, s := range part {
-		delete(o.inflight, model.NewRemoteKey(e.host, s))
+		k := model.NewRemoteKey(e.host, s)
+		if m, ok := o.inflight[k]; ok && m.gen == gen {
+			delete(o.inflight, k)
+		}
 	}
 }
 
@@ -515,8 +530,9 @@ func (e *Engine) failHeavy(o *owner, part []string, why string) {
 
 // putHeavy puts what GitHub said of repositories asked for by name into
 // every row of each. A repository renamed since takes its new name; the
-// row keeps its origin apart, so a clone read again does not undo it.
-func (e *Engine) putHeavy(o *owner, got []github.HeavyRepo, fields model.Need) {
+// row keeps its origin apart, so a clone read again does not undo it. It
+// returns the clones measured on another default branch than GitHub's.
+func (e *Engine) putHeavy(o *owner, got []github.HeavyRepo, fields model.Need) (again []string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	now := e.now()
@@ -538,10 +554,14 @@ func (e *Engine) putHeavy(o *owner, got []github.HeavyRepo, fields model.Need) {
 				}
 				r.Heavy.Set(model.Heavy{Key: h.Key, Found: true, PushedAt: h.PushedAt, Default: h.Default, DefaultOid: h.DefaultOid, CI: h.CI,
 					Issues: h.Issues, PRs: h.PRs, Alerts: h.Alerts, AlertsOff: h.AlertsOff, AlertsDenied: h.AlertsDenied, Fields: fields}, now)
+				if c := r.Local.Value; r.Local.Has && h.Default != "" && (c.Default != h.Default || c.DefaultSource != model.DefaultFromGitHub) {
+					again = append(again, c.Path)
+				}
 			}
 		}
 	}
 	e.changedOwner(o)
+	return again
 }
 
 // fieldsOf is what a read asked for, as the screen names its needs.

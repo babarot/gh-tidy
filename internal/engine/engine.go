@@ -64,7 +64,8 @@ const (
 const (
 	listFresh    = 5 * time.Minute
 	countsFresh  = 10 * time.Minute
-	unlistedOids = 10 * time.Minute // oids of clones no list covers, read again by time
+	unlistedOids = 10 * time.Minute // oids of clones no list covers, read again by time; also what GitHub would not give
+	retryFailed  = time.Minute      // a read that went wrong, tried again
 )
 
 // Options build an Engine.
@@ -123,10 +124,18 @@ type owner struct {
 	pages     github.Pages
 	fromCache bool
 	version   int
-	pending   map[string]int                 // work of each kind in flight, for the header
-	writes    int                            // changes in flight: an owner with one is not let go
-	inflight  map[model.RemoteKey]model.Need // repositories being read by name, with the fields asked for
-	listing   bool                           // the list is being read
+	pending   map[string]int           // work of each kind in flight, for the header
+	writes    int                      // changes in flight: an owner with one is not let go
+	inflight  map[model.RemoteKey]mark // repositories being read by name
+	listing   int                      // the generation whose list is being read; 0 when none
+}
+
+// mark is a repository being read by name: the fields asked for, and the
+// generation that asked, so that a canceled read of an older one does not
+// clear the mark of a newer one.
+type mark struct {
+	fields model.Need
+	gen    int
 }
 
 // New returns an engine. Call Start before anything else.
@@ -223,14 +232,14 @@ func (e *Engine) Open(login string) {
 	key := strings.ToLower(login)
 	o := e.owners[key]
 	if o == nil {
-		o = &owner{login: login, rows: map[string]*model.Row{}, pending: map[string]int{}, inflight: map[model.RemoteKey]model.Need{}}
+		o = &owner{login: login, rows: map[string]*model.Row{}, pending: map[string]int{}, inflight: map[model.RemoteKey]mark{}}
 		e.owners[key] = o
 		e.loadCache(o)
 	}
 	o.kind = e.kindOf(login)
 	o.gen++
-	o.inflight = map[model.RemoteKey]model.Need{}
-	o.listing = false
+	o.inflight = map[model.RemoteKey]mark{}
+	o.listing = 0
 	o.ctx, o.cancel = context.WithCancel(e.ctx)
 	e.shown = key
 	e.touch(key)

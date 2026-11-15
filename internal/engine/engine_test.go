@@ -434,7 +434,7 @@ func TestRateLimitHoldsReadsBack(t *testing.T) {
 	if len(w.gh.asked) != 0 {
 		t.Errorf("read while paused: %v", w.gh.asked)
 	}
-	w.clock.add(time.Minute)
+	w.clock.add(2 * time.Minute) // past the pause, and past the wait before a failed read is tried again
 	e2.SetNeeds(model.NeedCounts|model.NeedCI, nil)
 	idle(t, e2)
 	if !slices.Contains(w.gh.asked, "me/app") {
@@ -696,5 +696,46 @@ func TestNothingGoesToGitHubWhilePaused(t *testing.T) {
 	idle(t, e)
 	if len(w.gh.listed) == 0 {
 		t.Error("the list was not read once the pause ended")
+	}
+}
+
+func TestTicksDoNotAskAgainForWhatGitHubWouldNotGive(t *testing.T) {
+	w := newWorld(t)
+	w.local.add("me", "app", "me/app", nil)
+	w.local.add("me", "gone", "me/gone", nil)
+	w.local.add("me", "empty", "me/empty", nil)
+	w.gh.setList("me", github.Complete, "e1", "app", "empty")
+	w.gh.heavy["me/app"] = github.HeavyRepo{Default: "main", DefaultOid: "a"}
+	w.gh.heavy["me/empty"] = github.HeavyRepo{} // no default branch yet; the list says main
+	e := w.engine()
+	e.Open("me")
+	idle(t, e)
+	first := len(w.gh.asked)
+	for range 5 {
+		w.clock.add(time.Second)
+		e.Tick()
+		idle(t, e)
+	}
+	if len(w.gh.asked) != first {
+		t.Errorf("ticks asked again: %v", w.gh.asked[first:])
+	}
+	w.clock.add(unlistedOids + time.Second)
+	e.Tick()
+	idle(t, e)
+	if !slices.Contains(w.gh.asked[first:], "me/gone") {
+		t.Error("what GitHub would not give was never asked for again")
+	}
+}
+
+func TestACloneIsMeasuredOnGitHubsDefaultAsSoonAsItIsKnown(t *testing.T) {
+	w := newWorld(t)
+	w.local.add("me", "app", "me/app", func(c *model.Clone) { c.Default, c.DefaultSource = "master", model.DefaultFromGuess })
+	w.gh.setList("me", github.Complete, "e1", "app")
+	w.gh.heavy["me/app"] = github.HeavyRepo{Default: "trunk", DefaultOid: "t"}
+	e := w.engine()
+	e.Open("me")
+	idle(t, e)
+	if r := rowOf(e.Owner(), "/src/github.com/me/app"); r.Local.Value.Default != "trunk" {
+		t.Errorf("clone default = %q after the first reading", r.Local.Value.Default)
 	}
 }

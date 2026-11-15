@@ -90,6 +90,9 @@ func (b *budget) allowAuto(resource string, heavy bool) (bool, string) {
 		return false, "gh tidy used its share of the hour"
 	}
 	p := b.pools[resource]
+	if p == nil {
+		p = b.pools["core"] // a host that does not name the resource reports every limit as one
+	}
 	if p == nil || p.limit == 0 || now.After(p.reset) {
 		return true, ""
 	}
