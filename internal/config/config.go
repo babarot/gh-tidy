@@ -129,7 +129,7 @@ func Default() File {
 		TUI:    TUI{Theme: theme.Auto},
 		Columns: Columns{
 			Local:  []string{"repo", "main", "checked_out", "changes", "worktrees", "fetched"},
-			GitHub: []string{"repo", "issues", "prs", "dependabot", "ci", "pushed", "visibility", "main"},
+			GitHub: []string{"repo", "issues", "prs", "dependabot", "ci", "stars", "pushed", "visibility", "main"},
 		},
 		Preview: Preview{Sections: []string{"incoming", "unpushed", "behind_main", "changes", "stash", "worktrees"}},
 		Symbols: Symbols{Unstaged: "*", Staged: "+", Untracked: "%", Stash: "$", Behind: "<", Ahead: ">", Diverged: "<>",

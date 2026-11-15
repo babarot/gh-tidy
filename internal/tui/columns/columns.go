@@ -117,6 +117,7 @@ var All = []Column{
 	{"dependabot", "DEPENDABOT", 10, 3, []Lens{GitHub}, model.NeedAlerts, dependabotCell},
 	{"ci", "CI", 4, 4, []Lens{GitHub}, model.NeedCI, ciCell},
 	{"pushed", "PUSHED", 9, 5, []Lens{GitHub}, 0, pushedCell},
+	{"stars", "STARS", 6, 5, []Lens{GitHub}, 0, starsCell},
 	{"visibility", "", 7, 6, []Lens{GitHub}, 0, visibilityCell},
 }
 

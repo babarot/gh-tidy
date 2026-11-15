@@ -30,9 +30,9 @@ This page is written from the code (`go test ./internal/config -run TestConfigur
 # The columns of each set, in order. v switches between the sets.
 # The local set, of: repo, main, checked_out, changes, worktrees, fetched.
 # local = ["repo", "main", "checked_out", "changes", "worktrees", "fetched"]
-# The github set, of: repo, issues, prs, dependabot, ci, pushed, visibility,
-# main.
-# github = ["repo", "issues", "prs", "dependabot", "ci", "pushed", "visibility", "main"]
+# The github set, of: repo, issues, prs, dependabot, ci, stars, pushed,
+# visibility, main.
+# github = ["repo", "issues", "prs", "dependabot", "ci", "stars", "pushed", "visibility", "main"]
 
 [preview]
 # The parts of the pane below the list, in order: incoming (commits on

@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
 	"time"
+
+	"github.com/babarot/gh-tidy/internal/model"
 )
 
 func liveClient(t *testing.T) *Client {
@@ -71,7 +74,11 @@ func TestLiveHeavy(t *testing.T) {
 		}
 	}
 	slugs = append(slugs[:min(len(slugs), 30)], "babarot/does-not-exist-tidy")
-	off, counted := 0, 0
+	listed := map[model.RemoteKey]int{}
+	for _, r := range l.Repos {
+		listed[r.Key] = r.Stars
+	}
+	off, counted, starsDiffer := 0, 0, 0
 	for i := 0; i < len(slugs); i += 10 {
 		part := slugs[i:min(len(slugs), i+10)]
 		start := time.Now()
@@ -81,6 +88,9 @@ func TestLiveHeavy(t *testing.T) {
 		}
 		t.Logf("batch of %d: %s, cost %d, %d left", len(part), time.Since(start), rate.Cost, rate.Remaining)
 		for _, h := range got {
+			if n, ok := listed[h.Key]; ok && h.Found && n != h.Stars {
+				starsDiffer++
+			}
 			switch {
 			case !h.Found && h.Asked != "github.com/babarot/does-not-exist-tidy":
 				t.Errorf("%s not found", h.Asked)
@@ -92,6 +102,11 @@ func TestLiveHeavy(t *testing.T) {
 		}
 	}
 	t.Logf("Dependabot alerts: %d counted, %d off", counted, off)
+	// The stars asked by name are the list's, but for one starred between
+	// the two reads.
+	if starsDiffer > 1 {
+		t.Errorf("%d repositories have other stars in the list and asked by name", starsDiffer)
+	}
 
 	// A public repository of another owner: GitHub counts its alerts as 0,
 	// with no error, to a token that may not read them.

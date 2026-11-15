@@ -174,7 +174,7 @@ var settings = []setting{
 	{Key: "columns.local", Kind: listKind{NonEmpty: true}, Value: func(f File) any { return f.Columns.Local },
 		Doc: "The local set, of: repo, main, checked_out, changes, worktrees, fetched."},
 	{Key: "columns.github", Kind: listKind{NonEmpty: true}, Value: func(f File) any { return f.Columns.GitHub },
-		Doc: "The github set, of: repo, issues, prs, dependabot, ci, pushed, visibility, main."},
+		Doc: "The github set, of: repo, issues, prs, dependabot, ci, stars, pushed, visibility, main."},
 
 	{Key: "preview.sections", Kind: listKind{}, Value: func(f File) any { return f.Preview.Sections },
 		Doc: "The parts of the pane below the list, in order: incoming (commits on origin's default branch that p brings in), unpushed, behind_main (commits on the default branch the checked out branch lacks), changes (the files changed), stash and worktrees. A part with nothing to show is left out."},

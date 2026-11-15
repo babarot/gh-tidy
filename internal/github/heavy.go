@@ -35,6 +35,7 @@ type HeavyRepo struct {
 	CI         string // SUCCESS, FAILURE, PENDING, ERROR, EXPECTED; empty with no checks
 	Issues     int
 	PRs        int
+	Stars      int
 	// Alerts is the count of open Dependabot alerts. AlertsOff says they are
 	// not turned on for the repository; AlertsDenied that the token may not
 	// read them. Neither is zero.
@@ -50,7 +51,8 @@ type HeavyRepo struct {
 // (owner/name), in one query of aliases. The caller keeps the batch small:
 // GitHub cuts off a query it takes more than ten seconds over (ErrTimeout).
 func (c *Client) Heavy(ctx context.Context, slugs []string, want Want) ([]HeavyRepo, Rate, error) {
-	fields := []string{"nameWithOwner", "pushedAt"}
+	// stargazerCount is a field of the repository, which costs no point.
+	fields := []string{"nameWithOwner", "pushedAt", "stargazerCount"}
 	if want.Default || want.CI {
 		ci := ""
 		if want.CI {
@@ -129,7 +131,7 @@ func (c *Client) Heavy(ctx context.Context, slugs []string, want Want) ([]HeavyR
 			}
 			continue
 		}
-		h.Found, h.Key, h.PushedAt = true, model.NewRemoteKey(c.host, n.NameWithOwner), n.PushedAt
+		h.Found, h.Key, h.PushedAt, h.Stars = true, model.NewRemoteKey(c.host, n.NameWithOwner), n.PushedAt, n.StargazerCount
 		if n.DefaultBranchRef != nil {
 			h.Default, h.DefaultOid = n.DefaultBranchRef.Name, n.DefaultBranchRef.Target.Oid
 			if r := n.DefaultBranchRef.Target.StatusCheckRollup; r != nil {
@@ -160,6 +162,7 @@ func (c *Client) Heavy(ctx context.Context, slugs []string, want Want) ([]HeavyR
 type node2 struct {
 	NameWithOwner    string
 	PushedAt         time.Time
+	StargazerCount   int
 	DefaultBranchRef *struct {
 		Name   string
 		Target struct {
