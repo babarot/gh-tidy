@@ -20,8 +20,8 @@ gh-tidy is split into packages by layer. A package imports only packages of lowe
 | 3 | `internal/engine` | What gh-tidy knows of owners and clones, and the only one changing it: what to read and when, limits on each kind of outside access, the rate limit budget, each clone's lane for changes; no Bubble Tea | `internal/github`, `internal/logging`, `internal/model`, `internal/policy`, `internal/store` | - |
 | 3 | `internal/locate` | The root, and what to open from where gh tidy starts | `internal/gitx`, `internal/repo` | - |
 | 3 | `internal/cleanup` | What d removes and keeps, and removing it | `internal/config`, `internal/gitx`, `internal/repo` | - |
-| 4 | `internal/tui` | The terminal UI | `internal/cleanup`, `internal/config`, `internal/github`, `internal/gitx`, `internal/locate`, `internal/repo`, `internal/theme` | `charm.land/bubbletea/v2`, `charm.land/lipgloss/v2`, `github.com/charmbracelet/x/ansi` |
-| 5 | `main` | Flags, config and starting the TUI | `internal/logging`, `internal/config`, `internal/locate`, `internal/repo`, `internal/tui`, `internal/version` | `charm.land/bubbletea/v2` |
+| 4 | `internal/legacy/tui` | The terminal UI being replaced; removed with the code only it uses | `internal/cleanup`, `internal/config`, `internal/github`, `internal/gitx`, `internal/locate`, `internal/repo`, `internal/theme` | `charm.land/bubbletea/v2`, `charm.land/lipgloss/v2`, `github.com/charmbracelet/x/ansi` |
+| 5 | `main` | Flags, config and starting the TUI | `internal/logging`, `internal/config`, `internal/locate`, `internal/legacy/tui`, `internal/repo`, `internal/version` | `charm.land/bubbletea/v2` |
 
 Standard library packages that reach outside the process:
 
@@ -31,7 +31,7 @@ Standard library packages that reach outside the process:
 | `net/http` | `internal/github` |
 | `net/rpc` | - |
 | `net/smtp` | - |
-| `os/exec` | `internal/cleanup`, `internal/gittest`, `internal/gitx`, `internal/tui` |
+| `os/exec` | `internal/cleanup`, `internal/gittest`, `internal/gitx`, `internal/legacy/tui` |
 | `syscall` | - |
 <!-- layers:end -->
 

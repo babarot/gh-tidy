@@ -102,7 +102,7 @@ func drive(t *testing.T, m *Model, cmd tea.Cmd) {
 			queue = append(queue, msg...)
 		case tickMsg, statusExpMsg:
 		default:
-			if reflect.TypeOf(msg).PkgPath() != "github.com/babarot/gh-tidy/internal/tui" {
+			if reflect.TypeOf(msg).PkgPath() != "github.com/babarot/gh-tidy/internal/legacy/tui" {
 				continue // clipboard, background color requests
 			}
 			_, next := m.Update(msg)

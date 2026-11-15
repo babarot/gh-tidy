@@ -21,10 +21,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/babarot/gh-tidy/internal/config"
+	"github.com/babarot/gh-tidy/internal/legacy/tui"
 	"github.com/babarot/gh-tidy/internal/locate"
 	"github.com/babarot/gh-tidy/internal/logging"
 	"github.com/babarot/gh-tidy/internal/repo"
-	"github.com/babarot/gh-tidy/internal/tui"
 	"github.com/babarot/gh-tidy/internal/version"
 )
 
