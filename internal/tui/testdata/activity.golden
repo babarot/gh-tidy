@@ -30,12 +30,12 @@
 │   … 1 more                                                                          │                                                    │
 │ ▾ ⇣5  on main, not in retry-backoff                                                 │                                                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- [+] Fetching mika 0/6 fetched  +1 running                                                                                            60.0s
-     workers  disk 0/10 · net 4/4 · api 0/2 · 2 queued
- ⠦ fetch   calendar-sync                 fetching                                                                                     60.0s
- ⠦ fetch   color-picker                  fetching                                                                                     60.0s
- ⠦ fetch   dotfiles                      fetching                                                                                     60.0s
- workers shown while gh tidy works
+ [+] Reading mika 5/7 clones · GitHub 1/3                                       rate limit 4,952/5,000  │ this load 12 used · 3 saved  4.0s
+     workers  disk 1/8 · net 0/4 · api 2/2 · 3 queued
+ ✔ clone   dotfiles                      read                                                                                          2.0s
+ ⠦ clone   trail-notes                   reading                                                                                       1.0s
+ ⠦ github  fields · 2 repositories       asking GitHub                                                                                 1.0s
+
  enter worktrees · v github · P update all · p update · f fetch · d clean up · D clean up all · / filter · O owner · + - preview · ? keys
 -- styles --
 L1 0-6 fg=#96bfff bg=#3b3b52 bold
@@ -151,34 +151,39 @@ L30 86-87 fg=#706f87
 L30 139-140 fg=#525270
 L31 0-140 fg=#525270
 L32 1-4 fg=#96bfff bold
-L32 5-18 fg=#d0d6e8 bold
-L32 19-30 fg=#8888a4
-L32 32-42 fg=#96bfff
-L32 134-139 fg=#706f87
-L33 5-23 fg=#706f87
-L33 24-25 fg=#525270
-L33 26-29 fg=#706f87
-L33 30-33 fg=#ffe5a0
-L33 34-35 fg=#525270
-L33 36-43 fg=#706f87
-L33 44-45 fg=#525270
-L33 46-54 fg=#8888a4
-L34 1-2 fg=#96bfff
+L32 5-17 fg=#d0d6e8 bold
+L32 18-90 fg=#8888a4
+L32 91-102 fg=#b0b8d1
+L32 104-105 fg=#525270
+L32 106-115 fg=#8888a4
+L32 116-123 fg=#e0e4f0
+L32 124-125 fg=#525270
+L32 126-133 fg=#b5f0b0
+L32 135-139 fg=#706f87
+L33 5-18 fg=#706f87
+L33 19-22 fg=#96bfff
+L33 23-24 fg=#525270
+L33 25-32 fg=#706f87
+L33 33-34 fg=#525270
+L33 35-38 fg=#706f87
+L33 39-42 fg=#ffe5a0
+L33 43-44 fg=#525270
+L33 45-53 fg=#8888a4
+L34 1-2 fg=#b5f0b0
 L34 3-8 fg=#706f87
-L34 11-24 fg=#e0e4f0
-L34 41-49 fg=#96bfff
-L34 134-139 fg=#706f87
+L34 11-19 fg=#e0e4f0
+L34 41-45 fg=#8888a4
+L34 135-139 fg=#706f87
 L35 1-2 fg=#96bfff
 L35 3-8 fg=#706f87
-L35 11-23 fg=#e0e4f0
-L35 41-49 fg=#96bfff
-L35 134-139 fg=#706f87
+L35 11-22 fg=#e0e4f0
+L35 41-48 fg=#96bfff
+L35 135-139 fg=#706f87
 L36 1-2 fg=#96bfff
-L36 3-8 fg=#706f87
-L36 11-19 fg=#e0e4f0
-L36 41-49 fg=#96bfff
-L36 134-139 fg=#706f87
-L37 1-34 fg=#8888a4
+L36 3-9 fg=#706f87
+L36 11-34 fg=#e0e4f0
+L36 41-54 fg=#96bfff
+L36 135-139 fg=#706f87
 L38 1-6 fg=#96bfff bold
 L38 7-16 fg=#8888a4
 L38 17-18 fg=#525270

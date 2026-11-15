@@ -1110,12 +1110,44 @@ func TestTheActivityBoxShowsTheWork(t *testing.T) {
 	if s := screen(m); !strings.Contains(s, "workers  disk") || !strings.Contains(s, "net 4/4") {
 		t.Errorf("w did not show the workers:\n%s", s)
 	}
-	golden(t, "activity", m)
 	close(block)
 	w.settle(m)
 	if s := screen(m); strings.Contains(s, "[+]") || strings.Contains(s, "workers  disk") {
 		t.Errorf("the box did not fold:\n%s", s)
 	}
+}
+
+// fixedActivity is an engine whose run is always a, so that a screen of
+// a run does not hang on the machine: its number of CPUs, or which tasks
+// its workers took first.
+type fixedActivity struct {
+	Engine
+	a model.Activity
+}
+
+func (f fixedActivity) Activity() model.Activity { return f.a }
+
+// The box of a run, with the rate limit in its head and the workers
+// under it, as a golden.
+func TestTheActivityBoxLooks(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	task := func(kind, name, note string, failed bool, took time.Duration) model.Task {
+		x := model.Task{Kind: kind, Name: name, Note: note, Failed: failed, Start: later.Add(-took - time.Second)}
+		if note != "" || failed {
+			x.End = later.Add(-time.Second)
+		}
+		return x
+	}
+	m.eng = fixedActivity{Engine: m.eng, a: model.Activity{Verb: "Reading", What: "mika", Started: later.Add(-4 * time.Second),
+		Counts:  []model.Count{{Name: "clones", Done: 5, Total: 7}, {Name: "GitHub", Done: 1, Total: 3}},
+		Running: []model.Task{task("clone", "trail-notes", "", false, 0), task("github", "fields · 2 repositories", "", false, 0)},
+		Done:    []model.Task{task("clone", "scratchpad", "failed", true, time.Second), task("clone", "dotfiles", "read", false, 2*time.Second)},
+		Workers: []model.Workers{{Name: "disk", Running: 1, Limit: 8}, {Name: "net", Running: 0, Limit: 4}, {Name: "api", Running: 2, Limit: 2}},
+		Queued:  3,
+		Rate:    model.RateLeft{Known: true, Remaining: 4952, Limit: 5000, Used: 12, Saved: 3, Asking: true}}}
+	m.workers = true
+	golden(t, "activity", m)
 }
 
 // The rate limit shows while gh tidy asks GitHub's API and for a while
