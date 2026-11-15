@@ -21,29 +21,6 @@ import (
 	"github.com/babarot/gh-tidy/internal/theme"
 )
 
-// How STATUS is written.
-const (
-	StatusCount  = "count"  // 3* 1+ 12% 2$
-	StatusSymbol = "symbol" // *+%$, as zsh-mini-prompt writes it
-)
-
-// What [tui] hide can leave out until a shows everything.
-const (
-	HideQuiet     = "quiet"     // nothing to say
-	HideUntracked = "untracked" // only untracked files to say
-)
-
-// Sort orders of the list.
-const (
-	SortAttention  = "attention"
-	SortName       = "name"
-	SortFetched    = "fetched"
-	SortLastCommit = "last_commit"
-)
-
-// Sorts lists the sort orders in the order s cycles through them.
-var Sorts = []string{SortAttention, SortName, SortFetched, SortLastCommit}
-
 // Scopes of a custom action.
 const (
 	ScopeRepo     = "repo"     // the selected repository
@@ -120,23 +97,11 @@ type Core struct {
 	// Root is where clones live, laid out as <host>/<owner>/<repo>. Empty
 	// reads git config ghq.root, then ~/ghq.
 	Root string `toml:"root"`
-	// DefaultOwner is opened when gh tidy starts outside Root. Empty opens
-	// the owner picker.
-	DefaultOwner string `toml:"default_owner"`
-	// FetchConcurrency is how many repositories F fetches at once.
-	FetchConcurrency int `toml:"fetch_concurrency"`
-	// StaleCheck asks GitHub whether each default branch has moved past the
-	// local origin/<default>.
-	StaleCheck bool `toml:"stale_check"`
 }
 
 // TUI is how the list looks.
 type TUI struct {
-	Theme        string   `toml:"theme"`
-	StatusStyle  string   `toml:"status_style"`
-	Hide         []string `toml:"hide"`
-	Sort         string   `toml:"sort"`
-	DetailHeight int      `toml:"detail_height"`
+	Theme string `toml:"theme"`
 }
 
 // Cleanup is what d removes and how.
@@ -170,9 +135,8 @@ type Action struct {
 // Default returns the settings used when the file sets nothing.
 func Default() File {
 	return File{
-		Core:   Core{FetchConcurrency: 8, StaleCheck: true},
 		Owners: Owners{Add: []string{}, Hide: []string{}},
-		TUI:    TUI{Theme: theme.Auto, StatusStyle: StatusCount, Hide: []string{HideQuiet, HideUntracked}, Sort: SortAttention, DetailHeight: 8},
+		TUI:    TUI{Theme: theme.Auto},
 		Columns: Columns{
 			Local:  []string{"repo", "main", "checked_out", "changes", "worktrees", "fetched"},
 			GitHub: []string{"repo", "issues", "prs", "dependabot", "ci", "pushed", "visibility", "main"},
@@ -214,6 +178,9 @@ func Load(path string) (File, error) {
 // Parse decodes data, named path in messages, over the defaults.
 func Parse(path string, data []byte) (File, error) {
 	f := Default()
+	if err := removedSettings(data); err != nil {
+		return f, fmt.Errorf("%s: %w", path, err)
+	}
 	dec := toml.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&f); err != nil {
@@ -232,28 +199,45 @@ func Parse(path string, data []byte) (File, error) {
 	return f, nil
 }
 
+// removed are the settings that are gone, by table and key, with why. A
+// file that still sets one is told so, rather than told the key is
+// unknown.
+var removed = map[string]string{
+	"core.default_owner":     "the owner opened is the one given, the one where gh tidy starts, the one opened last, or you",
+	"core.fetch_concurrency": "how many fetches run at once is fixed, to spare GitHub and the machine",
+	"core.stale_check":       "gh tidy always reads where GitHub's default branches are; MAIN is measured against them",
+	"tui.status_style":       "[symbols] counts says whether counts are written",
+	"tui.hide":               "the clones with nothing to do are a section at the end of the list, folded by its head",
+	"tui.sort":               "the list is in the order of what needs attention",
+	"tui.detail_height":      "the pane's height is changed with + and -, and kept for the next start",
+}
+
+func removedSettings(data []byte) error {
+	var raw map[string]any
+	if err := toml.Unmarshal(data, &raw); err != nil {
+		return nil // the strict decode says where
+	}
+	var errs []error
+	for table, v := range raw {
+		t, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		for key := range t {
+			if why, ok := removed[table+"."+key]; ok {
+				errs = append(errs, fmt.Errorf("[%s] %s is no longer a setting: %s", table, key, why))
+			}
+		}
+	}
+	slices.SortFunc(errs, func(a, b error) int { return strings.Compare(a.Error(), b.Error()) })
+	return errors.Join(errs...)
+}
+
 func (f File) validate() error {
 	var errs []error
 	bad := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) }
 	if !theme.Valid(f.TUI.Theme) {
 		bad("[tui] theme %q is not one of %s", f.TUI.Theme, theme.NamesString())
-	}
-	if f.TUI.StatusStyle != StatusCount && f.TUI.StatusStyle != StatusSymbol {
-		bad("[tui] status_style %q is not %q or %q", f.TUI.StatusStyle, StatusCount, StatusSymbol)
-	}
-	for _, h := range f.TUI.Hide {
-		if h != HideQuiet && h != HideUntracked {
-			bad("[tui] hide %q is not %q or %q", h, HideQuiet, HideUntracked)
-		}
-	}
-	if !slices.Contains(Sorts, f.TUI.Sort) {
-		bad("[tui] sort %q is not one of %s", f.TUI.Sort, strings.Join(Sorts, ", "))
-	}
-	if f.TUI.DetailHeight < 5 {
-		bad("[tui] detail_height must be at least 5, not %d", f.TUI.DetailHeight)
-	}
-	if f.Core.FetchConcurrency < 1 {
-		bad("[core] fetch_concurrency must be at least 1, not %d", f.Core.FetchConcurrency)
 	}
 	for _, o := range slices.Concat(f.Owners.Add, f.Owners.Hide) {
 		if n := strings.Count(o, "/"); o == "" || n > 1 || strings.HasPrefix(o, "/") || strings.HasSuffix(o, "/") {
@@ -295,9 +279,6 @@ func (f File) validate() error {
 	return errors.Join(errs...)
 }
 
-// Hides reports whether [tui] hide lists h.
-func (f File) Hides(h string) bool { return slices.Contains(f.TUI.Hide, h) }
-
 // Expand replaces the placeholders in argv with vars, such as
 // {"path": "/x"} for {path}. Each element stays one argument, so a path
 // with spaces is passed whole.
@@ -319,15 +300,6 @@ const Template = `# gh tidy settings. Uncomment a line to change it.
 # Where clones live, laid out as <host>/<owner>/<repo>. Empty (default) reads
 # git config ghq.root, then ~/ghq.
 # root = ""
-# The owner to open when started outside root. Empty (default) opens the
-# owner picker.
-# default_owner = ""
-# How many repositories to fetch at once with F.
-# fetch_concurrency = 8
-# Ask GitHub (one GraphQL query) whether each default branch has moved past
-# the local origin/<default>, and mark the counts that are out of date with ?.
-# It also lists the repositories not cloned yet.
-# stale_check = true
 
 [owners]
 # The owners offered are the viewer, the viewer's organizations and the
@@ -341,17 +313,6 @@ const Template = `# gh tidy settings. Uncomment a line to change it.
 # catppuccin-latte on a light one. Also: tokyo-night, dracula, nord,
 # gruvbox-dark, and ansi (the terminal's own 16 colors).
 # theme = "auto"
-# How STATUS is written: "count" (default), such as 3* 1+ 12% 2$, or
-# "symbol", such as *+%$, as zsh-mini-prompt writes it.
-# status_style = "count"
-# Repositories left out until a shows them: "quiet", nothing to say, and
-# "untracked", only untracked files to say. [] shows every repository.
-# hide = ["quiet", "untracked"]
-# The order to start with: "attention" (default), "name", "fetched" or
-# "last_commit". s cycles through them.
-# sort = "attention"
-# Height of the detail pane below the list, in lines (at least 5).
-# detail_height = 8
 
 [columns]
 # The columns of each set, in order. v switches between the sets.

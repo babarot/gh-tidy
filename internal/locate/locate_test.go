@@ -63,10 +63,6 @@ func TestResolve(t *testing.T) {
 		})
 	}
 
-	owners, err := Owners(root, "github.com")
-	if err != nil || len(owners) != 2 || owners[0] != (OwnerDir{"me", 3}) || owners[1] != (OwnerDir{"nobody", 0}) {
-		t.Errorf("Owners = %+v, %v", owners, err)
-	}
 }
 
 func TestRoot(t *testing.T) {

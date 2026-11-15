@@ -74,9 +74,10 @@ func TestTemplateKeysAreTheDefaults(t *testing.T) {
 func TestParseErrors(t *testing.T) {
 	for _, tc := range []struct{ name, src, want string }{
 		{"unknown key", "[tui]\nthme = \"nord\"\n", "thme"},
-		{"wrong type", "[core]\nfetch_concurrency = \"8\"\n", "x.toml:2"},
-		{"bad value", "[tui]\nstatus_style = \"dots\"\n", `status_style "dots"`},
-		{"bad hide", "[tui]\nhide = [\"clean\"]\n", `hide "clean"`},
+		{"wrong type", "[core]\nroot = 8\n", "x.toml:2"},
+		{"bad theme", "[tui]\ntheme = \"dots\"\n", `theme "dots"`},
+		{"removed", "[tui]\nsort = \"name\"\n", "[tui] sort is no longer a setting: the list is in the order"},
+		{"removed in core", "[core]\nstale_check = false\n", "stale_check is no longer a setting"},
 		{"remove without path", "[cleanup]\nworktree_remove = [\"rm\"]\n", "{path}"},
 		{"bad owner", "[owners]\nadd = [\"a/b/c\"]\n", `"a/b/c"`},
 		{"no columns", "[columns]\nlocal = []\n", "[columns]"},

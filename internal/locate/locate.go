@@ -8,11 +8,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/babarot/gh-tidy/internal/gitx"
-	"github.com/babarot/gh-tidy/internal/repo"
 )
 
 // DefaultHost is the host clones are looked up under.
@@ -38,7 +36,8 @@ type Kind int
 const (
 	// Owner opens one owner's clones.
 	Owner Kind = iota
-	// Picker opens the list of owners under Root/Host.
+	// Picker is the root or a host directory under it, which name no
+	// owner of their own.
 	Picker
 )
 
@@ -115,35 +114,6 @@ func fromClone(ctx context.Context, cwd, root string) (Target, bool) {
 		return Target{Kind: Owner, Host: parts[0], Owner: parts[1], Select: main}, true
 	}
 	return Target{}, false
-}
-
-// OwnerDir is one owner under <root>/<host>.
-type OwnerDir struct {
-	Name   string
-	Clones int
-}
-
-// Owners lists the owners under <root>/<host>, most clones first.
-func Owners(root, host string) ([]OwnerDir, error) {
-	ents, err := os.ReadDir(filepath.Join(root, host))
-	if err != nil {
-		return nil, err
-	}
-	var out []OwnerDir
-	for _, e := range ents {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
-			continue
-		}
-		paths, _ := repo.Find(filepath.Join(root, host, e.Name()))
-		out = append(out, OwnerDir{Name: e.Name(), Clones: len(paths)})
-	}
-	slices.SortFunc(out, func(a, b OwnerDir) int {
-		if a.Clones != b.Clones {
-			return b.Clones - a.Clones
-		}
-		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
-	})
-	return out, nil
 }
 
 // ExpandHome expands a leading ~/.

@@ -6,6 +6,7 @@ package app
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -14,8 +15,10 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -59,6 +62,7 @@ func Run(cmd string, args []string, stderr io.Writer) error {
 		fs.PrintDefaults()
 	}
 	showVersion := fs.Bool("version", false, "print the version")
+	asJSON := fs.Bool("json", false, "print the owner's clones as JSON, read from disk alone, instead of opening the list")
 	debug := fs.Bool("debug", false, "log at debug level (also GH_TIDY_LOG_LEVEL)")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -84,6 +88,13 @@ func Run(cmd string, args []string, stderr io.Writer) error {
 	defer stop()
 
 	root := locate.Root(ctx, cfg.Core.Root)
+	if *asJSON {
+		owner, _ := startOwner(ctx, fs.Arg(0), root, "", "")
+		if owner == "" || owner == tui.All {
+			return errors.New("--json needs an owner: pass one, or run it in an owner's directory")
+		}
+		return printJSON(ctx, os.Stdout, filepath.Join(root, locate.DefaultHost, owner))
+	}
 	client, err := github.NewClient(github.Options{Logger: log})
 	if err != nil {
 		return err
@@ -125,6 +136,28 @@ func Run(cmd string, args []string, stderr io.Writer) error {
 		return nil
 	}
 	return err
+}
+
+// printJSON writes the clones under dir as JSON, read from disk alone.
+func printJSON(ctx context.Context, w io.Writer, dir string) error {
+	paths, err := local.Find(dir)
+	if err != nil {
+		return err
+	}
+	clones := make([]model.Clone, len(paths))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, runtime.NumCPU())
+	for i, p := range paths {
+		wg.Go(func() {
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			clones[i] = local.Scan(ctx, p)
+		})
+	}
+	wg.Wait()
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(clones)
 }
 
 // startOwner decides the owner to open: the one given, the one where gh
