@@ -503,7 +503,8 @@ var (
 
 // activityBox is the work of the run, after docker compose's: a head
 // with the counts, the rate limit and the time, the workers when w asked
-// for them, and the last tasks, the running ones first. It is nil when
+// for them, and the last tasks: the newest running ones, and above them
+// the last done when fewer run than it shows. It is nil when
 // the box does not show; rateIn says the rate limit is in its head.
 func (m *Model) activityBox(a model.Activity) (box []drawn, rateIn bool) {
 	if !m.boxShown(a) {

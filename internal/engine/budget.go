@@ -31,6 +31,7 @@ type budget struct {
 	log *slog.Logger
 
 	pools   map[string]*points // by resource: core, graphql
+	shown   string             // the resource lowest() last named, for the log
 	spent   int
 	spentAt time.Time // the start of the hour spent counts
 
@@ -72,9 +73,15 @@ func (b *budget) saw(r github.Rate, ok bool) {
 	p := b.pools[res]
 	if p == nil || !r.Reset.Equal(p.reset) {
 		b.pools[res] = &points{limit: r.Limit, lowest: r.Remaining, reset: r.Reset}
-		return
+	} else {
+		p.lowest = min(p.lowest, r.Remaining)
 	}
-	p.lowest = min(p.lowest, r.Remaining)
+	// The screen shows only the lowest resource's count; the log says
+	// which one it is.
+	if known, remaining, limit, _, name := b.lowestLocked(); known && name != b.shown {
+		b.shown = name
+		b.log.Debug("rate limit shown", logging.KeyResource, name, logging.KeyRemaining, remaining, logging.KeyLimit, limit)
+	}
 }
 
 // allowAuto says whether a read gh-tidy makes on its own, of resource,
@@ -111,6 +118,11 @@ func (b *budget) allowAuto(resource string, heavy bool) (bool, string) {
 func (b *budget) lowest() (known bool, remaining, limit int, reset time.Time, resource string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	return b.lowestLocked()
+}
+
+// lowestLocked is lowest with b.mu held.
+func (b *budget) lowestLocked() (known bool, remaining, limit int, reset time.Time, resource string) {
 	now := b.now()
 	share := 2.0
 	for name, p := range b.pools {
