@@ -377,8 +377,8 @@ func (m *Model) detailLeft(r *repo.Repo) []segs {
 	lines = append(lines, fetched)
 
 	def := label("default")
-	switch {
-	case r.Default == "":
+	switch r.Default {
+	case "":
 		def = append(def, seg{"unknown (git remote set-head origin -a)", st.warn})
 	default:
 		def = append(def, seg{r.Default, st.subtle})

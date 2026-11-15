@@ -33,7 +33,9 @@ func newWorld(t *testing.T) *world {
 	base, _ := filepath.EvalSymlinks(t.TempDir())
 	w := &world{t: t, base: base, root: filepath.Join(base, "src"), remotes: map[string]string{}}
 	w.owner = filepath.Join(w.root, "github.com", "me")
-	os.MkdirAll(w.owner, 0o755)
+	if err := os.MkdirAll(w.owner, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	return w
 }
 
@@ -154,7 +156,9 @@ func TestListShowsState(t *testing.T) {
 	w.clone("quiet")
 	w.advance("app", 2)
 	gittest.Git(t, app, "fetch", "-q")
-	os.WriteFile(filepath.Join(app, "README"), []byte("edit\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(app, "README"), []byte("edit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	m := w.model(func(c *config.File) { c.TUI.Hide = []string{config.HideQuiet} })
 	s := plain(m)
@@ -197,7 +201,9 @@ func TestPullRefusesDirty(t *testing.T) {
 	app := w.clone("app")
 	w.advance("app", 1)
 	gittest.Git(t, app, "fetch", "-q")
-	os.WriteFile(filepath.Join(app, "README"), []byte("edit\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(app, "README"), []byte("edit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	m := w.model(nil)
 	selectRepo(t, m, "app")
 	press(t, m, "p")
@@ -217,7 +223,9 @@ func TestPullAll(t *testing.T) {
 	m := w.model(nil)
 	w.advance("behind", 2)
 	w.advance("dirty", 1)
-	os.WriteFile(filepath.Join(dirty, "README"), []byte("edit\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(dirty, "README"), []byte("edit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	gittest.Commit(t, ahead, "mine", "mine")
 	w.advance("ahead", 1) // diverged once fetched
 
@@ -356,7 +364,9 @@ func TestConfirmedActionRemovingClone(t *testing.T) {
 	app := w.clone("app")
 	w.clone("other")
 	trash := filepath.Join(w.base, "trash")
-	os.MkdirAll(trash, 0o755)
+	if err := os.MkdirAll(trash, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	m := w.model(func(c *config.File) {
 		c.Actions = []config.Action{{Key: "D", Name: "trash", Confirm: true, Run: []string{"mv", "{path}", trash}}}
 	})

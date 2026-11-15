@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -109,9 +110,7 @@ func Lookup(ctx context.Context, host string, slugs []string) (map[string]Repo, 
 			got, err := lookup(ctx, client, part)
 			mu.Lock()
 			defer mu.Unlock()
-			for k, v := range got {
-				out[k] = v
-			}
+			maps.Copy(out, got)
 			if err != nil {
 				errs = append(errs, err)
 			}

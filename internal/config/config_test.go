@@ -11,7 +11,7 @@ import (
 func TestTemplateIsDefault(t *testing.T) {
 	// Every line of the template uncommented must decode to the defaults.
 	var lines []string
-	for _, l := range strings.Split(Template, "\n") {
+	for l := range strings.SplitSeq(Template, "\n") {
 		if strings.HasPrefix(l, "# ") && strings.Contains(l, " = ") && !strings.HasPrefix(l, "# [[") {
 			l = strings.TrimPrefix(l, "# ")
 			if i := strings.Index(l, "   #"); i >= 0 {

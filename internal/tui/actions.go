@@ -320,7 +320,7 @@ func (m *Model) askLines(width int) []string {
 	// The whole command, wrapped rather than cut: it is what is about to run.
 	var body []string
 	label := "run "
-	for _, l := range strings.Split(ansi.Wrap(strings.Join(quoted, " "), inner-4, " /"), "\n") {
+	for l := range strings.SplitSeq(ansi.Wrap(strings.Join(quoted, " "), inner-4, " /"), "\n") {
 		body = append(body, segs{{label, st.subtle}, {l, st.strong}}.render(inner, nil))
 		label = "    "
 	}

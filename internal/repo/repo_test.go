@@ -14,7 +14,9 @@ func TestScan(t *testing.T) {
 	base := t.TempDir()
 	remote := gittest.Remote(t, base, "app")
 	dir := filepath.Join(base, "src", "github.com", "me", "app")
-	os.MkdirAll(filepath.Dir(dir), 0o755)
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	gittest.Clone(t, remote, dir, "me/app")
 
 	// Another clone moves main ahead by two on the remote.
@@ -31,12 +33,18 @@ func TestScan(t *testing.T) {
 	gittest.Git(t, dir, "push", "-q", "-u", "origin", "feature")
 	gittest.Commit(t, dir, "f", "feature work")
 
-	os.WriteFile(filepath.Join(dir, "README"), []byte("changed\n"), 0o644)
-	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "README"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	gittest.Git(t, dir, "branch", "local-only")
 	wt := filepath.Join(base, "wt")
 	gittest.Git(t, dir, "worktree", "add", "-q", "-b", "wt-branch", wt)
-	os.WriteFile(filepath.Join(wt, "dirty"), []byte("x\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(wt, "dirty"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	r := Scan(context.Background(), dir)
 	if r.Err != nil {
@@ -121,8 +129,12 @@ func TestFind(t *testing.T) {
 	gittest.Isolate(t)
 	dir := t.TempDir()
 	gittest.Git(t, dir, "init", "-q", "a")
-	os.MkdirAll(filepath.Join(dir, "not-a-repo"), 0o755)
-	os.WriteFile(filepath.Join(dir, "file"), nil, 0o644)
+	if err := os.MkdirAll(filepath.Join(dir, "not-a-repo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "file"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	got, err := Find(dir)
 	if err != nil || len(got) != 1 || filepath.Base(got[0]) != "a" {
 		t.Errorf("Find = %v, %v", got, err)

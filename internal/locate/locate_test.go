@@ -15,11 +15,15 @@ func TestResolve(t *testing.T) {
 	base, _ := filepath.EvalSymlinks(t.TempDir())
 	root := filepath.Join(base, "src")
 	owner := filepath.Join(root, "github.com", "me")
-	os.MkdirAll(owner, 0o755)
+	if err := os.MkdirAll(owner, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	remote := gittest.Remote(t, base, "app")
 	app := filepath.Join(owner, "app")
 	gittest.Clone(t, remote, app, "me/app")
-	os.MkdirAll(filepath.Join(app, "sub", "dir"), 0o755)
+	if err := os.MkdirAll(filepath.Join(app, "sub", "dir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	// A clone whose directory name is not the repository's name.
 	renamed := filepath.Join(owner, "old-name")
 	gittest.Clone(t, remote, renamed, "me/new-name")
@@ -30,7 +34,9 @@ func TestResolve(t *testing.T) {
 	local := filepath.Join(owner, "local")
 	gittest.Git(t, owner, "init", "-q", local)
 	empty := filepath.Join(root, "github.com", "nobody")
-	os.MkdirAll(empty, 0o755)
+	if err := os.MkdirAll(empty, 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	ctx := context.Background()
 	for _, tc := range []struct {
@@ -70,7 +76,9 @@ func TestRoot(t *testing.T) {
 		t.Errorf("Root(~/code) = %s", got)
 	}
 	cfg := filepath.Join(t.TempDir(), "gitconfig")
-	os.WriteFile(cfg, []byte("[ghq]\n\troot = ~/first\n\troot = ~/second\n"), 0o644)
+	if err := os.WriteFile(cfg, []byte("[ghq]\n\troot = ~/first\n\troot = ~/second\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
 	if got := Root(context.Background(), ""); got != filepath.Join(home, "first") {
 		t.Errorf("Root from ghq.root = %s", got)

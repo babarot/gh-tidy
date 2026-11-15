@@ -88,7 +88,7 @@ func ParseStatus(out string) Status {
 				s.Ahead, s.Behind, s.HasAB = a, b, true
 			}
 		case strings.HasPrefix(r, "# stash "):
-			fmt.Sscanf(strings.TrimPrefix(r, "# stash "), "%d", &s.Stash)
+			_, _ = fmt.Sscanf(strings.TrimPrefix(r, "# stash "), "%d", &s.Stash)
 		case strings.HasPrefix(r, "1 "), strings.HasPrefix(r, "2 "):
 			if len(r) < 4 {
 				continue
@@ -127,7 +127,7 @@ type Worktree struct {
 func ParseWorktrees(out string) []Worktree {
 	var wts []Worktree
 	var cur *Worktree
-	for _, f := range strings.Split(out, "\x00") {
+	for f := range strings.SplitSeq(out, "\x00") {
 		switch {
 		case f == "":
 			if cur != nil {
@@ -171,23 +171,23 @@ const BranchFormat = "%(refname:short)%00%(upstream:short)%00%(upstream:track,no
 // ParseBranches parses git for-each-ref --format=BranchFormat refs/heads.
 func ParseBranches(out string) []Branch {
 	var bs []Branch
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		f := strings.Split(line, "\x00")
 		if len(f) != 4 {
 			continue
 		}
 		b := Branch{Name: f[0], Upstream: f[1]}
-		for _, part := range strings.Split(f[2], ", ") {
+		for part := range strings.SplitSeq(f[2], ", ") {
 			switch {
 			case part == "gone":
 				b.Gone = true
 			case strings.HasPrefix(part, "ahead "):
-				fmt.Sscanf(part, "ahead %d", &b.Ahead)
+				_, _ = fmt.Sscanf(part, "ahead %d", &b.Ahead)
 			case strings.HasPrefix(part, "behind "):
-				fmt.Sscanf(part, "behind %d", &b.Behind)
+				_, _ = fmt.Sscanf(part, "behind %d", &b.Behind)
 			}
 		}
-		fmt.Sscanf(f[3], "%d", &b.Date)
+		_, _ = fmt.Sscanf(f[3], "%d", &b.Date)
 		bs = append(bs, b)
 	}
 	return bs

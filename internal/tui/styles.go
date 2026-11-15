@@ -118,7 +118,6 @@ func (s segs) render(w int, bg *lipgloss.Style) string {
 		rest := s[i+1:].width()
 		if tw > left || (tw == left && rest > 0) {
 			t = ansi.Truncate(t, left, "…")
-			tw = ansi.StringWidth(t)
 			left = 0
 		} else {
 			left -= tw

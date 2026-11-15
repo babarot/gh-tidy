@@ -154,13 +154,11 @@ func Parse(path string, data []byte) (File, error) {
 	dec := toml.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&f); err != nil {
-		var de *toml.DecodeError
-		if errors.As(err, &de) {
+		if de, ok := errors.AsType[*toml.DecodeError](err); ok {
 			row, col := de.Position()
 			return f, fmt.Errorf("%s:%d:%d: %s\n%s", path, row, col, de.Error(), de.String())
 		}
-		var se *toml.StrictMissingError
-		if errors.As(err, &se) {
+		if se, ok := errors.AsType[*toml.StrictMissingError](err); ok {
 			return f, fmt.Errorf("%s: %s", path, strings.TrimSpace(se.String()))
 		}
 		return f, fmt.Errorf("%s: %w", path, err)

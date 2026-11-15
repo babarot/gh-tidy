@@ -2,6 +2,7 @@ package cleanup
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -45,13 +46,17 @@ func TestDecideAndRun(t *testing.T) {
 
 	land(t, app, filepath.Join(wts, "landed"), "landed")
 	land(t, app, filepath.Join(wts, "landed-dirty"), "landed-dirty")
-	os.WriteFile(filepath.Join(wts, "landed-dirty", "x"), []byte("x"), 0o644)
+	if err := os.WriteFile(filepath.Join(wts, "landed-dirty", "x"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	land(t, app, filepath.Join(wts, "here"), "here")
 	gittest.Git(t, app, "worktree", "add", "-q", "-b", "fresh", filepath.Join(wts, "fresh"))
 	gittest.Git(t, app, "worktree", "add", "-q", "-b", "working", filepath.Join(wts, "working"))
 	gittest.Commit(t, filepath.Join(wts, "working"), "w", "not landed")
 	gittest.Git(t, app, "worktree", "add", "-q", "-b", "vanished", filepath.Join(wts, "vanished"))
-	os.RemoveAll(filepath.Join(wts, "vanished"))
+	if err := os.RemoveAll(filepath.Join(wts, "vanished")); err != nil {
+		t.Fatal(err)
+	}
 	gittest.Git(t, app, "fetch", "-q")
 
 	gittest.Git(t, app, "branch", "merged-branch", "origin/main")
@@ -166,7 +171,7 @@ func TestWorktreeRemoveCommand(t *testing.T) {
 
 func TestNoDefault(t *testing.T) {
 	r := &repo.Repo{Path: t.TempDir()}
-	if _, err := Decide(context.Background(), r, config.Default().Cleanup, ""); err != ErrNoDefault {
+	if _, err := Decide(context.Background(), r, config.Default().Cleanup, ""); !errors.Is(err, ErrNoDefault) {
 		t.Errorf("Decide = %v, want ErrNoDefault", err)
 	}
 }

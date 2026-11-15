@@ -68,7 +68,7 @@ func Decide(ctx context.Context, r *repo.Repo, cfg config.Cleanup, cwd string) (
 		return nil, err
 	}
 	merged := map[string]bool{}
-	for _, b := range strings.Split(out, "\n") {
+	for b := range strings.SplitSeq(out, "\n") {
 		if b != "" {
 			merged[b] = true
 		}
@@ -148,7 +148,7 @@ func workedOn(ctx context.Context, dir, branch string) bool {
 	if err != nil || strings.TrimSpace(out) == "" {
 		return true
 	}
-	for _, l := range strings.Split(out, "\n") {
+	for l := range strings.SplitSeq(out, "\n") {
 		if l != "" && !strings.HasPrefix(l, "branch: Created from") {
 			return true
 		}
