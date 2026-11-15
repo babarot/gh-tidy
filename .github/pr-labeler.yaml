@@ -1,0 +1,12 @@
+# Rules for the pr-labeler workflow, which github-config hands out: a pull
+# request that changes nothing gh tidy runs is left out of the release
+# notes.
+changelog/skip:
+  - all:
+    - changed-files:
+      - all-globs-to-all-files:
+        - '!main.go'
+        - '!internal/**'
+        - '!CHANGELOG.md'
+        - '!go.mod'
+        - '!go.sum'
