@@ -1,0 +1,5 @@
+# Tools for developing gh-tidy. Go comes from wherever you have it (go.mod
+# sets the minimum); make check runs everything below.
+
+[tools]
+golangci-lint = "2.15.0"
