@@ -18,7 +18,7 @@ gh-tidy keeps one GitHub owner's local clones up to date and clear of finished w
 - Match clones to GitHub by the origin URL, never by the directory name.
 - `d` never forces anything onto the user's work: a worktree with changes, one never committed to, the one gh tidy runs in and a branch not merged into `origin/<default>` stay unless a setting says otherwise. Re-check that a branch is merged right before deleting it.
 - gh tidy runs git and gh only. Other tools are reached through `[[actions]]` and `[cleanup] worktree_remove`, never by name in the code.
-- A new setting goes in `config.File`, `Default`, `validate` and `Template`; `TestTemplateIsDefault` checks the template uncommented decodes to the defaults. A new key goes in `defaultKeys` and the `[keys]` part of the template.
+- A new setting goes in `config.File`, `Default`, `validate` and `Template`; `TestTemplateIsDefault` checks the template uncommented decodes to the defaults. A new action goes in `Defaults` in `internal/tui/keymap` and the `[keys]` part of the template; `TestTemplateKeysAreTheDefaults` checks the two agree. The TUI writes no key in its code: it asks the keymap for an action.
 
 ## Logging
 

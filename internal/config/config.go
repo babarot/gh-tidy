@@ -397,8 +397,10 @@ const Template = `# gh tidy settings. Uncomment a line to change it.
 # worktree_remove = ["git", "worktree", "remove", "{path}"]
 
 [keys]
-# Which keys do what, by operation: a key or a list of keys, replacing the
-# operation's own, or [] to turn it off. ctrl+c is fixed.
+# Which keys do what, by action: a key or a list of keys, replacing the
+# action's own, or [] to turn it off. ctrl+c and esc are fixed.
+# quit = "q"
+# help = "?"
 # up = ["up", "k"]
 # down = ["down", "j"]
 # top = ["home", "g"]
@@ -406,22 +408,31 @@ const Template = `# gh tidy settings. Uncomment a line to change it.
 # page_up = ["pgup", "ctrl+b"]
 # page_down = ["pgdown", "ctrl+f"]
 # expand = "enter"
-# switch_tab = "tab"
+# lens = "v"
+# prev_owner = "<"
+# next_owner = ">"
+# choose_owner = "O"
 # search = "/"
-# show_all = "a"
-# sort = "s"
 # fetch = "f"
 # fetch_all = "F"
 # pull = "p"
 # pull_all = "P"
 # cleanup = "d"
+# cleanup_all = "D"
 # clone = "c"
+# list = "L"
 # open_browser = "o"
 # reveal = "R"
 # copy_path = "y"
 # copy_url = "Y"
-# help = "?"
-# quit = ["q", "esc"]
+# preview_grow = "+"
+# preview_shrink = "-"
+# preview_down = "J"
+# preview_up = "K"
+# choose = "enter"
+# confirm = ["y", "enter"]
+# accept = "enter"
+# erase = "backspace"
 
 # Custom commands, run on the selected repository or worktree. run is the
 # command and its arguments; these are replaced in each argument:

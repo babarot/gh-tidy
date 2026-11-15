@@ -13,6 +13,7 @@ gh-tidy is split into packages by layer. A package imports only packages of lowe
 | 1 | `internal/gitx` | Running git without taking a lock, and parsing its porcelain output | - | - |
 | 1 | `internal/policy` | Deciding what to do with a clone from facts: moving its default branch, what d removes, how a worktree is judged, attention | `internal/model` | - |
 | 1 | `internal/config` | Reading the config file and reporting its mistakes | `internal/theme` | `github.com/charmbracelet/x/ansi`, `github.com/pelletier/go-toml/v2` |
+| 1 | `internal/tui/keymap` | Actions by name and their keys, after [keys]; the TUI writes no key in its code | - | - |
 | 2 | `internal/repo` | One clone's state, read from git alone | `internal/gitx` | - |
 | 2 | `internal/local` | A clone's state and the facts about it, read from git, and the changes made to it with git | `internal/gitx`, `internal/model` | - |
 | 2 | `internal/store` | The files kept between starts: each owner's table as last read (the cache) and the user's choices (the state) | `internal/model` | - |
@@ -20,7 +21,7 @@ gh-tidy is split into packages by layer. A package imports only packages of lowe
 | 3 | `internal/engine` | What gh-tidy knows of owners and clones, and the only one changing it: what to read and when, limits on each kind of outside access, the rate limit budget, each clone's lane for changes; no Bubble Tea | `internal/github`, `internal/logging`, `internal/model`, `internal/policy`, `internal/store` | - |
 | 3 | `internal/locate` | The root, and what to open from where gh tidy starts | `internal/gitx`, `internal/repo` | - |
 | 3 | `internal/cleanup` | What d removes and keeps, and removing it | `internal/config`, `internal/gitx`, `internal/repo` | - |
-| 4 | `internal/legacy/tui` | The terminal UI being replaced; removed with the code only it uses | `internal/cleanup`, `internal/config`, `internal/github`, `internal/gitx`, `internal/locate`, `internal/repo`, `internal/theme` | `charm.land/bubbletea/v2`, `charm.land/lipgloss/v2`, `github.com/charmbracelet/x/ansi` |
+| 4 | `internal/legacy/tui` | The terminal UI being replaced; removed with the code only it uses | `internal/cleanup`, `internal/config`, `internal/github`, `internal/gitx`, `internal/locate`, `internal/repo`, `internal/theme`, `internal/tui/keymap` | `charm.land/bubbletea/v2`, `charm.land/lipgloss/v2`, `github.com/charmbracelet/x/ansi` |
 | 5 | `main` | Flags, config and starting the TUI | `internal/logging`, `internal/config`, `internal/locate`, `internal/legacy/tui`, `internal/repo`, `internal/version` | `charm.land/bubbletea/v2` |
 
 Standard library packages that reach outside the process:

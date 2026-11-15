@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/babarot/gh-tidy/internal/config"
+	newkeys "github.com/babarot/gh-tidy/internal/tui/keymap"
 )
 
 // Operations, by the name [keys] uses.
@@ -102,6 +103,9 @@ func newKeymap(cfg config.File) (keymap, error) {
 	sort.Strings(ops)
 	for _, op := range ops {
 		if _, ok := byOp[op]; !ok {
+			if newkeys.Known(op) {
+				continue // the new TUI's, read there
+			}
 			errs = append(errs, fmt.Errorf("[keys] %s is not an operation", op))
 			continue
 		}
