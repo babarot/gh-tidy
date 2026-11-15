@@ -1,0 +1,141 @@
+package model
+
+import "time"
+
+// Result is how the last attempt to read a value went.
+type Result int
+
+const (
+	// NotTried is a value never asked for.
+	NotTried Result = iota
+	// OK is a value read.
+	OK
+	// Denied is a value GitHub does not give this token (permissions, SSO,
+	// a feature turned off); Why says which. Not zero.
+	Denied
+	// Failed is an attempt that went wrong (network, timeout); Why says
+	// how. The value read before, if any, is kept.
+	Failed
+)
+
+// Read is a value with the last value read and the last attempt, kept
+// apart: a first attempt that failed has no value, and a value read once
+// stays shown when a later attempt fails or is refused.
+type Read[T any] struct {
+	Value T
+	Has   bool      // Value was read once
+	At    time.Time // when Value was read
+	Last  Result
+	Why   string
+	Tried time.Time // when the last attempt ended
+}
+
+// Set records a value read at t.
+func (r *Read[T]) Set(v T, t time.Time) {
+	r.Value, r.Has, r.At, r.Last, r.Why, r.Tried = v, true, t, OK, "", t
+}
+
+// Fail records an attempt that went wrong at t, keeping the value read
+// before.
+func (r *Read[T]) Fail(why string, t time.Time) { r.Last, r.Why, r.Tried = Failed, why, t }
+
+// Deny records that GitHub does not give the value, keeping the value read
+// before.
+func (r *Read[T]) Deny(why string, t time.Time) { r.Last, r.Why, r.Tried = Denied, why, t }
+
+// OlderThan reports whether the value was read before now-d, or never.
+func (r Read[T]) OlderThan(d time.Duration, now time.Time) bool {
+	return !r.Has || now.Sub(r.At) > d
+}
+
+// Remote is what an owner's list says of a repository.
+type Remote struct {
+	Key           RemoteKey
+	Name          string
+	Fork          bool
+	Archived      bool
+	Private       bool
+	PushedAt      time.Time
+	DefaultBranch string
+	Description   string
+}
+
+// Heavy is what GitHub says of a repository when asked by name, beyond the
+// list. Which fields are set depends on what was asked for.
+type Heavy struct {
+	Key        RemoteKey // the name GitHub answered with; differs for a repository renamed since
+	Found      bool
+	PushedAt   time.Time
+	Default    string
+	DefaultOid string
+	CI         string
+	Issues     int
+	PRs        int
+	// Alerts counts open Dependabot alerts; AlertsOff says they are not
+	// turned on, AlertsDenied that the token may not read them.
+	Alerts       int
+	AlertsOff    bool
+	AlertsDenied bool
+}
+
+// Ahead is whether GitHub's default branch has commits a clone has not
+// fetched, decided for a pair of commits: GitHub's, and the clone's
+// origin/<default> when it was decided.
+type Ahead struct {
+	Remote, Local string
+	Ahead         bool
+}
+
+// Row is one row of an owner's table: a clone, a repository on GitHub, or
+// both, matched by the clone's origin. A row is found by its clone's key,
+// or by its remote key when it has no clone.
+type Row struct {
+	Clone  CloneKey  // empty for a repository not cloned
+	Remote RemoteKey // empty for a clone without a GitHub origin
+
+	Local  Read[Clone]
+	Listed Read[Remote] // from the owner's list
+	Heavy  Read[Heavy]  // asked for by name
+	Ahead  Read[Ahead]
+}
+
+// Key is the row's key: its clone's, or its remote's without a clone.
+func (r Row) Key() string {
+	if r.Clone != "" {
+		return string(r.Clone)
+	}
+	return string(r.Remote)
+}
+
+// Completeness says how much of an owner's repositories its list holds.
+type Completeness int
+
+const (
+	ListUnknown    Completeness = iota // not read yet
+	ListComplete                       // every repository the token may see
+	ListPartial                        // some; Why says why the rest are missing
+	ListUnreadable                     // none; Why says why
+)
+
+// Owner is a copy of what gh-tidy holds of one owner, made for the screen:
+// it is never changed after it is handed out.
+type Owner struct {
+	Host, Login string
+	// All is the view across every owner: clones only, GitHub values as
+	// each owner last read them.
+	All bool
+
+	List    Completeness
+	ListWhy string
+	ListAt  time.Time // when the list was last read whole; zero when never
+	// FromCache says what is shown came from the cache and has not been
+	// read again yet in this run.
+	FromCache bool
+
+	Rows []Row
+
+	// Reading says what is being read now, for the header; empty when
+	// nothing is.
+	Reading string
+	Version int
+}
