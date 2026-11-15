@@ -172,12 +172,15 @@ func (e *Engine) rescan(_ context.Context, path string) model.Clone {
 // refused because a change is in flight in them. Each clone's lane is
 // taken when asked, so that what is refused is said at once.
 func (e *Engine) Fetch(keys []model.CloneKey) (busy []model.CloneKey) {
+	defer e.busy()()
 	for _, k := range keys {
 		if !e.lane(k, "waiting to fetch") {
 			busy = append(busy, k)
 			continue
 		}
+		t := e.trackOp("fetched", "fetch", k)
 		e.netPool.add(prioAsked, nil, func() {
+			t.start()
 			e.doing(k, "fetching")
 			c, ok := e.clone(k)
 			op := model.Op{Result: "fetched"}
@@ -191,6 +194,7 @@ func (e *Engine) Fetch(keys []model.CloneKey) (busy []model.CloneKey) {
 				e.logChange("fetch", c.Path, op)
 				e.rescan(e.ctx, c.Path)
 			}
+			t.end(opNote(op))
 			e.leave(k, op)
 			e.readHeavyShown()
 		}, nil)
@@ -203,14 +207,18 @@ func (e *Engine) Fetch(keys []model.CloneKey) (busy []model.CloneKey) {
 // being worked on. What is skipped says why. It returns the clones it
 // refused because a change is in flight in them.
 func (e *Engine) Advance(keys []model.CloneKey) (busy []model.CloneKey) {
+	defer e.busy()()
 	for _, k := range keys {
 		if !e.lane(k, "waiting to update") {
 			busy = append(busy, k)
 			continue
 		}
+		t := e.trackOp("updated", "update", k)
 		e.netPool.add(prioAsked, nil, func() {
+			t.start()
 			e.doing(k, "fetching")
 			op := e.advance(k)
+			t.end(opNote(op))
 			e.leave(k, op)
 			e.readHeavyShown()
 		}, nil)
@@ -275,14 +283,18 @@ func (e *Engine) PlanCleanup(key model.CloneKey, opts policy.Cleanup, cwd string
 // confirm is left alone, and said so. It returns the clones it refused
 // because a change is in flight in them.
 func (e *Engine) Cleanup(plans map[model.CloneKey]policy.Plan, opts policy.Cleanup, cwd string) (busy []model.CloneKey) {
+	defer e.busy()()
 	for k, confirmed := range plans {
 		if !e.lane(k, "waiting to clean up") {
 			busy = append(busy, k)
 			continue
 		}
+		t := e.trackOp("cleaned", "cleanup", k)
 		e.localPool.add(prioAsked, nil, func() {
+			t.start()
 			e.doing(k, "cleaning up")
 			op := e.cleanup(k, confirmed, opts, cwd)
+			t.end(opNote(op))
 			e.leave(k, op)
 		}, nil)
 	}
@@ -402,8 +414,10 @@ func (e *Engine) ReadList() {
 	if o.list == model.ListPartial {
 		o.list, o.listWhy = model.ListUnknown, ""
 	}
-	gen := o.gen
+	gen, login := o.gen, o.login
 	e.mu.Unlock()
+	defer e.busy()()
+	e.track.load(login)
 	e.notify()
 	e.readList(o, gen, e.alive(o, gen))
 }
@@ -443,7 +457,10 @@ func (e *Engine) Clone(key model.RemoteKey) (string, error) {
 	if !e.lane(ck, "cloning", o) {
 		return dir, errors.New("busy with another change")
 	}
+	t := e.trackOp("cloned", "create", ck)
 	e.netPool.add(prioAsked, nil, func() {
+		t.start()
+		defer func() { t.end("cloned", false) }() // a failure ends it below first
 		// The row is the remote's until the clone is read: show it there.
 		e.mu.Lock()
 		r.Op = model.Op{Doing: "cloning"}
@@ -454,6 +471,9 @@ func (e *Engine) Clone(key model.RemoteKey) (string, error) {
 			op = model.Op{Result: lastLine(err), Failed: true}
 		}
 		e.logChange("clone", dir, op)
+		if op.Failed {
+			t.end("failed", true)
+		}
 		e.mu.Lock()
 		r.Op = model.Op{}
 		if op.Failed {
@@ -502,4 +522,51 @@ func (e *Engine) Writing() int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return len(e.lanes)
+}
+
+// Refresh reads the owner shown again, all of it: its clones, its list
+// and every field of its repositories, whether or not they are fresh. The
+// user asked: the reads are not held back by the budget gh tidy keeps for
+// itself, only by GitHub's rate limit. It does not read the list of an
+// owner gh tidy does not list unasked; ReadList does.
+func (e *Engine) Refresh() {
+	e.mu.Lock()
+	o := e.owners[e.shown]
+	if o == nil {
+		e.mu.Unlock()
+		return
+	}
+	o.listAt = time.Time{}
+	o.refresh = o.login != All
+	o.refreshList = o.login != All
+	login := o.login
+	e.mu.Unlock()
+	defer e.busy()()
+	e.track.load(login)
+	e.notify()
+	if o.login == All {
+		e.readAll(o)
+		return
+	}
+	e.readOwner(o)
+}
+
+// trackOp follows a change to the clone of key, for the activity shown.
+func (e *Engine) trackOp(group, kind string, key model.CloneKey) *tracked {
+	e.mu.Lock()
+	who := ""
+	if o := e.owners[e.shown]; o != nil {
+		who = o.login
+	}
+	e.mu.Unlock()
+	return e.track.add(group, 1, kind, filepath.Base(string(key)), who)
+}
+
+// opNote says how a change went: what it did or why it skipped, and only
+// "failed" for a failure, whose text can hold a remote's address.
+func opNote(op model.Op) (string, bool) {
+	if op.Failed {
+		return "failed", true
+	}
+	return op.Result, false
 }

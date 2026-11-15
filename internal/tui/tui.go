@@ -38,6 +38,7 @@ type Engine interface {
 	ClearResults()
 	Clone(key model.RemoteKey) (string, error)
 	ReadList()
+	Refresh()
 	Hold(path, doing string) bool
 	Release(path string)
 	Writing() int

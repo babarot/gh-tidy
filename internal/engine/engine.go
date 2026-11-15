@@ -109,6 +109,7 @@ type Engine struct {
 	localPool, netPool, apiPool *pool
 	idle                        *idleGroup
 	budget                      *budget
+	track                       *tracker
 
 	mu      sync.Mutex
 	ctx     context.Context
@@ -141,23 +142,25 @@ type detailKey struct {
 
 // owner is what the engine holds of one owner.
 type owner struct {
-	login     string
-	kind      github.OwnerKind
-	gen       int // moves on each time the owner is opened; older work is dropped
-	cancel    context.CancelFunc
-	ctx       context.Context
-	rows      map[string]*model.Row
-	list      model.Completeness
-	listWhy   string
-	listAt    time.Time
-	pages     github.Pages
-	fromCache bool
-	version   int
-	pending   map[string]int           // work of each kind in flight, for the header
-	writes    int                      // changes in flight: an owner with one is not let go
-	inflight  map[model.RemoteKey]mark // repositories being read by name
-	listing   int                      // the generation whose list is being read; 0 when none
-	asked     bool                     // the user asked for the list: read it whole, whoever the owner is
+	login       string
+	kind        github.OwnerKind
+	gen         int // moves on each time the owner is opened; older work is dropped
+	cancel      context.CancelFunc
+	ctx         context.Context
+	rows        map[string]*model.Row
+	list        model.Completeness
+	listWhy     string
+	listAt      time.Time
+	pages       github.Pages
+	fromCache   bool
+	version     int
+	pending     map[string]int           // work of each kind in flight, for the header
+	writes      int                      // changes in flight: an owner with one is not let go
+	inflight    map[model.RemoteKey]mark // repositories being read by name
+	listing     int                      // the generation whose list is being read; 0 when none
+	asked       bool                     // the user asked for the list: read it whole, whoever the owner is
+	refresh     bool                     // r asked to read everything again: the next heavy read takes every row
+	refreshList bool                     // and the next list read is asked for, as far as the owner's list is read at all
 }
 
 // mark is a repository being read by name: the fields asked for, and the
@@ -185,6 +188,8 @@ func New(o Options) *Engine {
 		localPool: newPool(runtime.NumCPU(), idle), netPool: newPool(networkAtOnce, idle), apiPool: newPool(apiAtOnce, idle),
 		idle: idle, owners: map[string]*owner{}, visible: map[string]bool{}, changed: make(chan struct{}, 1)}
 	e.budget = newBudget(now, log)
+	e.track = newTracker(now)
+	idle.onIdle = e.track.idled
 	return e
 }
 
@@ -269,12 +274,15 @@ func (e *Engine) Open(login string) {
 	}
 	o.kind = e.kindOf(login)
 	o.gen++
+	o.refresh, o.refreshList = false, false // an r for an owner left was for then
 	o.inflight = map[model.RemoteKey]mark{}
 	o.listing = 0
 	o.ctx, o.cancel = context.WithCancel(e.ctx)
 	e.shown = key
 	e.touch(key)
 	e.mu.Unlock()
+	defer e.busy()()
+	e.track.load(login)
 	e.localPool.drop()
 	e.apiPool.drop()
 	e.notify()

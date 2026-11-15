@@ -91,6 +91,7 @@ This page is written from the code (`go test ./internal/config -run TestConfigur
 # cleanup = "d"
 # cleanup_all = "D"
 # clone = "c"
+# refresh = "r"
 # list = "L"
 # open_browser = "o"
 # reveal = "R"

@@ -1036,3 +1036,12 @@ func TestAnEmptyListTakesKeys(t *testing.T) {
 		t.Error("enter on nothing closed the popup")
 	}
 }
+
+func TestRefreshKey(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	press(w, m, "r")
+	if !strings.Contains(screen(m), "reading mika again") {
+		t.Errorf("r said nothing:\n%s", screen(m))
+	}
+}

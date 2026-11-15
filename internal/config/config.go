@@ -379,6 +379,7 @@ const Template = `# gh tidy settings. Uncomment a line to change it.
 # cleanup = "d"
 # cleanup_all = "D"
 # clone = "c"
+# refresh = "r"
 # list = "L"
 # open_browser = "o"
 # reveal = "R"
