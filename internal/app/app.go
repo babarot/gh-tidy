@@ -90,14 +90,20 @@ func Run(cmd string, args []string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-
+	// Before ctrl+c is caught, so that it ends the question about the
+	// roots as it ends any program.
 	wd, _ := os.Getwd()
-	roots, err := roots(ctx, cfg.Core.Roots, config.Path(), wd, ask{in: os.Stdin, out: stderr, terminal: !*asJSON && isTerminal(os.Stdin) && isTerminal(os.Stderr)})
+	roots, err := roots(context.Background(), cfg.Core.Roots, config.Path(), wd, ask{in: os.Stdin, out: stderr, terminal: !*asJSON && isTerminal(os.Stdin) && isTerminal(os.Stderr)})
 	if err != nil {
 		return err
 	}
+	for _, r := range roots {
+		if _, err := os.Stat(r); os.IsNotExist(err) {
+			log.Warn("a root is not there: no clone is read from it", logging.KeyRoot, r)
+		}
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
 	if *asJSON {
 		host, owner := locate.DefaultHost, ""
 		if h, o, ok := strings.Cut(fs.Arg(0), "/"); ok {
@@ -162,16 +168,14 @@ func Run(cmd string, args []string, stderr io.Writer) error {
 // through a symlink is read once.
 func printJSON(ctx context.Context, w io.Writer, dirs []string) error {
 	var paths []string
-	seen := map[string]bool{}
+	var seen []os.FileInfo
 	for _, dir := range dirs {
-		real := dir
-		if r, err := filepath.EvalSymlinks(dir); err == nil {
-			real = r
+		if fi, err := os.Stat(dir); err == nil {
+			if slices.ContainsFunc(seen, func(s os.FileInfo) bool { return os.SameFile(s, fi) }) {
+				continue
+			}
+			seen = append(seen, fi)
 		}
-		if seen[real] {
-			continue
-		}
-		seen[real] = true
 		ps, err := local.Find(dir)
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err

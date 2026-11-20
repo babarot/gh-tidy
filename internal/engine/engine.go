@@ -9,6 +9,7 @@ package engine
 import (
 	"context"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -428,22 +429,22 @@ func (e *Engine) loadCache(o *owner) {
 }
 
 // ownerDirs are where the clones of login live, a directory under each
-// root, in the roots' order. A directory two roots reach through a
-// symlink is read once, from the first root: resolved only to tell, so
-// that a clone's path stays under its root.
+// root, in the roots' order. A directory two roots reach (through a
+// symlink, or two spellings on a disk that ignores case) is read once,
+// from the first root: compared only to tell, so that a clone's path
+// stays under its root.
 func (e *Engine) ownerDirs(login string) []string {
 	var out []string
-	seen := map[string]bool{}
+	var seen []os.FileInfo
 	for _, root := range e.roots {
 		d := filepath.Join(root, e.host, login)
-		real := d
-		if r, err := filepath.EvalSymlinks(d); err == nil {
-			real = r
+		if fi, err := os.Stat(d); err == nil {
+			if slices.ContainsFunc(seen, func(s os.FileInfo) bool { return os.SameFile(s, fi) }) {
+				continue
+			}
+			seen = append(seen, fi)
 		}
-		if !seen[real] {
-			seen[real] = true
-			out = append(out, d)
-		}
+		out = append(out, d)
 	}
 	return out
 }

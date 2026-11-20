@@ -28,7 +28,7 @@ func Roots(configured []string) ([]string, error) {
 		dup := false
 		for _, o := range out {
 			switch {
-			case o == r:
+			case o == r || sameDir(o, r):
 				dup = true
 			case within(o, r) || within(r, o):
 				return nil, fmt.Errorf("[core] roots: %s is inside %s; name one of them", Abbrev(longer(o, r)), Abbrev(shorter(o, r)))
@@ -39,6 +39,17 @@ func Roots(configured []string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// sameDir reports whether a and b are one directory, as two spellings on
+// a disk that ignores case are.
+func sameDir(a, b string) bool {
+	fa, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	fb, err := os.Stat(b)
+	return err == nil && os.SameFile(fa, fb)
 }
 
 // within reports whether p is below dir.
