@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/babarot/gh-tidy/internal/github"
 	"github.com/babarot/gh-tidy/internal/logging"
@@ -16,10 +17,12 @@ import (
 const keepGitHubDetails = 256
 
 // ghKey is what a repository's detail was read for: the heavy fields it
-// follows. When one changes, the detail is read again.
+// follows, and when they were read. When one changes, or the heavy fields
+// are read again, the detail is read again.
 type ghKey struct {
 	alerts  int
 	oid, ci string
+	at      time.Time
 }
 
 // ghEntry is a repository's detail, as read or tried.
@@ -44,21 +47,26 @@ func detailWant(h model.Heavy) github.DetailWant {
 
 // GitHubDetail is the GitHub detail of the repository k, of the owner
 // shown: its open alerts and its checks that failed or run. It is read
-// when the screen asks for it, only when the counts ask for it, as a read
-// gh tidy makes on its own (within the budget), and never in all. What
-// was read or failed is held: a failure is tried again after a while,
-// and a detail is read again when the counts it follows change.
-func (e *Engine) GitHubDetail(k model.RemoteKey) model.GitHubDetail {
+// when the screen asks with read set (once the cursor has rested on the
+// row), only when the counts ask for it, as a read gh tidy makes on its
+// own (within the budget), and never in all; without read it says only
+// what is held. What was read or failed is held: a failure is tried again
+// after a while, and a detail is read again when the counts it follows
+// are read again. An empty k says nothing is selected: a read queued for
+// another row is dropped.
+func (e *Engine) GitHubDetail(k model.RemoteKey, read bool) model.GitHubDetail {
 	e.mu.Lock()
+	e.ghLast = k
 	o := e.owners[e.shown]
 	if o == nil {
 		e.mu.Unlock()
 		return model.GitHubDetail{}
 	}
 	var h model.Heavy
+	var at time.Time
 	for _, r := range e.rowsByRemote(o, k) {
 		if r.Heavy.Has && r.Heavy.Value.Found {
-			h = r.Heavy.Value
+			h, at = r.Heavy.Value, r.Heavy.At
 		}
 	}
 	want := detailWant(h)
@@ -70,8 +78,7 @@ func (e *Engine) GitHubDetail(k model.RemoteKey) model.GitHubDetail {
 		e.mu.Unlock()
 		return model.GitHubDetail{State: model.DetailAll}
 	}
-	key := ghKey{h.Alerts, h.DefaultOid, h.CI}
-	e.ghLast = k
+	key := ghKey{h.Alerts, h.DefaultOid, h.CI, at}
 	now := e.now()
 	if ent := e.ghDetails[k]; ent != nil && ent.key == key {
 		switch ent.d.State {
@@ -86,6 +93,10 @@ func (e *Engine) GitHubDetail(k model.RemoteKey) model.GitHubDetail {
 				return d
 			}
 		}
+	}
+	if !read {
+		e.mu.Unlock()
+		return model.GitHubDetail{State: model.DetailReading}
 	}
 	ent := &ghEntry{key: key, d: model.GitHubDetail{State: model.DetailReading, At: now}}
 	e.ghDetails[k] = ent

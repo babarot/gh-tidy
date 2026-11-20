@@ -122,16 +122,18 @@ func (f *fakeLocal) Detail(_ context.Context, c model.Clone, tree string) model.
 
 // fakeGitHub is GitHub, as values.
 type fakeGitHub struct {
-	lists   map[string]github.Listing
-	heavy   map[string]github.HeavyRepo
-	details map[string]model.RepoDetail
-	mu      sync.Mutex
-	asked   int // repositories asked for by name
+	lists    map[string]github.Listing
+	heavy    map[string]github.HeavyRepo
+	details  map[string]model.RepoDetail
+	detailed int // details read
+	mu       sync.Mutex
+	asked    int // repositories asked for by name
 }
 
 func (f *fakeGitHub) RepoDetail(_ context.Context, slug string, want github.DetailWant) (model.RepoDetail, github.Rate, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.detailed++
 	d := f.details[strings.ToLower(slug)]
 	d.AlertsAsked, d.ChecksAsked = want.Alerts, want.Oid != ""
 	return d, github.Rate{Cost: 1}, nil
@@ -1341,5 +1343,44 @@ func TestTheGitHubPaneListsAlertsAndChecks(t *testing.T) {
 	press(w, m, "J", "J")
 	if s := screen(m); !strings.Contains(s, "~ build") {
 		t.Errorf("the running check is not listed:\n%s", s)
+	}
+}
+
+// With the timers on, a row's GitHub detail is read only once the cursor
+// rests on it: moving on before the wait ends reads nothing.
+func TestTheDetailWaitsForTheCursorToRest(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	m.setLens(columns.GitHub)
+	w.settle(m)
+	m.noTimers = false
+	row := func(name string) int {
+		for i, l := range m.lines {
+			if l.row != nil && l.row.Remote == model.RemoteKey("github.com/mika/"+name) {
+				return i
+			}
+		}
+		t.Fatalf("no row %s", name)
+		return 0
+	}
+	m.moveTo(row("tool-shed")) // alerts, so its detail is wanted
+	m.sync()
+	if m.settle() == nil || m.settle() != nil {
+		t.Fatal("the wait did not start once")
+	}
+	m.moveTo(row("calendar-sync"))
+	m.sync()
+	m.Update(detailMsg{k: "github.com/mika/tool-shed"}) // its wait ends elsewhere
+	w.settle(m)
+	w.gh.mu.Lock()
+	n := w.gh.detailed
+	w.gh.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("read %d details for rows only passed", n)
+	}
+	m.Update(detailMsg{k: "github.com/mika/calendar-sync"})
+	w.settle(m)
+	if m.ghd.State != model.DetailRead || len(m.ghd.Value.Alerts) == 0 {
+		t.Errorf("after resting: %+v", m.ghd)
 	}
 }

@@ -30,7 +30,7 @@ type Engine interface {
 	SetNeeds(needs model.Need, visible []string)
 	Changes() <-chan struct{}
 	Detail(clone model.CloneKey, tree string) (model.Detail, bool)
-	GitHubDetail(k model.RemoteKey) model.GitHubDetail
+	GitHubDetail(k model.RemoteKey, read bool) model.GitHubDetail
 	Tick()
 
 	Fetch(keys []model.CloneKey) (busy []model.CloneKey)
@@ -131,9 +131,12 @@ type Model struct {
 	pkey    string
 	pfold   map[string]bool
 	detail  *model.Detail
-	// ghd is the GitHub detail of ghdOf, the repository selected.
-	ghd   model.GitHubDetail
-	ghdOf model.RemoteKey
+	// ghd is the GitHub detail of ghdOf, the repository selected. It is
+	// read once the cursor has rested on the row (ghdRested): ghdDue is a
+	// row waiting to rest, and ghdTicked the row a wait was started for.
+	ghd                          model.GitHubDetail
+	ghdOf                        model.RemoteKey
+	ghdRested, ghdDue, ghdTicked model.RemoteKey
 
 	popup *popup
 
@@ -299,12 +302,36 @@ func (m *Model) sync() {
 			m.detail = &d
 		}
 	}
-	// The github pane's alerts and checks, of the repository selected.
-	m.ghd, m.ghdOf = model.GitHubDetail{}, ""
+	// The github pane's alerts and checks, of the repository selected:
+	// only what is held until the cursor rests on it, so that moving over
+	// many rows reads none of them.
+	var k model.RemoteKey
 	if l, ok := m.selected(); ok && l.row != nil && l.row.Remote != "" && l.kind != columns.KindHead && l.kind != columns.KindWorktree &&
 		(m.lens == columns.GitHub || l.kind == columns.KindRemote) {
-		m.ghd, m.ghdOf = m.eng.GitHubDetail(l.row.Remote), l.row.Remote
+		k = l.row.Remote
 	}
+	read := k != "" && (m.noTimers || m.ghdRested == k)
+	m.ghd, m.ghdOf, m.ghdDue = m.eng.GitHubDetail(k, read), k, ""
+	if k != "" && !read && m.ghd.State == model.DetailReading {
+		m.ghdDue = k
+	}
+}
+
+// detailSettle is how long the cursor rests on a row before its GitHub
+// detail is read. A constant: it spares GitHub the rows only passed.
+const detailSettle = 250 * time.Millisecond
+
+// detailMsg says the cursor may have rested on k.
+type detailMsg struct{ k model.RemoteKey }
+
+// settle starts the wait for the row waiting to rest, once.
+func (m *Model) settle() tea.Cmd {
+	if m.noTimers || m.ghdDue == "" || m.ghdDue == m.ghdTicked {
+		return nil
+	}
+	k := m.ghdDue
+	m.ghdTicked = k
+	return tea.Tick(detailSettle, func(time.Time) tea.Msg { return detailMsg{k} })
 }
 
 func (m *Model) selected() (line, bool) {
@@ -329,7 +356,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.quitting && m.eng.Writing() == 0 {
 			return m, tea.Quit
 		}
-		return m, tea.Batch(m.waitChange(), m.spin())
+		return m, tea.Batch(m.waitChange(), m.spin(), m.settle())
 	case tickMsg:
 		m.eng.Tick()
 		return m, tea.Batch(m.tick(), m.spin())
@@ -353,11 +380,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		cmd := m.key(msg.String())
 		m.sync()
-		return m, tea.Batch(cmd, m.spin())
+		return m, tea.Batch(cmd, m.spin(), m.settle())
 	case tea.MouseMsg:
 		cmd := m.mouse(msg)
 		m.sync()
-		return m, tea.Batch(cmd, m.spin())
+		return m, tea.Batch(cmd, m.spin(), m.settle())
+	case detailMsg:
+		m.ghdTicked = ""
+		if msg.k == m.ghdOf {
+			m.ghdRested = msg.k
+			m.sync()
+		}
 	}
 	return m, nil
 }

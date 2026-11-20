@@ -154,6 +154,7 @@ type fakeGitHub struct {
 	detailErr error
 	detailed  []string      // slugs whose detail was asked for
 	detailGo  chan struct{} // when set, RepoDetail waits for it
+	waiting   int           // RepoDetail calls waiting on detailGo
 }
 
 func (f *fakeGitHub) RepoDetail(ctx context.Context, slug string, want github.DetailWant) (model.RepoDetail, github.Rate, error) {
@@ -161,6 +162,9 @@ func (f *fakeGitHub) RepoDetail(ctx context.Context, slug string, want github.De
 	wait := f.detailGo
 	f.mu.Unlock()
 	if wait != nil {
+		f.mu.Lock()
+		f.waiting++
+		f.mu.Unlock()
 		select {
 		case <-wait:
 		case <-ctx.Done():

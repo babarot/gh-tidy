@@ -40,28 +40,28 @@ func detailed(w *world) []string {
 // and held; a repository with nothing to read is not read.
 func TestTheDetailIsReadOnceWhenSelected(t *testing.T) {
 	w, e := detailWorld(t)
-	if d := e.GitHubDetail(appR); d.State != model.DetailReading {
+	if d := e.GitHubDetail(appR, true); d.State != model.DetailReading {
 		t.Fatalf("first ask: %+v", d)
 	}
 	idle(t, e)
-	d := e.GitHubDetail(appR)
+	d := e.GitHubDetail(appR, true)
 	if d.State != model.DetailRead || len(d.Value.Alerts) != 1 || !d.Value.AlertsAsked || !d.Value.ChecksAsked {
 		t.Fatalf("after reading: %+v", d)
 	}
-	e.GitHubDetail(appR)
+	e.GitHubDetail(appR, true)
 	idle(t, e)
-	if d := e.GitHubDetail(toolR); d.State != model.DetailNone {
+	if d := e.GitHubDetail(toolR, true); d.State != model.DetailNone {
 		t.Errorf("a repository with nothing to read: %+v", d)
 	}
 	idle(t, e)
 	if got := detailed(w); !slices.Equal(got, []string{"me/app"}) {
 		t.Errorf("read %q; want app once", got)
 	}
-	if d := e.GitHubDetail(webR); d.State != model.DetailReading {
+	if d := e.GitHubDetail(webR, true); d.State != model.DetailReading {
 		t.Errorf("web: %+v", d)
 	}
 	idle(t, e)
-	if d := e.GitHubDetail(webR); d.Value.ChecksAsked {
+	if d := e.GitHubDetail(webR, true); d.Value.ChecksAsked {
 		t.Error("asked for the checks of a repository whose checks pass")
 	}
 }
@@ -69,14 +69,14 @@ func TestTheDetailIsReadOnceWhenSelected(t *testing.T) {
 // When the counts it follows change, the detail is read again.
 func TestTheDetailIsReadAgainWhenTheCountsChange(t *testing.T) {
 	w, e := detailWorld(t)
-	e.GitHubDetail(appR)
+	e.GitHubDetail(appR, true)
 	idle(t, e)
 	w.gh.mu.Lock()
 	w.gh.heavy["me/app"] = github.HeavyRepo{Default: "main", DefaultOid: "a1", Alerts: 2, CI: "PENDING"}
 	w.gh.mu.Unlock()
 	e.Refresh()
 	idle(t, e)
-	e.GitHubDetail(appR)
+	e.GitHubDetail(appR, true)
 	idle(t, e)
 	if got := detailed(w); len(got) != 2 {
 		t.Errorf("read %q; want app again after its checks changed", got)
@@ -90,10 +90,10 @@ func TestAFailedDetailIsNotAskedAgainAtOnce(t *testing.T) {
 	w.gh.mu.Lock()
 	w.gh.detailErr = errors.New("502")
 	w.gh.mu.Unlock()
-	e.GitHubDetail(appR)
+	e.GitHubDetail(appR, true)
 	idle(t, e)
 	for range 5 {
-		if d := e.GitHubDetail(appR); d.State != model.DetailFailed || d.Why == "" {
+		if d := e.GitHubDetail(appR, true); d.State != model.DetailFailed || d.Why == "" {
 			t.Fatalf("after a failure: %+v", d)
 		}
 		idle(t, e)
@@ -107,9 +107,9 @@ func TestAFailedDetailIsNotAskedAgainAtOnce(t *testing.T) {
 	w.clock.add(retryFailed + time.Second)
 	e.Tick()
 	idle(t, e)
-	e.GitHubDetail(appR)
+	e.GitHubDetail(appR, true)
 	idle(t, e)
-	if d := e.GitHubDetail(appR); d.State != model.DetailRead {
+	if d := e.GitHubDetail(appR, true); d.State != model.DetailRead {
 		t.Errorf("after the wait: %+v", d)
 	}
 }
@@ -123,9 +123,9 @@ func TestADetailIsHeldBackByTheBudget(t *testing.T) {
 	w.gh.mu.Unlock()
 	e.Refresh()
 	idle(t, e)
-	e.GitHubDetail(appR)
+	e.GitHubDetail(appR, true)
 	idle(t, e)
-	if d := e.GitHubDetail(appR); d.State != model.DetailHeld || d.Why == "" {
+	if d := e.GitHubDetail(appR, true); d.State != model.DetailHeld || d.Why == "" {
 		t.Errorf("below the floor: %+v", d)
 	}
 	if got := detailed(w); len(got) != 0 {
@@ -133,21 +133,54 @@ func TestADetailIsHeldBackByTheBudget(t *testing.T) {
 	}
 }
 
-// Moving over many rows reads only the one the cursor stops on.
-func TestOnlyTheLastSelectedIsRead(t *testing.T) {
+// Rows the cursor only passes are not read: the screen asks without
+// read until the cursor rests. A read queued for a row is dropped when the
+// cursor moves on, even to a row with nothing to read.
+func TestRowsOnlyPassedAreNotRead(t *testing.T) {
 	w, e := detailWorld(t)
+	e.GitHubDetail(appR, false)
+	e.GitHubDetail(webR, false)
+	e.GitHubDetail(toolR, false)
+	idle(t, e)
+	if got := detailed(w); len(got) != 0 {
+		t.Fatalf("read %q for rows only passed", got)
+	}
+
+	w.gh.mu.Lock()
+	w.gh.heavy["me/api"] = github.HeavyRepo{Default: "main", DefaultOid: "p1", Alerts: 3}
 	w.gh.details["me/web"] = model.RepoDetail{}
 	release := make(chan struct{})
-	w.gh.mu.Lock()
 	w.gh.detailGo = release
 	w.gh.mu.Unlock()
-	e.GitHubDetail(appR) // runs, and waits
-	e.GitHubDetail(webR) // queued behind it, then left
-	e.GitHubDetail(appR)
+	w.gh.setList("me", github.Complete, "e2", "app", "tool", "web", "api")
+	e.Refresh()
+	idle(t, e)
+	// Both workers busy, waiting: each read is held in the fake before
+	// the cursor moves on.
+	waitFor := func(n int) {
+		for deadline := time.Now().Add(5 * time.Second); ; {
+			w.gh.mu.Lock()
+			got := w.gh.waiting
+			w.gh.mu.Unlock()
+			if got >= n {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%d reads waiting; want %d", got, n)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+	e.GitHubDetail(appR, true)
+	waitFor(1)
+	e.GitHubDetail(webR, true)
+	waitFor(2)
+	e.GitHubDetail("github.com/me/api", true) // queued behind them
+	e.GitHubDetail(toolR, true)               // nothing to read here
 	close(release)
 	idle(t, e)
-	if got := detailed(w); slices.Contains(got, "me/web") {
-		t.Errorf("read %q; web was left before its turn", got)
+	if got := detailed(w); slices.Contains(got, "me/api") {
+		t.Errorf("read %q; api was left before its turn", got)
 	}
 }
 
@@ -159,7 +192,7 @@ func TestAllReadsNoDetail(t *testing.T) {
 	idle(t, e)
 	e.Open(All)
 	idle(t, e)
-	if d := e.GitHubDetail(appR); d.State != model.DetailAll {
+	if d := e.GitHubDetail(appR, true); d.State != model.DetailAll {
 		t.Errorf("in all: %+v", d)
 	}
 	idle(t, e)

@@ -506,6 +506,8 @@ func alertLines(d model.GitHubDetail) []Cell {
 	}
 	v := d.Value
 	switch {
+	case !v.AlertsAsked:
+		return nil
 	case v.AlertsDenied:
 		return []Cell{{{Text: "  this token may not read them", Role: Muted}}}
 	case len(v.Alerts) == 0:
@@ -554,8 +556,12 @@ func checkLines(d model.GitHubDetail, pending bool) []Cell {
 	}
 	v := d.Value
 	switch {
+	case !v.ChecksAsked:
+		return nil
 	case v.ChecksErr != "":
 		return []Cell{{{Text: "  not read: GitHub could not read the commit", Role: Muted}}}
+	case len(v.Checks) == 0 && v.ChecksFailed+v.ChecksRunning > 0:
+		return []Cell{{{Text: fmt.Sprintf("  %d failed · %d running, beyond the checks read", v.ChecksFailed, v.ChecksRunning), Role: Muted}}}
 	case len(v.Checks) == 0 && pending:
 		return []Cell{{{Text: "  no check has reported: a required one may be waiting", Role: Muted}}}
 	case len(v.Checks) == 0:
