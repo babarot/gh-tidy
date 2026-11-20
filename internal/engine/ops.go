@@ -422,6 +422,21 @@ func (e *Engine) ReadList() {
 	e.readList(o, gen, e.alive(o, gen))
 }
 
+// cloneDir is where c clones login's repositories: the owner's directory
+// in the first root that has one, else in the first root.
+func (e *Engine) cloneDir(login string) string {
+	dirs := e.ownerDirs(login)
+	for _, d := range dirs {
+		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
+			return d
+		}
+	}
+	if len(e.roots) == 0 {
+		return ""
+	}
+	return filepath.Join(e.roots[0], e.host, login)
+}
+
 // ErrNoCloner is returned by Clone from an engine built without a way to
 // clone.
 var ErrNoCloner = errors.New("gh tidy was built without a way to clone")
@@ -449,7 +464,11 @@ func (e *Engine) Clone(key model.RemoteKey) (string, error) {
 	}
 	login := o.login
 	e.mu.Unlock()
-	dir := filepath.Join(e.ownerDir(login), name)
+	base := e.cloneDir(login)
+	if base == "" {
+		return "", errors.New("no root to clone into")
+	}
+	dir := filepath.Join(base, name)
 	ck := model.NewCloneKey(dir)
 	if _, err := os.Stat(dir); err == nil {
 		return dir, fmt.Errorf("%s already exists", abbrevHome(dir))

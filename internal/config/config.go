@@ -84,9 +84,10 @@ type Symbols struct {
 
 // Core is where clones are and how they are read.
 type Core struct {
-	// Root is where clones live, laid out as <host>/<owner>/<repo>. Empty
-	// reads git config ghq.root, then ~/ghq.
-	Root string `toml:"root"`
+	// Roots are where clones live, each laid out as <host>/<owner>/<repo>,
+	// in order: c clones into the first that holds the owner, else the
+	// first. Empty asks at start.
+	Roots []string `toml:"roots"`
 }
 
 // TUI is how the list looks.
@@ -125,6 +126,7 @@ type Action struct {
 // Default returns the settings used when the file sets nothing.
 func Default() File {
 	return File{
+		Core:   Core{Roots: []string{}},
 		Owners: Owners{Add: []string{}, Hide: []string{}},
 		TUI:    TUI{Theme: theme.Auto},
 		Columns: Columns{
@@ -192,6 +194,7 @@ func Parse(path string, data []byte) (File, error) {
 // file that still sets one is told so, rather than told the key is
 // unknown.
 var removed = map[string]string{
+	"core.root":              `the places of clones are a list: write roots = ["<the same path>"]; git config ghq.root is no longer read`,
 	"core.default_owner":     "the owner opened is the one given, the one where gh tidy starts, the one opened last, or you",
 	"core.fetch_concurrency": "how many fetches run at once is fixed, to spare GitHub and the machine",
 	"core.stale_check":       "gh tidy always reads where GitHub's default branches are; MAIN is measured against them",

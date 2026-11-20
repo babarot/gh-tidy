@@ -1,6 +1,7 @@
 package columns
 
 import (
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -301,6 +302,33 @@ func TestStars(t *testing.T) {
 	}{{listed, "12.3k"}, {asked, "7"}, {unread, Unread[0].Text}, {model.Row{}, "-"}} {
 		if got := text(tt.row); got != tt.want {
 			t.Errorf("stars of %s = %q; want %q", tt.row.Remote, got, tt.want)
+		}
+	}
+}
+
+// A clone whose owner and name another clone shares, as in two roots,
+// says which root it is in; other clones do not.
+func TestTwinsSayTheirRoot(t *testing.T) {
+	roots := []string{"/home/me/src", "/home/me/work", "/mnt/b/src"}
+	row := func(path string) model.Row {
+		r := model.Row{Clone: model.NewCloneKey(path)}
+		r.Local.Set(model.Clone{Path: path, Name: filepath.Base(path)}, now)
+		return r
+	}
+	rows := []model.Row{row("/home/me/src/github.com/acme/api"), row("/home/me/work/github.com/acme/api"),
+		row("/mnt/b/src/github.com/acme/api"), row("/home/me/src/github.com/acme/web")}
+	x := ctx(true)
+	x.Roots, x.Twins = roots, Twins(rows)
+	text := func(r model.Row) string {
+		var b strings.Builder
+		for _, s := range repoCell(x, Item{Row: &r, Kind: KindClone}) {
+			b.WriteString(s.Text)
+		}
+		return b.String()
+	}
+	for i, want := range []string{"api me/src", "api work", "api b/src", "web"} {
+		if got := text(rows[i]); !strings.HasPrefix(got, want) || (i == 3 && strings.Contains(got, "src")) {
+			t.Errorf("repo of %s = %q; want %q", rows[i].Clone, got, want)
 		}
 	}
 }

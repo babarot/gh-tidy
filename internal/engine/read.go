@@ -24,14 +24,23 @@ func (e *Engine) readOwner(o *owner) {
 
 	e.begin(o, "clones")
 	e.localPool.add(prioRest, alive, func() {
-		paths, err := e.local.Find(e.ownerDir(login))
-		switch {
-		case err == nil || os.IsNotExist(err):
+		var paths []string
+		complete := true
+		for _, dir := range e.ownerDirs(login) {
+			ps, err := e.local.Find(dir)
+			if err != nil && !os.IsNotExist(err) {
+				// A directory that could not be read: what is known of its
+				// clones stays rather than turning into repositories not
+				// cloned.
+				e.log.Warn("could not list clones", logging.KeyOwner, login, "err", err.Error())
+				complete = false
+			}
+			paths = append(paths, ps...)
+		}
+		// Once, with the clones of every root: each root alone would
+		// forget the others'.
+		if complete {
 			e.forgetMissing(o, paths)
-		default:
-			// The directory could not be read: what is known of its clones
-			// stays rather than turning into repositories not cloned.
-			e.log.Warn("could not list clones", logging.KeyOwner, login, "err", err.Error())
 		}
 		e.scanAll(o, paths, alive, func() {
 			e.mu.Lock()
@@ -44,7 +53,7 @@ func (e *Engine) readOwner(o *owner) {
 	e.readList(o, gen, alive)
 }
 
-// readAll reads every clone under the root for the All owner, and takes
+// readAll reads every clone under the roots for the All owner, and takes
 // GitHub's values as each owner last read them: nothing is asked of
 // GitHub.
 func (e *Engine) readAll(o *owner) {
@@ -54,20 +63,29 @@ func (e *Engine) readAll(o *owner) {
 	alive := e.alive(o, gen)
 	e.begin(o, "clones")
 	e.localPool.add(prioRest, alive, func() {
-		owners, err := e.local.Owners(e.ownerDir(""))
-		if err != nil && !os.IsNotExist(err) {
-			e.log.Warn("could not list owners", "err", err.Error())
-			e.scanAll(o, nil, alive, func() { e.end(o, "clones") })
-			return
-		}
-		var paths []string
+		var owners []string
 		complete := true
-		for _, login := range owners {
-			ps, err := e.local.Find(e.ownerDir(login))
+		for _, dir := range e.hostDirs() {
+			names, err := e.local.Owners(dir)
 			if err != nil && !os.IsNotExist(err) {
+				e.log.Warn("could not list owners", "err", err.Error())
 				complete = false
 			}
-			paths = append(paths, ps...)
+			for _, login := range names {
+				if !slices.Contains(owners, login) {
+					owners = append(owners, login)
+				}
+			}
+		}
+		var paths []string
+		for _, login := range owners {
+			for _, dir := range e.ownerDirs(login) {
+				ps, err := e.local.Find(dir)
+				if err != nil && !os.IsNotExist(err) {
+					complete = false
+				}
+				paths = append(paths, ps...)
+			}
 			e.copyGitHubValues(o, login)
 		}
 		if complete {
@@ -93,8 +111,8 @@ func (e *Engine) copyGitHubValues(all *owner, login string) {
 		}
 	}
 	for _, r := range rows {
-		if r.Clone == "" {
-			continue // All holds clones only
+		if r.Clone == "" || !e.inOwnerDir(string(r.Clone), All) {
+			continue // All holds clones only, of the roots now
 		}
 		cp := r
 		cp.Op = model.Op{}
@@ -114,8 +132,16 @@ func (e *Engine) forgetMissing(o *owner, paths []string) {
 	for _, p := range paths {
 		have[model.NewCloneKey(p)] = true
 	}
+	e.dropClones(o, func(r *model.Row) bool { return !have[r.Clone] })
+	e.changedOwner(o)
+}
+
+// dropClones drops the clones of o that gone says are gone; a row that is
+// also in the list stays, as not cloned, when no other clone of it does,
+// so that a list answered 304 still holds it. Called with e.mu held.
+func (e *Engine) dropClones(o *owner, gone func(*model.Row) bool) {
 	for k, r := range o.rows {
-		if r.Clone == "" || have[r.Clone] {
+		if r.Clone == "" || !gone(r) {
 			continue
 		}
 		delete(o.rows, k)
@@ -124,7 +150,6 @@ func (e *Engine) forgetMissing(o *owner, paths []string) {
 			o.rows[left.Key()] = &left
 		}
 	}
-	e.changedOwner(o)
 }
 
 // scanAll reads each clone, the rows on the screen first, and calls done
@@ -795,9 +820,18 @@ func (e *Engine) Tick() {
 	e.readHeavy(o)
 }
 
-// inOwnerDir reports whether the clone at path sits in login's directory.
+// inOwnerDir reports whether the clone at path sits in login's directory
+// under one of the roots; for All, in any owner's. It looks at the path
+// alone.
 func (e *Engine) inOwnerDir(path, login string) bool {
-	return login == All || filepath.Dir(path) == e.ownerDir(login)
+	dir := filepath.Dir(path)
+	for _, root := range e.roots {
+		hostDir := filepath.Join(root, e.host)
+		if login == All && filepath.Dir(dir) == hostDir || login != All && dir == filepath.Join(hostDir, login) {
+			return true
+		}
+	}
+	return false
 }
 
 // slugOf is owner/name of a remote key.

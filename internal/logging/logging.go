@@ -39,6 +39,8 @@ const (
 	// KeyReason why something was held back or skipped.
 	KeyWaitedMS = "waited_ms"
 	KeyReason   = "reason"
+	// KeyRoot is a directory clones live under.
+	KeyRoot = "root"
 )
 
 // Rotation: the file is moved aside when it is over maxSize at startup,

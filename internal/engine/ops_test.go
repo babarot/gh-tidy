@@ -85,7 +85,7 @@ func opsWorld(t *testing.T) (*world, *fakeChanger, *Engine) {
 	w.local.add("me", "app", "me/app", nil)
 	w.gh.setList("me", github.Complete, "e1", "app")
 	ch := &fakeChanger{dirty: map[string]int{}}
-	e := New(Options{Root: root, Local: w.local, Change: ch, GitHub: w.gh, Store: w.store, Now: w.clock.now})
+	e := New(Options{Roots: []string{root}, Local: w.local, Change: ch, GitHub: w.gh, Store: w.store, Now: w.clock.now})
 	if err := e.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestCloneMakesTheRowAClone(t *testing.T) {
 	w.local.add("me", "app", "me/app", nil)
 	w.gh.setList("me", github.Complete, "e1", "app", "tool")
 	cl := &fakeCloner{local: w.local}
-	e := New(Options{Root: root, Local: w.local, GitHub: w.gh, Store: w.store, Cloner: cl, Now: w.clock.now})
+	e := New(Options{Roots: []string{root}, Local: w.local, GitHub: w.gh, Store: w.store, Cloner: cl, Now: w.clock.now})
 	if err := e.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}

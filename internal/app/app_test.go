@@ -35,7 +35,7 @@ func TestOwners(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got := owners(root, "github.com", github.Viewer{Login: "me", Orgs: []string{"acme", "corp"}},
+	got := owners([]string{root}, "github.com", github.Viewer{Login: "me", Orgs: []string{"acme", "corp"}},
 		config.Owners{Add: []string{"github.com/extra"}, Hide: []string{"zed"}})
 	want := []string{"acme", "corp", "extra", "me"}
 	if len(got) != len(want) {

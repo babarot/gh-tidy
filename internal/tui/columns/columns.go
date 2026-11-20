@@ -9,7 +9,9 @@
 package columns
 
 import (
+	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/babarot/gh-tidy/internal/config"
@@ -78,6 +80,64 @@ type Ctx struct {
 	Owner   *model.Owner // All writes the owner before each name
 	Symbols config.Symbols
 	Now     time.Time
+	// Roots are where clones live, and Twins the clones whose name
+	// another clone shares (Twins): those say which root they are in.
+	Roots []string
+	Twins map[string]bool
+}
+
+// twin is what two clones of one name share: their owner's directory and
+// their own name.
+func twin(clone model.CloneKey) string {
+	p := string(clone)
+	return strings.ToLower(filepath.Base(filepath.Dir(p)) + "/" + filepath.Base(p))
+}
+
+// Twins are the clones of rows whose owner and name another clone
+// shares, as in two roots.
+func Twins(rows []model.Row) map[string]bool {
+	n := map[string]int{}
+	for _, r := range rows {
+		if r.Clone != "" {
+			n[twin(r.Clone)]++
+		}
+	}
+	out := map[string]bool{}
+	for k, c := range n {
+		if c > 1 {
+			out[k] = true
+		}
+	}
+	return out
+}
+
+// RootLabel names the root path is under by its last directories: one,
+// or as many as tell it from the other roots.
+func RootLabel(roots []string, path string) string {
+	var in string
+	for _, r := range roots {
+		if strings.HasPrefix(path, r+string(filepath.Separator)) {
+			in = r
+		}
+	}
+	if in == "" {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(in, string(filepath.Separator)), string(filepath.Separator))
+	for n := 1; n <= len(parts); n++ {
+		label := strings.Join(parts[len(parts)-n:], "/")
+		unique := true
+		for _, r := range roots {
+			rp := strings.Split(strings.Trim(r, string(filepath.Separator)), string(filepath.Separator))
+			if r != in && len(rp) >= n && strings.Join(rp[len(rp)-n:], "/") == label {
+				unique = false
+			}
+		}
+		if unique {
+			return label
+		}
+	}
+	return in
 }
 
 // Column is one column of the list.

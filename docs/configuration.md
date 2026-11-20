@@ -8,9 +8,11 @@ This page is written from the code (`go test ./internal/config -run TestConfigur
 # gh tidy settings. Uncomment a line to change it.
 
 [core]
-# Where clones live, laid out as <host>/<owner>/<repo>. Empty (default) reads
-# git config ghq.root, then ~/ghq.
-# root = ""
+# Where clones live, each laid out as <host>/<owner>/<repo>, such as ["~/src",
+# "~/work"]. c clones into the first that holds the owner's directory, else
+# the first. Empty (default): gh tidy offers the root of the clone it starts
+# in, and writes it here when you say yes.
+# roots = []
 
 [owners]
 # The owners offered are the viewer, the viewer's organizations and the owners

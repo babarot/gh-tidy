@@ -75,7 +75,10 @@ func TestTemplateKeysAreTheDefaults(t *testing.T) {
 func TestParseErrors(t *testing.T) {
 	for _, tc := range []struct{ name, src, want string }{
 		{"unknown key", "[tui]\nthme = \"nord\"\n", "thme"},
-		{"wrong type", "[core]\nroot = 8\n", "x.toml:2"},
+		{"wrong type", "[core]\nroots = 8\n", "x.toml:2"},
+		{"root taken out", "[core]\nroot = \"~/src\"\n", `[core] root is no longer a setting: the places of clones are a list: write roots = ["<the same path>"]`},
+		{"relative root", "[core]\nroots = [\"src\"]\n", `"src" is not absolute or under ~`},
+		{"root twice", "[core]\nroots = [\"~/src\", \"~/src\"]\n", "written twice"},
 		{"bad theme", "[tui]\ntheme = \"dots\"\n", `theme "dots"`},
 		{"removed", "[tui]\nsort = \"name\"\n", "[tui] sort is no longer a setting: the list is in the order"},
 		{"removed in core", "[core]\nstale_check = false\n", "stale_check is no longer a setting"},

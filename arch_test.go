@@ -39,7 +39,7 @@ var layers = []layer{
 	{"internal/store", 2, []string{"internal/model"}, nil, "The files kept between starts: each owner's table as last read (the cache) and the user's choices (the state)"},
 	{"internal/github", 2, []string{"internal/logging", "internal/model"}, []string{"github.com/cli/go-gh/v2"}, "Reading GitHub through gh's authentication: owners' lists by REST with conditional requests, repositories' fields by GraphQL, the rate limit of every response"},
 	{"internal/engine", 3, []string{"internal/github", "internal/logging", "internal/model", "internal/policy", "internal/store"}, nil, "What gh-tidy knows of owners and clones, and the only one changing it: what to read and when, limits on each kind of outside access, the rate limit budget, each clone's lane for changes; no Bubble Tea"},
-	{"internal/locate", 2, []string{"internal/gitx"}, nil, "The root, and what to open from where gh tidy starts"},
+	{"internal/locate", 2, []string{"internal/gitx"}, nil, "The roots, and what to open from where gh tidy starts"},
 	{"internal/tui", 4, []string{"internal/config", "internal/model", "internal/policy", "internal/theme", "internal/tui/columns", "internal/tui/keymap", "internal/tui/statusline"},
 		[]string{"charm.land/bubbletea/v2", "charm.land/lipgloss/v2", "github.com/charmbracelet/x/ansi"}, "The screen: one owner's clones and repositories in a list, the preview of the row selected, the popups; what is known is the engine's"},
 	{"internal/app", 5, []string{"internal/command", "internal/config", "internal/engine", "internal/github", "internal/local", "internal/locate", "internal/logging", "internal/model", "internal/store", "internal/tui", "internal/version"},

@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -45,7 +46,7 @@ Usage:
   %s [flags] [OWNER | HOST/OWNER]
 
 Without OWNER, it opens the owner of the clone it is started in, the owner
-directory under the root it is started in, the owner opened last, or you.
+directory under a root it is started in, the owner opened last, or you.
 
 Settings are in %s, and the log is written to %s.
 
@@ -89,28 +90,42 @@ func Run(cmd string, args []string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	// Before ctrl+c is caught, so that it ends the question about the
+	// roots as it ends any program.
+	wd, _ := os.Getwd()
+	roots, err := roots(context.Background(), cfg.Core.Roots, config.Path(), wd, ask{in: os.Stdin, out: stderr, terminal: !*asJSON && isTerminal(os.Stdin) && isTerminal(os.Stderr)})
+	if err != nil {
+		return err
+	}
+	for _, r := range roots {
+		if _, err := os.Stat(r); os.IsNotExist(err) {
+			log.Warn("a root is not there: no clone is read from it", logging.KeyRoot, r)
+		}
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-
-	root := locate.Root(ctx, cfg.Core.Root)
 	if *asJSON {
 		host, owner := locate.DefaultHost, ""
 		if h, o, ok := strings.Cut(fs.Arg(0), "/"); ok {
 			host, owner = h, o
 		} else {
-			owner, _ = startOwner(ctx, fs.Arg(0), root, "", "")
+			owner, _ = startOwner(ctx, fs.Arg(0), roots, "", "")
 		}
 		if owner == "" || owner == tui.All {
 			return errors.New("--json needs an owner: pass one, or run it in an owner's directory")
 		}
-		return printJSON(ctx, os.Stdout, filepath.Join(root, host, owner))
+		var dirs []string
+		for _, root := range roots {
+			dirs = append(dirs, filepath.Join(root, host, owner))
+		}
+		return printJSON(ctx, os.Stdout, dirs)
 	}
 	client, err := github.NewClient(github.Options{Logger: log})
 	if err != nil {
 		return err
 	}
 	st := store.Store{CacheDir: xdg("XDG_CACHE_HOME", ".cache"), StateDir: xdg("XDG_STATE_HOME", filepath.Join(".local", "state"))}
-	eng := engine.New(engine.Options{Root: root, Local: disk{}, Change: changer{remove: cfg.Cleanup.WorktreeRemove}, Cloner: cloner{},
+	eng := engine.New(engine.Options{Roots: roots, Local: disk{}, Change: changer{remove: cfg.Cleanup.WorktreeRemove}, Cloner: cloner{},
 		GitHub: client, Store: st, Logger: log})
 	if err := eng.Start(ctx); err != nil {
 		log.Warn("who is signed in is not known: every owner is read as another user's", logging.KeyReason, err.Error())
@@ -122,11 +137,11 @@ func Run(cmd string, args []string, stderr io.Writer) error {
 		log.Warn("state not read", logging.KeyReason, err.Error())
 	}
 	account := store.AccountKey(host, viewer.Login)
-	owner, sel := startOwner(ctx, fs.Arg(0), root, state.LastOwner[account], viewer.Login)
+	owner, sel := startOwner(ctx, fs.Arg(0), roots, state.LastOwner[account], viewer.Login)
 	log.Info("start", logging.KeyVersion, version.Version, logging.KeyOwner, host+"/"+owner)
 
 	m, err := tui.New(tui.Options{
-		Engine: eng, Commands: programs{}, Cwd: cwd(), Config: cfg, Owners: owners(root, host, viewer, cfg.Owners), Owner: owner, Select: sel,
+		Engine: eng, Commands: programs{}, Cwd: cwd(), Config: cfg, Owners: owners(roots, host, viewer, cfg.Owners), Roots: roots, Owner: owner, Select: sel,
 		Lens: state.Lens, PreviewHeight: state.PreviewHeight, Home: home(),
 		Save: func(owner, lens string, ph int) {
 			if state.LastOwner == nil {
@@ -148,11 +163,24 @@ func Run(cmd string, args []string, stderr io.Writer) error {
 	return err
 }
 
-// printJSON writes the clones under dir as JSON, read from disk alone.
-func printJSON(ctx context.Context, w io.Writer, dir string) error {
-	paths, err := local.Find(dir)
-	if err != nil {
-		return err
+// printJSON writes the clones under dirs (the owner's directory in each
+// root) as JSON, read from disk alone. A directory two roots reach
+// through a symlink is read once.
+func printJSON(ctx context.Context, w io.Writer, dirs []string) error {
+	var paths []string
+	var seen []os.FileInfo
+	for _, dir := range dirs {
+		if fi, err := os.Stat(dir); err == nil {
+			if slices.ContainsFunc(seen, func(s os.FileInfo) bool { return os.SameFile(s, fi) }) {
+				continue
+			}
+			seen = append(seen, fi)
+		}
+		ps, err := local.Find(dir)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		paths = append(paths, ps...)
 	}
 	clones := make([]model.Clone, len(paths))
 	var wg sync.WaitGroup
@@ -173,7 +201,7 @@ func printJSON(ctx context.Context, w io.Writer, dir string) error {
 // startOwner decides the owner to open: the one given, the one where gh
 // tidy started (with the clone it started in selected), the one opened
 // last, the viewer, or all.
-func startOwner(ctx context.Context, arg, root, last, viewer string) (owner, sel string) {
+func startOwner(ctx context.Context, arg string, roots []string, last, viewer string) (owner, sel string) {
 	if arg != "" {
 		if _, o, ok := strings.Cut(arg, "/"); ok {
 			return o, ""
@@ -181,7 +209,7 @@ func startOwner(ctx context.Context, arg, root, last, viewer string) (owner, sel
 		return arg, ""
 	}
 	if cwd, err := os.Getwd(); err == nil {
-		if t, err := locate.Resolve(ctx, cwd, root); err == nil && t.Kind == locate.Owner {
+		if t, err := locate.Resolve(ctx, cwd, roots); err == nil && t.Kind == locate.Owner {
 			if t.Select != "" {
 				sel = string(model.NewCloneKey(t.Select))
 			}
@@ -192,9 +220,9 @@ func startOwner(ctx context.Context, arg, root, last, viewer string) (owner, sel
 }
 
 // owners are the owners offered: the viewer, the viewer's organizations,
-// the owners with clones under the root and those the settings add, less
+// the owners with clones under a root and those the settings add, less
 // those they hide, by name.
-func owners(root, host string, v github.Viewer, set config.Owners) []string {
+func owners(roots []string, host string, v github.Viewer, set config.Owners) []string {
 	var out []string
 	add := func(o string) {
 		if o != "" && !slices.ContainsFunc(out, func(s string) bool { return strings.EqualFold(s, o) }) {
@@ -205,9 +233,11 @@ func owners(root, host string, v github.Viewer, set config.Owners) []string {
 	for _, o := range v.Orgs {
 		add(o)
 	}
-	if dirs, err := local.Owners(filepath.Join(root, host)); err == nil {
-		for _, o := range dirs {
-			add(o)
+	for _, root := range roots {
+		if dirs, err := local.Owners(filepath.Join(root, host)); err == nil {
+			for _, o := range dirs {
+				add(o)
+			}
 		}
 	}
 	strip := func(o string) string {
