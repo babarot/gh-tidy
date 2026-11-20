@@ -61,6 +61,11 @@ func repoCell(x Ctx, it Item) Cell {
 		name = remoteName(r)
 	}
 	c = append(c, Seg{Text: name, Role: Title, Bold: true})
+	if r.Clone != "" && x.Twins[twin(r.Clone)] {
+		if label := RootLabel(x.Roots, string(r.Clone)); label != "" {
+			c = append(c, Seg{Text: " " + label, Role: Dim})
+		}
+	}
 	if !r.Local.Has {
 		return c
 	}

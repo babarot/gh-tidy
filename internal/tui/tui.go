@@ -70,7 +70,10 @@ type Options struct {
 	// start; nil keeps nothing.
 	Save func(owner, lens string, previewHeight int)
 	Home string // written as ~ in paths
-	Now  func() time.Time
+	// Roots are where clones live: a row whose name another row shares
+	// says which root it is in.
+	Roots []string
+	Now   func() time.Time
 	// NoTimers leaves out the timers, so that every command returns; for
 	// tests.
 	NoTimers bool
@@ -153,6 +156,10 @@ type Model struct {
 
 	hits      []hit
 	lastClick click
+	// roots are where clones live, and twins the clones whose name
+	// another clone of the list shares.
+	roots []string
+	twins map[string]bool
 	// dragging says the pane's top line is held by the mouse.
 	dragging bool
 }
@@ -193,7 +200,7 @@ func New(o Options) (*Model, error) {
 		now = time.Now
 	}
 	m := &Model{eng: o.Engine, cmds: o.Commands, cwd: o.Cwd, actions: o.Config.Actions, cleanup: o.Config.Cleanup, keys: keys, sym: o.Config.Symbols, cols: cols, sections: secs, themeArg: o.Config.TUI.Theme,
-		save: o.Save, home: o.Home, now: now, noTimers: o.NoTimers,
+		save: o.Save, home: o.Home, now: now, noTimers: o.NoTimers, roots: o.Roots,
 		owners: append([]string{All}, o.Owners...), owner: o.Owner, lens: columns.Local, cursor: o.Select,
 		order: map[string]int{}, expanded: map[string]bool{}, folds: map[string]bool{}, pfold: map[string]bool{},
 		ph: previewDefault, dark: true}
@@ -260,6 +267,7 @@ func (m *Model) Init() tea.Cmd {
 // refresh takes a new copy of the owner from the engine and lays it out.
 func (m *Model) refresh() {
 	m.snap = m.eng.Owner()
+	m.twins = columns.Twins(m.snap.Rows)
 	m.relayout()
 	m.sync()
 }

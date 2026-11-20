@@ -26,9 +26,16 @@ type fakeLocal struct {
 
 	factReads, detailReads int
 	detailHold             chan struct{} // when set, Detail waits for it
+
+	findErr map[string]error // directories Find cannot read
 }
 
 func (f *fakeLocal) add(owner, name, slug string, edit func(*model.Clone)) {
+	f.addAt(root, owner, name, slug, edit)
+}
+
+// addAt adds a clone under another root.
+func (f *fakeLocal) addAt(root, owner, name, slug string, edit func(*model.Clone)) {
 	path := filepath.Join(root, "github.com", owner, name)
 	c := model.Clone{Key: model.NewCloneKey(path), Path: path, Name: name, Default: "main", DefaultSource: model.DefaultFromOriginHEAD, DefaultOid: "local-" + name}
 	if slug != "" {
@@ -60,6 +67,9 @@ func (f *fakeLocal) Owners(dir string) ([]string, error) {
 func (f *fakeLocal) Find(dir string) ([]string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := f.findErr[dir]; err != nil {
+		return nil, err
+	}
 	var out []string
 	for p := range f.clones {
 		if filepath.Dir(p) == dir {
@@ -278,7 +288,7 @@ func newWorld(t *testing.T) *world {
 }
 
 func (w *world) engine() *Engine {
-	e := New(Options{Root: root, Local: w.local, GitHub: w.gh, Store: w.store, Now: w.clock.now})
+	e := New(Options{Roots: []string{root}, Local: w.local, GitHub: w.gh, Store: w.store, Now: w.clock.now})
 	if err := e.Start(context.Background()); err != nil {
 		w.t.Fatal(err)
 	}

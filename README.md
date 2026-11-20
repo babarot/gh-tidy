@@ -30,7 +30,7 @@ gh tidy babarot    # one owner
 gh tidy all        # every owner's clones
 ```
 
-Clones are looked for where [ghq](https://github.com/x-motemen/ghq) puts them, `<root>/<host>/<owner>/<repo>`; the root is `ghq.root` in git config, or `~/ghq`. ghq itself is not needed. Without an owner, gh tidy opens the owner of the clone it starts in (with that clone selected), the owner directory it starts in, the owner opened last, or you.
+Clones are looked for as `<root>/<host>/<owner>/<repo>`, under the roots `[core] roots` names, such as `["~/src", "~/work"]`. With none set, gh tidy offers the root of the clone it starts in and writes it to a new config file when you say yes; otherwise, and always for `--json`, it stops with the line to write. Without an owner, gh tidy opens the owner of the clone it starts in (with that clone selected), the owner directory it starts in, the owner opened last, or you.
 
 A clone is matched to GitHub by its origin, not its directory name, so a clone in a directory of another name, or of a repository renamed since, is still found. A worktree is shown under its clone wherever it is on disk.
 

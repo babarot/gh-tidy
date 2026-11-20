@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"unicode"
@@ -63,8 +64,7 @@ func where(key string) string {
 }
 
 type (
-	boolKind   struct{}
-	stringKind struct{}
+	boolKind struct{}
 	// themeKind is the name of a color scheme, or auto.
 	themeKind struct{}
 	// listKind is a list of strings, with at least one when NonEmpty.
@@ -77,15 +77,15 @@ type (
 	// cell wide per character, or the columns would not line up. Empty
 	// writes nothing.
 	markKind struct{}
+	// rootsKind is a list of directories, each absolute or under ~, each
+	// once: a relative one would change with where gh tidy starts.
+	rootsKind struct{}
 	// commandKind is a command and its arguments, which must pass Needs.
 	commandKind struct{ Needs string }
 )
 
 func (boolKind) check(string, any) []error { return nil }
 func (boolKind) toml(v any) string         { return fmt.Sprint(as[bool](v)) }
-
-func (stringKind) check(string, any) []error { return nil }
-func (stringKind) toml(v any) string         { return fmt.Sprintf("%q", as[string](v)) }
 
 func (themeKind) check(key string, v any) []error {
 	if s := as[string](v); !theme.Valid(s) {
@@ -126,6 +126,24 @@ func (markKind) check(key string, v any) []error {
 }
 func (markKind) toml(v any) string { return fmt.Sprintf("%q", as[string](v)) }
 
+func (rootsKind) check(key string, v any) []error {
+	var errs []error
+	seen := map[string]bool{}
+	for _, r := range as[[]string](v) {
+		switch {
+		case r == "":
+			errs = append(errs, fmt.Errorf("%s: a root is empty", where(key)))
+		case r != "~" && !strings.HasPrefix(r, "~/") && !filepath.IsAbs(r):
+			errs = append(errs, fmt.Errorf("%s: %q is not absolute or under ~", where(key), r))
+		case seen[r]:
+			errs = append(errs, fmt.Errorf("%s: %q is written twice", where(key), r))
+		}
+		seen[r] = true
+	}
+	return errs
+}
+func (rootsKind) toml(v any) string { return tomlList(as[[]string](v)) }
+
 func (k commandKind) check(key string, v any) []error {
 	argv := as[[]string](v)
 	switch {
@@ -160,8 +178,8 @@ var tables = []table{
 
 // settings are every key of the tables, table by table in their order.
 var settings = []setting{
-	{Key: "core.root", Kind: stringKind{}, Value: func(f File) any { return f.Core.Root },
-		Doc: "Where clones live, laid out as <host>/<owner>/<repo>. Empty (default) reads git config ghq.root, then ~/ghq."},
+	{Key: "core.roots", Kind: rootsKind{}, Value: func(f File) any { return f.Core.Roots },
+		Doc: `Where clones live, each laid out as <host>/<owner>/<repo>, such as ["~/src", "~/work"]. c clones into the first that holds the owner's directory, else the first. Empty (default): gh tidy offers the root of the clone it starts in, and writes it here when you say yes.`},
 
 	{Key: "owners.add", Kind: ownersKind{}, Value: func(f File) any { return f.Owners.Add },
 		Doc: `Offer these owners too, as "owner" or "host/owner".`},

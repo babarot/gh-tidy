@@ -56,7 +56,7 @@ type Store interface {
 	SaveOwner(store.OwnerCache) error
 }
 
-// All is the owner that stands for every owner under the root.
+// All is the owner that stands for every owner under the roots.
 const All = "all"
 
 // Limits on each kind of outside access at once, and the sizes of what is
@@ -83,7 +83,9 @@ const (
 
 // Options build an Engine.
 type Options struct {
-	Root   string // where clones live, as <root>/<host>/<owner>/<repo>
+	// Roots are where clones live, as <root>/<host>/<owner>/<repo>, in
+	// order, resolved and each once (locate.Roots).
+	Roots  []string
 	Local  Local
 	Change Changer
 	GitHub GitHub
@@ -96,7 +98,7 @@ type Options struct {
 
 // Engine is what gh-tidy knows, and the work of reading and changing it.
 type Engine struct {
-	root   string
+	roots  []string
 	host   string
 	local  Local
 	change Changer
@@ -182,7 +184,7 @@ func New(o Options) *Engine {
 	if log == nil {
 		log = logging.Discard()
 	}
-	e := &Engine{root: o.Root, host: o.GitHub.Host(), local: o.Local, change: o.Change, gh: o.GitHub, store: o.Store, cloner: o.Cloner, log: log, now: now,
+	e := &Engine{roots: o.Roots, host: o.GitHub.Host(), local: o.Local, change: o.Change, gh: o.GitHub, store: o.Store, cloner: o.Cloner, log: log, now: now,
 		lanes: map[model.CloneKey]*hold{}, epoch: map[model.CloneKey]int64{},
 		details: map[detailKey]model.Detail{}, detailing: map[detailKey]bool{}, reads: map[model.CloneKey]int64{},
 		localPool: newPool(runtime.NumCPU(), idle), netPool: newPool(networkAtOnce, idle), apiPool: newPool(apiAtOnce, idle),
@@ -419,11 +421,41 @@ func (e *Engine) loadCache(o *owner) {
 		r := c.Rows[i]
 		o.rows[r.Key()] = &r
 	}
+	// A clone kept from a root no longer among the roots is not this
+	// owner's now: nothing shows it or acts on it before the read.
+	e.dropClones(o, func(r *model.Row) bool { return !e.inOwnerDir(string(r.Clone), o.login) })
 	o.fromCache = true
 }
 
-// ownerDir is where the clones of login live.
-func (e *Engine) ownerDir(login string) string { return filepath.Join(e.root, e.host, login) }
+// ownerDirs are where the clones of login live, a directory under each
+// root, in the roots' order. A directory two roots reach through a
+// symlink is read once, from the first root: resolved only to tell, so
+// that a clone's path stays under its root.
+func (e *Engine) ownerDirs(login string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, root := range e.roots {
+		d := filepath.Join(root, e.host, login)
+		real := d
+		if r, err := filepath.EvalSymlinks(d); err == nil {
+			real = r
+		}
+		if !seen[real] {
+			seen[real] = true
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// hostDirs are the roots' directories of the host, where the owners are.
+func (e *Engine) hostDirs() []string {
+	out := make([]string, len(e.roots))
+	for i, root := range e.roots {
+		out[i] = filepath.Join(root, e.host)
+	}
+	return out
+}
 
 func toGitHub(c model.Completeness) github.Completeness {
 	switch c {

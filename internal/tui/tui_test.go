@@ -314,7 +314,7 @@ func newWorld(t *testing.T) *world {
 	w.gh.lists["acme"] = github.Listing{Completeness: github.Complete, Pages: github.Pages{ETags: []string{"e2"}, Ended: true, Completeness: github.Complete}}
 	w.change = &fakeChange{local: w.local}
 	w.cmds = &fakeCommands{}
-	w.eng = engine.New(engine.Options{Root: root, Local: w.local, GitHub: w.gh, Change: w.change, Cloner: w.change,
+	w.eng = engine.New(engine.Options{Roots: []string{root}, Local: w.local, GitHub: w.gh, Change: w.change, Cloner: w.change,
 		Now: func() time.Time { return now }})
 	if err := w.eng.Start(context.Background()); err != nil {
 		t.Fatal(err)
