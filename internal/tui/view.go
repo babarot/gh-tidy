@@ -333,7 +333,11 @@ func (m *Model) paneOf(l line) pane {
 		p.title = m.sym.Worktree + " " + l.name()
 	}
 	if m.lens == columns.GitHub || l.kind == columns.KindRemote {
-		p.parts = columns.GitHubParts(x, it)
+		var d model.GitHubDetail
+		if l.row != nil && l.row.Remote == m.ghdOf {
+			d = m.ghd
+		}
+		p.parts = columns.GitHubParts(x, it, d)
 		return p
 	}
 	if !l.row.Local.Has {

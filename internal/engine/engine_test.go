@@ -149,6 +149,35 @@ type fakeGitHub struct {
 	listErr  error
 	block    map[string]chan struct{} // the lists of these owners wait for their channel
 	heavyGo  chan struct{}            // when set, Heavy waits for it
+
+	details   map[string]model.RepoDetail // by slug
+	detailErr error
+	detailed  []string      // slugs whose detail was asked for
+	detailGo  chan struct{} // when set, RepoDetail waits for it
+}
+
+func (f *fakeGitHub) RepoDetail(ctx context.Context, slug string, want github.DetailWant) (model.RepoDetail, github.Rate, error) {
+	f.mu.Lock()
+	wait := f.detailGo
+	f.mu.Unlock()
+	if wait != nil {
+		select {
+		case <-wait:
+		case <-ctx.Done():
+			return model.RepoDetail{}, github.Rate{}, ctx.Err()
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.detailed = append(f.detailed, slug)
+	if f.detailErr != nil {
+		return model.RepoDetail{}, f.rate, f.detailErr
+	}
+	d := f.details[slug]
+	d.AlertsAsked, d.ChecksAsked = want.Alerts, want.Oid != ""
+	r := f.rate
+	r.Cost, r.Resource = 1, "graphql"
+	return d, r, nil
 }
 
 func newFakeGitHub() *fakeGitHub {

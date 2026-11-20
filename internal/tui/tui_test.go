@@ -122,10 +122,19 @@ func (f *fakeLocal) Detail(_ context.Context, c model.Clone, tree string) model.
 
 // fakeGitHub is GitHub, as values.
 type fakeGitHub struct {
-	lists map[string]github.Listing
-	heavy map[string]github.HeavyRepo
-	mu    sync.Mutex
-	asked int // repositories asked for by name
+	lists   map[string]github.Listing
+	heavy   map[string]github.HeavyRepo
+	details map[string]model.RepoDetail
+	mu      sync.Mutex
+	asked   int // repositories asked for by name
+}
+
+func (f *fakeGitHub) RepoDetail(_ context.Context, slug string, want github.DetailWant) (model.RepoDetail, github.Rate, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	d := f.details[strings.ToLower(slug)]
+	d.AlertsAsked, d.ChecksAsked = want.Alerts, want.Oid != ""
+	return d, github.Rate{Cost: 1}, nil
 }
 
 func (f *fakeGitHub) Host() string { return "github.com" }
@@ -249,7 +258,11 @@ func (f *fakeCommands) Copy(t string) error                                   { 
 
 func newWorld(t *testing.T) *world {
 	w := &world{t: t, local: &fakeLocal{clones: map[string]model.Clone{}, facts: map[string]model.CleanupFacts{}},
-		gh: &fakeGitHub{lists: map[string]github.Listing{}, heavy: map[string]github.HeavyRepo{}}}
+		gh: &fakeGitHub{lists: map[string]github.Listing{}, heavy: map[string]github.HeavyRepo{}, details: map[string]model.RepoDetail{
+			"mika/calendar-sync": {AlertsTotal: 12, Alerts: []model.Alert{
+				{Package: "ical-parser", Ecosystem: "npm", Severity: "critical", Range: "< 2.4.1", Fixed: "2.4.1", Manifest: "package-lock.json"},
+				{Package: "tmp-dir", Ecosystem: "npm", Severity: "low", Range: "<= 0.9.0", Manifest: "package-lock.json"}},
+				Checks: []model.Check{{Name: "test (ubuntu-latest)"}, {Name: "build", Running: true}}, ChecksFailed: 1, ChecksRunning: 1}}}}
 	l := w.local
 	l.add(clone("agent-runner", func(c *model.Clone) {
 		base := c.Path
@@ -1300,5 +1313,33 @@ func TestDraggingThePaneTop(t *testing.T) {
 	m.Update(tea.MouseMotionMsg{X: 10, Y: 2})
 	if m.ph != previewMin {
 		t.Errorf("a move with no button changed the height to %d", m.ph)
+	}
+}
+
+// The github pane lists the selected repository's alerts and checks, read
+// for it: the most severe first, the rest counted.
+func TestTheGitHubPaneListsAlertsAndChecks(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	m.setLens(columns.GitHub)
+	w.settle(m)
+	for i, l := range m.lines {
+		if l.row != nil && l.row.Remote == "github.com/mika/calendar-sync" {
+			m.moveTo(i)
+		}
+	}
+	m.sync()
+	w.settle(m)
+	s := screen(m)
+	for _, want := range []string{"critical  ical-parser (npm)  < 2.4.1   fixed in 2.4.1  package-lock.json", "low       tmp-dir (npm)", "no fix yet",
+		"no fix yet      package-lock.json", "… 10 more", "✗ test (ubuntu-latest)"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("the pane lacks %q:\n%s", want, s)
+		}
+	}
+	golden(t, "github-detail", m)
+	press(w, m, "J", "J")
+	if s := screen(m); !strings.Contains(s, "~ build") {
+		t.Errorf("the running check is not listed:\n%s", s)
 	}
 }

@@ -44,6 +44,7 @@ type GitHub interface {
 	Viewer(ctx context.Context) (github.Viewer, github.Rate, error)
 	List(ctx context.Context, owner string, kind github.OwnerKind, prev github.Pages, maxPages int) (github.Listing, error)
 	Heavy(ctx context.Context, slugs []string, want github.Want) ([]github.HeavyRepo, github.Rate, error)
+	RepoDetail(ctx context.Context, slug string, want github.DetailWant) (model.RepoDetail, github.Rate, error)
 }
 
 // Cloner clones a repository into a directory.
@@ -132,6 +133,10 @@ type Engine struct {
 	// detailing those being read.
 	details   map[detailKey]model.Detail
 	detailing map[detailKey]bool
+	// ghDetails are the GitHub details of repositories, as last read or
+	// tried; ghLast is the repository the screen asked for last.
+	ghDetails map[model.RemoteKey]*ghEntry
+	ghLast    model.RemoteKey
 	// reads counts the reads of each clone put, so that a detail read
 	// from an older copy of the clone is dropped.
 	reads map[model.CloneKey]int64
@@ -187,7 +192,7 @@ func New(o Options) *Engine {
 	}
 	e := &Engine{roots: o.Roots, host: o.GitHub.Host(), local: o.Local, change: o.Change, gh: o.GitHub, store: o.Store, cloner: o.Cloner, log: log, now: now,
 		lanes: map[model.CloneKey]*hold{}, epoch: map[model.CloneKey]int64{},
-		details: map[detailKey]model.Detail{}, detailing: map[detailKey]bool{}, reads: map[model.CloneKey]int64{},
+		details: map[detailKey]model.Detail{}, detailing: map[detailKey]bool{}, ghDetails: map[model.RemoteKey]*ghEntry{}, reads: map[model.CloneKey]int64{},
 		localPool: newPool(runtime.NumCPU(), idle), netPool: newPool(networkAtOnce, idle), apiPool: newPool(apiAtOnce, idle),
 		idle: idle, owners: map[string]*owner{}, visible: map[string]bool{}, changed: make(chan struct{}, 1)}
 	e.budget = newBudget(now, log)

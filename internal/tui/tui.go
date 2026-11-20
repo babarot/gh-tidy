@@ -30,6 +30,7 @@ type Engine interface {
 	SetNeeds(needs model.Need, visible []string)
 	Changes() <-chan struct{}
 	Detail(clone model.CloneKey, tree string) (model.Detail, bool)
+	GitHubDetail(k model.RemoteKey) model.GitHubDetail
 	Tick()
 
 	Fetch(keys []model.CloneKey) (busy []model.CloneKey)
@@ -130,6 +131,9 @@ type Model struct {
 	pkey    string
 	pfold   map[string]bool
 	detail  *model.Detail
+	// ghd is the GitHub detail of ghdOf, the repository selected.
+	ghd   model.GitHubDetail
+	ghdOf model.RemoteKey
 
 	popup *popup
 
@@ -294,6 +298,12 @@ func (m *Model) sync() {
 		if d, ok := m.eng.Detail(l.row.Clone, tree); ok {
 			m.detail = &d
 		}
+	}
+	// The github pane's alerts and checks, of the repository selected.
+	m.ghd, m.ghdOf = model.GitHubDetail{}, ""
+	if l, ok := m.selected(); ok && l.row != nil && l.row.Remote != "" && l.kind != columns.KindHead && l.kind != columns.KindWorktree &&
+		(m.lens == columns.GitHub || l.kind == columns.KindRemote) {
+		m.ghd, m.ghdOf = m.eng.GitHubDetail(l.row.Remote), l.row.Remote
 	}
 }
 
