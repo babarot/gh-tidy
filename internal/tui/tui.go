@@ -310,6 +310,9 @@ func (m *Model) sync() {
 		(m.lens == columns.GitHub || l.kind == columns.KindRemote) {
 		k = l.row.Remote
 	}
+	if k != m.ghdRested {
+		m.ghdRested = "" // the cursor left the row it rested on
+	}
 	read := k != "" && (m.noTimers || m.ghdRested == k)
 	m.ghd, m.ghdOf, m.ghdDue = m.eng.GitHubDetail(k, read), k, ""
 	if k != "" && !read && m.ghd.State == model.DetailReading {

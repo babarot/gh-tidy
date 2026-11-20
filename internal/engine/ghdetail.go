@@ -64,8 +64,10 @@ func (e *Engine) GitHubDetail(k model.RemoteKey, read bool) model.GitHubDetail {
 	}
 	var h model.Heavy
 	var at time.Time
+	// The latest read of the rows of k, so that the key holds still
+	// whichever order the rows come in.
 	for _, r := range e.rowsByRemote(o, k) {
-		if r.Heavy.Has && r.Heavy.Value.Found {
+		if r.Heavy.Has && r.Heavy.Value.Found && r.Heavy.At.After(at) {
 			h, at = r.Heavy.Value, r.Heavy.At
 		}
 	}
