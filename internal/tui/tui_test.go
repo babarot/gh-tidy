@@ -1135,7 +1135,7 @@ func TestTheActivityBoxShowsTheWork(t *testing.T) {
 	if !strings.Contains(s, "[+] Fetching mika 0/6 fetched") || !strings.Contains(s, "fetching") || !strings.Contains(s, "+1 running") {
 		t.Errorf("the box while fetching:\n%s", s)
 	}
-	if status := strings.TrimSpace(plain(m.statusLine(m.eng.Activity(), true, false))); status != "" {
+	if status := strings.TrimSpace(plain(m.statusLine(m.eng.Activity(), false))); status != "" {
 		t.Errorf("status line beside the box: %q", status)
 	}
 	m.Update(tea.KeyPressMsg{Code: 'w', Text: "w"})
@@ -1193,7 +1193,7 @@ func TestTheRateLimit(t *testing.T) {
 	if !rateIn || !strings.Contains(plain(box[0]), "rate limit 4,952/5,000  │ this load 12 used · 3 saved") {
 		t.Errorf("head: %q", plain(box[0]))
 	}
-	if s := plain(m.statusLine(a, true, rateIn)); strings.Contains(s, "rate limit") {
+	if s := plain(m.statusLine(a, rateIn)); strings.Contains(s, "rate limit") {
 		t.Errorf("the rate limit twice: %q", s)
 	}
 	m.width = 60
@@ -1201,7 +1201,7 @@ func TestTheRateLimit(t *testing.T) {
 	if rateIn || strings.Contains(plain(box[0]), "rate limit") {
 		t.Errorf("a narrow head kept the rate limit: %q", plain(box[0]))
 	}
-	if s := plain(m.statusLine(a, true, rateIn)); !strings.Contains(s, "rate limit 4,952/5,000") {
+	if s := plain(m.statusLine(a, rateIn)); !strings.Contains(s, "rate limit 4,952/5,000") {
 		t.Errorf("status line: %q", s)
 	}
 	m.width = 140
@@ -1603,5 +1603,53 @@ func TestTheQuietHeadStaysAcrossALensSwitch(t *testing.T) {
 	m.relayout()
 	if s := screen(m); !strings.Contains(s, "nothing to do  2") {
 		t.Errorf("after switching there and back:\n%s", s)
+	}
+}
+
+// The box is as tall as what it shows, and takes the bottom of the
+// preview, which closes above it: the list keeps its height and the
+// preview its top.
+func TestTheActivityBoxTakesThePreviewsBottom(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	before := m.screen()
+	height := m.listHeight()
+	a := model.Activity{Verb: "Reading", What: "mika", Started: later.Add(-time.Second), Counts: []model.Count{{Name: "GitHub", Done: 1, Total: 1}},
+		Done: []model.Task{{Kind: "github", Name: "list mika", Note: "304", Start: later.Add(-time.Second), End: later}}}
+	box, _ := m.activityBox(a)
+	if len(box) != 2 {
+		t.Fatalf("a box with one task has %d lines; want the head and the task", len(box))
+	}
+	m.eng = fixedActivity{Engine: m.eng, a: a}
+	after := m.screen()
+	if m.listHeight() != height || len(after) != len(before) {
+		t.Errorf("the list went from %d lines to %d, the screen from %d to %d", height, m.listHeight(), len(before), len(after))
+	}
+	status := len(after) - 2
+	if got := plain(after[status-2]); !strings.Contains(got, "[+] Reading mika") {
+		t.Errorf("the box's head is not at the preview's bottom: %q", got)
+	}
+	if got := plain(after[status-3]); !strings.HasPrefix(got, "╰") {
+		t.Errorf("the preview does not close above the box: %q", got)
+	}
+	top := m.listTop() + height + 1
+	// The top is where it was; only how many lines are below the fold,
+	// which it counts, may differ.
+	title := func(d drawn) string { return strings.Fields(plain(d))[0] + " " + strings.Fields(plain(d))[1] }
+	if !strings.HasPrefix(plain(after[top]), "╭") || title(after[top]) != title(before[top]) {
+		t.Errorf("the preview's top moved: %q, was %q", plain(after[top]), plain(before[top]))
+	}
+	// A low preview keeps its two borders; the box keeps its head and its
+	// newest tasks.
+	tasks := []model.Task{{Kind: "clone", Name: "a"}, {Kind: "clone", Name: "b"}, {Kind: "clone", Name: "c"}}
+	big, _ := m.activityBox(model.Activity{Verb: "Reading", What: "mika", Started: later.Add(-time.Second), Running: tasks})
+	if got := fitBox(big, 3); len(got) != 3 || !strings.Contains(plain(got[0]), "[+]") || !strings.Contains(plain(got[2]), " c ") {
+		t.Errorf("fitBox = %q", func() []string {
+			var out []string
+			for _, d := range got {
+				out = append(out, plain(d))
+			}
+			return out
+		}())
 	}
 }

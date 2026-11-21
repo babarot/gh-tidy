@@ -287,7 +287,7 @@ func (w *World) make(ctx context.Context, r *repo) error {
 		if err := git(ctx, clone, "worktree", "add", "-q", "-b", "retry-backoff", wt); err != nil {
 			return err
 		}
-		if err := commit(ctx, wt, "retry.go", "package runner\n", "Retry with backoff"); err != nil {
+		if err := commit(ctx, wt, "retry.txt", "retry with backoff\n", "Retry with backoff"); err != nil {
 			return err
 		}
 		if err := git(ctx, wt, "push", "-q", "origin", "retry-backoff"); err != nil {
@@ -297,10 +297,10 @@ func (w *World) make(ctx context.Context, r *repo) error {
 		if err := git(ctx, clone, "worktree", "add", "-q", "-b", "socket-close", busy); err != nil {
 			return err
 		}
-		if err := commit(ctx, busy, "socket.go", "package runner\n", "Notice the socket closing"); err != nil {
+		if err := commit(ctx, busy, "socket.txt", "notice the socket closing\n", "Notice the socket closing"); err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(busy, "socket.go"), []byte("package runner\n\n// draft\n"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(busy, "socket.txt"), []byte("notice the socket closing\n\ndraft\n"), 0o644); err != nil {
 			return err
 		}
 		w.at(r.pushed)

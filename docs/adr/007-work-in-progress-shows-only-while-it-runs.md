@@ -12,8 +12,8 @@ Showing all of it costs lines the list needs, and most of the time nothing runs.
 
 ## Decision
 
-- The screen shows the work of a run only while it runs, and for a short constant time after, then gives the lines back to the list. Nothing about work in progress takes lines when nothing runs.
-- Everything that turns on the screen turns on one clock, which ticks only while something is shown that moves or waits to fold; tests stop it. Where the work is shown in a box, the status line does not show it too; the status line shows the progress only when the screen is too short for the box.
+- The screen shows the work of a run only while it runs, and for a short constant time after. It takes its lines from the bottom of the preview, which closes above it: the list and the preview's top do not move as it comes and goes. Nothing about work in progress is shown when nothing runs.
+- Everything that turns on the screen turns on one clock, which ticks only while something is shown that moves or waits to fold; tests stop it. Where the work is shown in a box, the status line does not show it too.
 - What GitHub's rate limit has left is shown as one number, the lower of REST's and GraphQL's, and only while gh tidy asks GitHub's API and for a while after. Which resource it is goes to the log. What gh tidy spent is shown as its own count, never added to what is left, since the limit is shared with gh and other tools.
 - How many workers run is shown only when asked for with a key, and only while work runs. It explains a slow run; it is not something to watch.
 - The words shown for a task are the engine's few words of how it went, never an error's own text, which can hold a remote's address.
@@ -28,4 +28,4 @@ Showing all of it costs lines the list needs, and most of the time nothing runs.
 
 - A new kind of background work shows on the screen through the engine's activity, with a kind and a count; the TUI does not track work of its own.
 - Anything new that moves on the screen uses the one clock, and keeps it ticking only while it needs to.
-- The list's height changes while a run goes on; whatever maps screen lines to rows (the mouse, paging) reads the layout as last drawn.
+- While the box is shown, the preview shows that many lines fewer.

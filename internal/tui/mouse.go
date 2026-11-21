@@ -91,7 +91,7 @@ func (m *Model) mouse(msg tea.MouseMsg) tea.Cmd {
 // the button is let go, as + and - keep it.
 func (m *Model) dragPane(y int) {
 	paneTop := m.listTop() + m.listHeight() + 1
-	most := min(previewMax, m.height-around-m.filterRows()-m.boxRows-1)
+	most := min(previewMax, m.height-around-m.filterRows()-1)
 	m.ph = max(previewMin, min(most, m.ph+paneTop-y))
 	m.scroll()
 }

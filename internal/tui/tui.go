@@ -156,13 +156,8 @@ type Model struct {
 	// spinning says a frame of the spinner is due: it turns while work
 	// goes on.
 	spinning bool
-	// boxRows is how many lines the activity box took when last drawn;
-	// workers says w asked for the workers' line in it.
-	boxRows int
+	// workers says w asked for the workers' line in the activity box.
 	workers bool
-	// syncedBox is boxRows when the rows shown were last told to the
-	// engine.
-	syncedBox int
 
 	width, height int
 	dark          bool
@@ -293,7 +288,6 @@ func (m *Model) refresh() {
 // the row selected.
 func (m *Model) sync() {
 	m.scroll()
-	m.syncedBox = m.boxRows
 	var visible []string
 	for _, l := range m.lines[m.offset:min(len(m.lines), m.offset+m.listHeight())] {
 		if l.row != nil {
@@ -385,11 +379,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.line.Expire(msg.id)
 	case frameMsg:
 		m.spinning = false
-		// The box folding or showing changed the list's height: the rows
-		// shown are told to the engine again.
-		if m.boxRows != m.syncedBox {
-			m.sync()
-		}
 		return m, m.spin()
 	case sayMsg:
 		return m, m.say(msg.kind, msg.text)
