@@ -1,11 +1,11 @@
 -- screen --
  tidy // ‹ mika ›    local │ github                                                         4 can update · 4 with changes · 1 worktree done 
   REPO                        ISSUES    PRS       DEPENDABOT  CI    STARS   PUSHED              MAIN
-  calendar-sync               1         0         2           ✗     11      3d ago              <1
+  calendar-sync               1         0         2           ✗     11      3d ago              ⇣1
   tool-shed                   3         0         1           ✓     23      4d ago              not cloned
-▎ agent-runner ⌥3             4 +1      2         0           ✓     4       2h ago              <6                                          
-  trail-notes                 0         1         0           ~     37      1d ago              <?
-  dotfiles                    0         0         0           ✓     16      3h ago     private  <2
+▎ agent-runner ⌥3             4 +1      2         0           ✓     4       2h ago              ⇣6                                          
+  trail-notes                 0         1         0           ~     37      1d ago              ⇣?
+  dotfiles                    0         0         0           ✓     16      3h ago     private  ⇣2
   pixel-garden                0         0         0           ✓     4       20h ago             =
   weather-cli                 0         0         off         -     37      9d ago     private  not cloned
   color-picker                0         0         0           -     4       15d ago             =

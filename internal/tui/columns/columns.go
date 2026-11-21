@@ -78,7 +78,7 @@ type Item struct {
 // Ctx is what a cell is written with besides its row.
 type Ctx struct {
 	Owner   *model.Owner // All writes the owner before each name
-	Symbols config.Symbols
+	Symbols config.Marks
 	Now     time.Time
 	// Roots are where clones live, and Twins the clones whose name
 	// another clone shares (Twins): those say which root they are in.

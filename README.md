@@ -44,16 +44,18 @@ A clone is matched to GitHub by its origin, not its directory name, so a clone i
 
 Each row is a clone, the ones that need looking at first. Clones with nothing to do and repositories not cloned (neither forks nor archived) are folded at the end; `enter` on a head opens it. `enter` on a clone shows its linked worktrees under it.
 
-The marks are those of [zsh-mini-prompt](https://github.com/babarot/zsh-mini-prompt), and each one is compared with one thing on every row:
+The marks are those of [starship](https://starship.rs) by default, and each one is compared with one thing on every row:
 
 | Mark | Means |
 |---|---|
-| `<N` `>N` `<N>M` `=` | behind, ahead, diverged from, or the same as the upstream. In MAIN, the local default branch against `origin/<default>` |
-| `?` | GitHub's default branch has commits you have not fetched; what they are is known after `f` |
-| `⇣N` | the default branch has N commits the branch checked out lacks: time to rebase |
-| `*` `+` `%` `$` | unstaged, staged, untracked, stashed |
+| `⇣N` `⇡N` `⇣N⇡M` `=` | behind, ahead, diverged from, or the same as the upstream. In MAIN, the local default branch against `origin/<default>` |
+| `?` | in MAIN, GitHub's default branch has commits you have not fetched; what they are is known after `f` |
+| `⇠N` | the default branch has N commits the branch checked out lacks: time to rebase |
+| `!` `+` `?` `$` | unstaged, staged, untracked, stashed |
 | `⌥N` | N linked worktrees |
 | `⋅` | not read yet |
+
+`style = "classic"` under `[symbols.branch]` or `[symbols.changes]` in the config file switches that set to the marks of [zsh-mini-prompt](https://github.com/babarot/zsh-mini-prompt) (`<` `>` `⇣`, `*` `+` `%` `$`), and each mark can be set on its own.
 
 WORKTREES judges each linked worktree: `busy` (changes, unpushed commits, or touched lately), `new` (never committed to: about to be used), `done` (merged and clean: `d` removes it), `idle` (clean, not merged, untouched for two weeks), with how long ago it was made or last touched. `+N br` counts branches in no worktree that hold work found nowhere else.
 

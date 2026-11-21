@@ -17,16 +17,25 @@ func tag(f reflect.StructField) string {
 // template and the checks miss no setting.
 func TestSettingsAreTheFilesKeys(t *testing.T) {
 	var want, got []string
+	// A struct in a table is a table of its own, as symbols.branch.
+	var walk func(name string, typ reflect.Type)
+	walk = func(name string, typ reflect.Type) {
+		if !slices.ContainsFunc(tables, func(t table) bool { return t.Name == name }) {
+			t.Errorf("[%s] is not in tables", name)
+		}
+		for k := range typ.Fields() {
+			if k.Type.Kind() == reflect.Struct {
+				walk(name+"."+tag(k), k.Type)
+				continue
+			}
+			want = append(want, name+"."+tag(k))
+		}
+	}
 	for f := range reflect.TypeFor[File]().Fields() {
 		if f.Type.Kind() != reflect.Struct {
 			continue // [keys], [[sections]] and [[actions]] are not in the table
 		}
-		if !slices.ContainsFunc(tables, func(t table) bool { return t.Name == tag(f) }) {
-			t.Errorf("[%s] is not in tables", tag(f))
-		}
-		for k := range f.Type.Fields() {
-			want = append(want, tag(f)+"."+tag(k))
-		}
+		walk(tag(f), f.Type)
 	}
 	for _, s := range settings {
 		got = append(got, s.Key)
@@ -54,13 +63,14 @@ func TestSettingsAreTheFilesKeys(t *testing.T) {
 func marked() (File, map[string]any) {
 	var f File
 	values := map[string]any{}
-	for tf, tv := range reflect.ValueOf(&f).Elem().Fields() {
-		if tv.Kind() != reflect.Struct {
-			continue
-		}
-		for kf, fv := range tv.Fields() {
-			key := tag(tf) + "." + tag(kf)
+	var mark func(name string, v reflect.Value)
+	mark = func(name string, v reflect.Value) {
+		for kf, fv := range v.Fields() {
+			key := name + "." + tag(kf)
 			switch fv.Kind() {
+			case reflect.Struct:
+				mark(key, fv)
+				continue
 			case reflect.String:
 				fv.SetString(key)
 			case reflect.Slice:
@@ -69,6 +79,11 @@ func marked() (File, map[string]any) {
 				fv.SetBool(true)
 			}
 			values[key] = fv.Interface()
+		}
+	}
+	for tf, tv := range reflect.ValueOf(&f).Elem().Fields() {
+		if tv.Kind() == reflect.Struct {
+			mark(tag(tf), tv)
 		}
 	}
 	return f, values

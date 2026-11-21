@@ -14,7 +14,7 @@ import (
 var now = time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
 
 func ctx(counts bool) Ctx {
-	s := config.Default().Symbols
+	s := config.Default().Symbols.Marks()
 	s.Counts = counts
 	return Ctx{Owner: &model.Owner{Login: "me"}, Symbols: s, Now: now}
 }
@@ -59,12 +59,12 @@ func TestMainCell(t *testing.T) {
 		want   string
 	}{
 		{"up to date", true, nil, false, "="},
-		{"behind", true, func(c *model.Clone) { c.Branches[0].Behind = 6 }, false, "<6"},
-		{"behind, no counts", false, func(c *model.Clone) { c.Branches[0].Behind = 6 }, false, "<"},
-		{"GitHub ahead only", true, nil, true, "<?"},
-		{"behind and GitHub ahead", true, func(c *model.Clone) { c.Branches[0].Behind = 2 }, true, "<2?"},
-		{"diverged", true, func(c *model.Clone) { c.Branches[0].Behind, c.Branches[0].Ahead = 3, 1 }, false, "<3>1"},
-		{"diverged, no counts", false, func(c *model.Clone) { c.Branches[0].Behind, c.Branches[0].Ahead = 3, 1 }, false, "<>"},
+		{"behind", true, func(c *model.Clone) { c.Branches[0].Behind = 6 }, false, "⇣6"},
+		{"behind, no counts", false, func(c *model.Clone) { c.Branches[0].Behind = 6 }, false, "⇣"},
+		{"GitHub ahead only", true, nil, true, "⇣?"},
+		{"behind and GitHub ahead", true, func(c *model.Clone) { c.Branches[0].Behind = 2 }, true, "⇣2?"},
+		{"diverged", true, func(c *model.Clone) { c.Branches[0].Behind, c.Branches[0].Ahead = 3, 1 }, false, "⇣3⇡1"},
+		{"diverged, no counts", false, func(c *model.Clone) { c.Branches[0].Behind, c.Branches[0].Ahead = 3, 1 }, false, "⇕"},
 		{"no origin", true, func(c *model.Clone) { c.OriginURL = "" }, false, "no origin"},
 		{"no local main", true, func(c *model.Clone) { c.Branches = nil }, false, "no main"},
 		{"tracks upstream", true, func(c *model.Clone) { c.Branches[0].Upstream = "upstream/main" }, false, "tracks upstream/main"},
@@ -130,13 +130,13 @@ func TestCheckedOutAndChanges(t *testing.T) {
 		c.Unstaged, c.Staged, c.Untracked, c.Stash = 1, 2, 0, 1
 	})
 	it := Item{Kind: KindClone, Row: r}
-	if got := text(checkedOutCell(ctx(true), it)); got != "fix >2 ⇣5" {
+	if got := text(checkedOutCell(ctx(true), it)); got != "fix ⇡2 ⇠5" {
 		t.Errorf("checked out: %q", got)
 	}
-	if got := text(changesCell(ctx(true), it)); got != "*1 +2 $1" {
+	if got := text(changesCell(ctx(true), it)); got != "!1 +2 $1" {
 		t.Errorf("changes: %q", got)
 	}
-	if got := text(changesCell(ctx(false), it)); got != "*+$" {
+	if got := text(changesCell(ctx(false), it)); got != "!+$" {
 		t.Errorf("changes without counts: %q", got)
 	}
 	if got := text(checkedOutCell(ctx(true), Item{Kind: KindClone, Row: row(nil)})); got != "main" {
@@ -270,10 +270,10 @@ func TestSections(t *testing.T) {
 		}
 	}
 	want := []string{
-		"<3  on origin/main, not in your main · p brings them in",
+		"⇣3  on origin/main, not in your main · p brings them in",
 		"NEVER PUSHED  fix exists only on this Mac",
-		"⇣2  on main, not in fix",
-		"*1 %1  uncommitted, on fix",
+		"⇠2  on main, not in fix",
+		"!1 ?1  uncommitted, on fix",
 	}
 	if !slices.Equal(heads, want) {
 		t.Errorf("heads:\n got %q\nwant %q", heads, want)

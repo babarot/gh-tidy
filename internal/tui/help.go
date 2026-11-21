@@ -42,7 +42,7 @@ var helpScopes = []struct {
 
 // helpSections are every key, with the keys the user set, the actions the
 // config file adds, what the mouse does, and the marks.
-func helpSections(keys keymap.Map, actions []config.Action, sym config.Symbols) []helpSection {
+func helpSections(keys keymap.Map, actions []config.Action, sym config.Marks) []helpSection {
 	var out []helpSection
 	for _, s := range helpScopes {
 		sec := helpSection{title: s.title}
@@ -125,7 +125,7 @@ func keysReference() string {
 	b.WriteString("Every key gh tidy reads, with its action's name under `[keys]` in the config file ([configuration](configuration.md)), what the mouse does, and the marks. `?` shows the same in gh tidy, with the keys you set.\n\n")
 	b.WriteString("This page is written from the code (`go test ./internal/tui -run TestKeysReference -update`).\n")
 	d := config.Default()
-	for _, s := range helpSections(keymap.Default(), nil, d.Symbols) {
+	for _, s := range helpSections(keymap.Default(), nil, d.Symbols.Marks()) {
 		fmt.Fprintf(&b, "\n## %s\n\n", s.title)
 		named := false
 		for _, r := range s.rows {

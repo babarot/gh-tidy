@@ -92,15 +92,15 @@ This page is written from the code (`go test ./internal/tui -run TestKeysReferen
 
 | | Does |
 |---|---|
-| `<` | behind: commits to bring in |
-| `>` | ahead: commits not pushed |
-| `<>` | behind and ahead; with counts, both numbers (<2>1) |
+| `⇣` | behind: commits to bring in |
+| `⇡` | ahead: commits not pushed |
+| `⇕` | behind and ahead; with counts, both numbers (⇣2⇡1) |
 | `=` | even with what it follows |
-| `⇣` | a branch behind the default branch |
+| `⇠` | a branch behind the default branch |
 | `?` | GitHub has commits not fetched yet |
-| `*` | files changed, not staged |
+| `!` | files changed, not staged |
 | `+` | files staged |
-| `%` | files not tracked |
+| `?` | files not tracked |
 | `$` | stash entries |
 | `⌥` | worktrees besides the main one |
 | `⋅` | not read yet |
