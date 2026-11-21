@@ -374,6 +374,18 @@ func (x Ctx) worktreeVerdict(r *model.Row, w model.Worktree) Cell {
 	return c
 }
 
+// pathCell is where the clone is, or the worktree on a worktree's row,
+// with the home written as ~.
+func pathCell(x Ctx, it Item) Cell {
+	switch {
+	case it.Kind == KindWorktree:
+		return Cell{{Text: x.Short(it.Tree.Path), Role: Muted}}
+	case it.Kind != KindClone || it.Row.Clone == "":
+		return nil
+	}
+	return Cell{{Text: x.Short(string(it.Row.Clone)), Role: Muted}}
+}
+
 func fetchedCell(x Ctx, it Item) Cell {
 	r := it.Row
 	switch {
