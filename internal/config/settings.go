@@ -60,8 +60,15 @@ func as[T any](v any) T {
 
 // where is a setting's key as messages write it: [table] key.
 func where(key string) string {
-	table, name, _ := strings.Cut(key, ".")
+	table, name := split(key)
 	return "[" + table + "] " + name
+}
+
+// split is a setting's key as its table and its name: the table is all
+// before the last dot, as in symbols.branch.style.
+func split(key string) (table, name string) {
+	i := strings.LastIndex(key, ".")
+	return key[:i], key[i+1:]
 }
 
 type (
@@ -75,6 +82,8 @@ type (
 	// ownersKind is a list of owners, as "owner" or "github.com/owner":
 	// gh tidy reads github.com only.
 	ownersKind struct{}
+	// styleKind is the name of a style of marks.
+	styleKind struct{}
 	// markKind is a mark the list writes: printed, with no space, and one
 	// cell wide per character, or the columns would not line up. Empty
 	// writes nothing.
@@ -119,6 +128,14 @@ func (ownersKind) check(key string, v any) []error {
 	return errs
 }
 func (ownersKind) toml(v any) string { return tomlList(as[[]string](v)) }
+
+func (styleKind) check(key string, v any) []error {
+	if s := as[string](v); !slices.Contains(styleNames, s) {
+		return []error{fmt.Errorf("%s %q is not one of %s", where(key), s, strings.Join(styleNames, ", "))}
+	}
+	return nil
+}
+func (styleKind) toml(v any) string { return fmt.Sprintf("%q", as[string](v)) }
 
 func (markKind) check(key string, v any) []error {
 	s := as[string](v)
@@ -178,7 +195,9 @@ var tables = []table{
 	{Name: "tui"},
 	{Name: "columns", Doc: "The columns of each set, in order. v switches between the sets."},
 	{Name: "preview"},
-	{Name: "symbols", Doc: "The marks the list writes, after zsh-mini-prompt. Change them to match your prompt; each must be one cell wide per character, and an empty one writes nothing."},
+	{Name: "symbols", Doc: "The marks the list writes. Each must be one cell wide per character, and an empty one writes nothing."},
+	{Name: "symbols.branch", Doc: "Where a branch is against what it follows, in MAIN and CHECKED OUT. A mark written here is over the style's; the defaults below are starship's."},
+	{Name: "symbols.changes", Doc: "The changes in a clone, in CHANGES. A mark written here is over the style's; the defaults below are starship's."},
 	{Name: "cleanup"},
 }
 
@@ -203,19 +222,25 @@ var settings = []setting{
 	{Key: "preview.sections", Kind: listKind{}, Value: func(f File) any { return f.Preview.Sections },
 		Doc: "The parts of the pane below the list, in order: incoming (commits on origin's default branch that p brings in), unpushed, behind_main (commits on the default branch the checked out branch lacks), changes (the files changed), stash and worktrees. A part with nothing to show is left out."},
 
-	{Key: "symbols.unstaged", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Unstaged }, Doc: "Files changed, not staged."},
-	{Key: "symbols.staged", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Staged }, Doc: "Files staged."},
-	{Key: "symbols.untracked", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Untracked }, Doc: "Files not tracked."},
-	{Key: "symbols.stash", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Stash }, Doc: "Stash entries."},
-	{Key: "symbols.behind", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Behind }, Doc: "Behind: commits to bring in."},
-	{Key: "symbols.ahead", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Ahead }, Doc: "Ahead: commits not pushed."},
-	{Key: "symbols.diverged", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Diverged }, Doc: "Behind and ahead, when counts are not written."},
-	{Key: "symbols.synced", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Synced }, Doc: "Even with what it follows."},
-	{Key: "symbols.behind_main", Kind: markKind{}, Value: func(f File) any { return f.Symbols.BehindMain }, Doc: "A branch behind the default branch."},
-	{Key: "symbols.github_ahead", Kind: markKind{}, Value: func(f File) any { return f.Symbols.GitHubAhead }, Doc: "GitHub has commits not fetched yet."},
 	{Key: "symbols.worktree", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Worktree }, Doc: "Worktrees besides the main one."},
 	{Key: "symbols.counts", Kind: boolKind{}, Value: func(f File) any { return f.Symbols.Counts },
-		Doc: "Write how many after a mark (*3); false writes the mark alone (*)."},
+		Doc: "Write how many after a mark (!3); false writes the mark alone (!)."},
+
+	{Key: "symbols.branch.style", Kind: styleKind{}, Value: func(f File) any { return f.Symbols.Branch.Style },
+		Doc: `The marks not written here: "starship" (default) or "classic" (zsh-mini-prompt's: <, >, <>, ⇣ for behind_main).`},
+	{Key: "symbols.branch.behind", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Branch.Behind }, Doc: "Behind: commits to bring in."},
+	{Key: "symbols.branch.ahead", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Branch.Ahead }, Doc: "Ahead: commits not pushed."},
+	{Key: "symbols.branch.diverged", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Branch.Diverged }, Doc: "Behind and ahead, when counts are not written."},
+	{Key: "symbols.branch.synced", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Branch.Synced }, Doc: "Even with what it follows."},
+	{Key: "symbols.branch.behind_main", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Branch.BehindMain }, Doc: "A branch behind the default branch."},
+	{Key: "symbols.branch.github_ahead", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Branch.GitHubAhead }, Doc: "GitHub has commits not fetched yet."},
+
+	{Key: "symbols.changes.style", Kind: styleKind{}, Value: func(f File) any { return f.Symbols.Changes.Style },
+		Doc: `The marks not written here: "starship" (default) or "classic" (zsh-mini-prompt's: *, +, %, $).`},
+	{Key: "symbols.changes.unstaged", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Changes.Unstaged }, Doc: "Files changed, not staged."},
+	{Key: "symbols.changes.staged", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Changes.Staged }, Doc: "Files staged."},
+	{Key: "symbols.changes.untracked", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Changes.Untracked }, Doc: "Files not tracked."},
+	{Key: "symbols.changes.stash", Kind: markKind{}, Value: func(f File) any { return f.Symbols.Changes.Stash }, Doc: "Stash entries."},
 
 	{Key: "cleanup.protect", Kind: listKind{}, Value: func(f File) any { return f.Cleanup.Protect },
 		Doc: "Branches d never deletes, besides the default branch and the current one."},
@@ -246,7 +271,7 @@ func template() string {
 		b.WriteString("\n[" + t.Name + "]\n")
 		b.WriteString(comment(t.Doc))
 		for _, s := range settings {
-			if table, key, _ := strings.Cut(s.Key, "."); table == t.Name {
+			if table, key := split(s.Key); table == t.Name {
 				b.WriteString(comment(s.Doc) + "# " + key + " = " + s.Kind.toml(s.Value(def)) + "\n")
 			}
 		}

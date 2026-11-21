@@ -144,3 +144,31 @@ func TestExpand(t *testing.T) {
 		t.Errorf("Expand = %q", got)
 	}
 }
+
+// A style sets the marks of its table that the file does not write; a
+// mark written, empty too, is over it, and the other table keeps its own.
+func TestSymbolStyles(t *testing.T) {
+	f, err := Parse("t", []byte(`
+[symbols.branch]
+style = "classic"
+synced = ""
+
+[symbols.changes]
+untracked = "%"
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := f.Symbols.Marks()
+	want := Marks{Unstaged: "!", Staged: "+", Untracked: "%", Stash: "$",
+		Behind: "<", Ahead: ">", Diverged: "<>", Synced: "", BehindMain: "⇣", GitHubAhead: "?", Worktree: "⌥", Counts: true}
+	if m != want {
+		t.Errorf("marks:\n got %+v\nwant %+v", m, want)
+	}
+	if _, err := Parse("t", []byte("[symbols.changes]\nstyle = \"fancy\"\n")); err == nil || !strings.Contains(err.Error(), `[symbols.changes] style "fancy" is not one of starship, classic`) {
+		t.Errorf("a style that is not one: %v", err)
+	}
+	if _, err := Parse("t", []byte("[symbols]\nbehind = \"<\"\n")); err == nil || !strings.Contains(err.Error(), "[symbols] behind is no longer a setting: it is behind under [symbols.branch]") {
+		t.Errorf("a mark where it was: %v", err)
+	}
+}

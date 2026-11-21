@@ -1,11 +1,11 @@
 -- screen --
  tidy // ‹ mika ›    local │ github                                                         4 can update · 4 with changes · 1 worktree done 
   REPO                        MAIN            CHECKED OUT                   CHANGES         WORKTREES                              FETCHED
-▎ agent-runner ⌥3             <6              retry-backoff >2 ⇣5           *1              1 busy  1 new  1 done                  5h ago   
-  scratchpad local only       no origin       main                          %4                                                     -
-  dotfiles                    <2              main                          *3 %2 $1                                               1h ago
-  calendar-sync               <1              feat/ics-export = ⇣1          *1 +2                                                  1h ago
-  trail-notes                 <?              main                                                                                 1h ago
+▎ agent-runner ⌥3             ⇣6              retry-backoff ⇡2 ⇠5           !1              1 busy  1 new  1 done                  5h ago   
+  scratchpad local only       no origin       main                          ?4                                                     -
+  dotfiles                    ⇣2              main                          !3 ?2 $1                                               1h ago
+  calendar-sync               ⇣1              feat/ics-export = ⇠1          !1 +2                                                  1h ago
+  trail-notes                 ⇣?              main                                                                                 1h ago
   ▸ nothing to do  2
   ▸ not cloned  2   c clones one
 
@@ -26,7 +26,7 @@
 
  7 clones · 2 not cloned
 ╭─ agent-runner ───────────────────────────────────────────────────────────────────────────────────────────────────── ↓ 12 more · +/- size ╮
-│ ▾ <6  on origin/main, not in your main · p brings them in                           │ path     ~/github.com/mika/agent-runner            │
+│ ▾ ⇣6  on origin/main, not in your main · p brings them in                           │ path     ~/github.com/mika/agent-runner            │
 │   d3665f0 Bump golang.org/x/net from 0.45.0 to 0.47.0  hana 1h                      │ fetched  5h ago                                    │
 │   f02d507 Document the cache layout  kai 2h                                         │ p        updates main · ff, not checked out        │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

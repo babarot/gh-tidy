@@ -100,7 +100,7 @@ type Model struct {
 	actions  []config.Action
 	cleanup  config.Cleanup
 	keys     keymap.Map
-	sym      config.Symbols
+	sym      config.Marks
 	cols     map[columns.Lens][]columns.Column
 	sections []columns.Section
 	themeArg string
@@ -211,7 +211,7 @@ func New(o Options) (*Model, error) {
 	if now == nil {
 		now = time.Now
 	}
-	m := &Model{eng: o.Engine, cmds: o.Commands, cwd: o.Cwd, actions: o.Config.Actions, cleanup: o.Config.Cleanup, keys: keys, sym: o.Config.Symbols, cols: cols, sections: secs, themeArg: o.Config.TUI.Theme,
+	m := &Model{eng: o.Engine, cmds: o.Commands, cwd: o.Cwd, actions: o.Config.Actions, cleanup: o.Config.Cleanup, keys: keys, sym: o.Config.Symbols.Marks(), cols: cols, sections: secs, themeArg: o.Config.TUI.Theme,
 		save: o.Save, home: o.Home, now: now, noTimers: o.NoTimers, roots: o.Roots,
 		owners: append([]string{All}, o.Owners...), owner: o.Owner, lens: columns.Local, cursor: o.Select,
 		order: map[string]int{}, expanded: map[string]bool{}, folds: map[string]bool{}, pfold: map[string]bool{}, top: map[string]bool{},

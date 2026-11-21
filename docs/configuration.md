@@ -44,33 +44,46 @@ This page is written from the code (`go test ./internal/config -run TestConfigur
 # sections = ["incoming", "unpushed", "behind_main", "changes", "stash", "worktrees"]
 
 [symbols]
-# The marks the list writes, after zsh-mini-prompt. Change them to match your
-# prompt; each must be one cell wide per character, and an empty one writes
-# nothing.
-# Files changed, not staged.
-# unstaged = "*"
-# Files staged.
-# staged = "+"
-# Files not tracked.
-# untracked = "%"
-# Stash entries.
-# stash = "$"
+# The marks the list writes. Each must be one cell wide per character, and an
+# empty one writes nothing.
+# Worktrees besides the main one.
+# worktree = "⌥"
+# Write how many after a mark (!3); false writes the mark alone (!).
+# counts = true
+
+[symbols.branch]
+# Where a branch is against what it follows, in MAIN and CHECKED OUT. A mark
+# written here is over the style's; the defaults below are starship's.
+# The marks not written here: "starship" (default) or "classic"
+# (zsh-mini-prompt's: <, >, <>, ⇣ for behind_main).
+# style = "starship"
 # Behind: commits to bring in.
-# behind = "<"
+# behind = "⇣"
 # Ahead: commits not pushed.
-# ahead = ">"
+# ahead = "⇡"
 # Behind and ahead, when counts are not written.
-# diverged = "<>"
+# diverged = "⇕"
 # Even with what it follows.
 # synced = "="
 # A branch behind the default branch.
-# behind_main = "⇣"
+# behind_main = "⇠"
 # GitHub has commits not fetched yet.
 # github_ahead = "?"
-# Worktrees besides the main one.
-# worktree = "⌥"
-# Write how many after a mark (*3); false writes the mark alone (*).
-# counts = true
+
+[symbols.changes]
+# The changes in a clone, in CHANGES. A mark written here is over the style's;
+# the defaults below are starship's.
+# The marks not written here: "starship" (default) or "classic"
+# (zsh-mini-prompt's: *, +, %, $).
+# style = "starship"
+# Files changed, not staged.
+# unstaged = "!"
+# Files staged.
+# staged = "+"
+# Files not tracked.
+# untracked = "?"
+# Stash entries.
+# stash = "$"
 
 [cleanup]
 # Branches d never deletes, besides the default branch and the current one.

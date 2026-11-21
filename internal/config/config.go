@@ -65,24 +65,70 @@ type Preview struct {
 	Sections []string `toml:"sections"`
 }
 
-// Symbols are the marks the list writes, after zsh-mini-prompt by
-// default, so that they read as the user's prompt does. Each must be as
-// many cells wide as it has characters, or the columns would not line up;
-// an empty one writes nothing (starship writes nothing for up to date).
+// Symbols are the marks the list writes. The marks of the branches and of
+// the changes each follow a style, starship's (the default) or classic
+// (zsh-mini-prompt's), so that they read as the user's prompt does, and a
+// mark written in the file is over its style's. Each must be as many cells
+// wide as it has characters, or the columns would not line up; an empty
+// one writes nothing.
 type Symbols struct {
-	Unstaged    string `toml:"unstaged"`
-	Staged      string `toml:"staged"`
-	Untracked   string `toml:"untracked"`
-	Stash       string `toml:"stash"`
+	Worktree string `toml:"worktree"`
+	// Counts writes how many after a mark (*3), or the mark alone (*).
+	Counts  bool          `toml:"counts"`
+	Branch  BranchSymbols `toml:"branch"`
+	Changes ChangeSymbols `toml:"changes"`
+}
+
+// BranchSymbols are the marks of where a branch is against what it
+// follows, in MAIN and CHECKED OUT.
+type BranchSymbols struct {
+	Style       string `toml:"style"`
 	Behind      string `toml:"behind"`
 	Ahead       string `toml:"ahead"`
 	Diverged    string `toml:"diverged"`
 	Synced      string `toml:"synced"`
 	BehindMain  string `toml:"behind_main"`
 	GitHubAhead string `toml:"github_ahead"`
-	Worktree    string `toml:"worktree"`
-	// Counts writes how many after a mark (*3), or the mark alone (*).
-	Counts bool `toml:"counts"`
+}
+
+// ChangeSymbols are the marks of the changes in a clone, in CHANGES.
+type ChangeSymbols struct {
+	Style     string `toml:"style"`
+	Unstaged  string `toml:"unstaged"`
+	Staged    string `toml:"staged"`
+	Untracked string `toml:"untracked"`
+	Stash     string `toml:"stash"`
+}
+
+// The styles, by name. Every mark of a style is one cell wide, also on a
+// terminal that draws the characters of ambiguous width two cells wide.
+var (
+	branchStyles = map[string]BranchSymbols{
+		"starship": {Style: "starship", Behind: "⇣", Ahead: "⇡", Diverged: "⇕", Synced: "=", BehindMain: "⇠", GitHubAhead: "?"},
+		"classic":  {Style: "classic", Behind: "<", Ahead: ">", Diverged: "<>", Synced: "=", BehindMain: "⇣", GitHubAhead: "?"},
+	}
+	changeStyles = map[string]ChangeSymbols{
+		"starship": {Style: "starship", Unstaged: "!", Staged: "+", Untracked: "?", Stash: "$"},
+		"classic":  {Style: "classic", Unstaged: "*", Staged: "+", Untracked: "%", Stash: "$"},
+	}
+	styleNames = []string{"starship", "classic"}
+)
+
+// Marks are the marks the list writes, each as the file and its style set
+// it.
+type Marks struct {
+	Unstaged, Staged, Untracked, Stash                       string
+	Behind, Ahead, Diverged, Synced, BehindMain, GitHubAhead string
+	Worktree                                                 string
+	Counts                                                   bool
+}
+
+// Marks are s's marks for the list.
+func (s Symbols) Marks() Marks {
+	b, c := s.Branch, s.Changes
+	return Marks{Unstaged: c.Unstaged, Staged: c.Staged, Untracked: c.Untracked, Stash: c.Stash,
+		Behind: b.Behind, Ahead: b.Ahead, Diverged: b.Diverged, Synced: b.Synced, BehindMain: b.BehindMain, GitHubAhead: b.GitHubAhead,
+		Worktree: s.Worktree, Counts: s.Counts}
 }
 
 // Core is where clones are and how they are read.
@@ -155,8 +201,7 @@ func Default() File {
 			GitHub: []string{"repo", "issues", "prs", "dependabot", "ci", "stars", "pushed", "visibility", "main"},
 		},
 		Preview: Preview{Sections: []string{"incoming", "unpushed", "behind_main", "changes", "stash", "worktrees"}},
-		Symbols: Symbols{Unstaged: "*", Staged: "+", Untracked: "%", Stash: "$", Behind: "<", Ahead: ">", Diverged: "<>",
-			Synced: "=", BehindMain: "⇣", GitHubAhead: "?", Worktree: "⌥", Counts: true},
+		Symbols: Symbols{Worktree: "⌥", Counts: true, Branch: branchStyles["starship"], Changes: changeStyles["starship"]},
 		Cleanup: Cleanup{Protect: []string{}, WorktreeRemove: []string{"git", "worktree", "remove", "{path}"}},
 	}
 }
@@ -193,6 +238,7 @@ func Parse(path string, data []byte) (File, error) {
 	if err := removedSettings(data); err != nil {
 		return f, fmt.Errorf("%s: %w", path, err)
 	}
+	f.Symbols = styled(f.Symbols, data)
 	dec := toml.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&f); err != nil {
@@ -223,6 +269,38 @@ var removed = map[string]string{
 	"tui.hide":               "the clones with nothing to do are a section at the end of the list, folded by its head",
 	"tui.sort":               "the list is in the order of what needs attention",
 	"tui.detail_height":      "the pane's height is changed with + and -, and kept for the next start",
+	"symbols.unstaged":       "it is unstaged under [symbols.changes], whose style sets the marks not written",
+	"symbols.staged":         "it is staged under [symbols.changes], whose style sets the marks not written",
+	"symbols.untracked":      "it is untracked under [symbols.changes], whose style sets the marks not written",
+	"symbols.stash":          "it is stash under [symbols.changes], whose style sets the marks not written",
+	"symbols.behind":         "it is behind under [symbols.branch], whose style sets the marks not written",
+	"symbols.ahead":          "it is ahead under [symbols.branch], whose style sets the marks not written",
+	"symbols.diverged":       "it is diverged under [symbols.branch], whose style sets the marks not written",
+	"symbols.synced":         "it is synced under [symbols.branch], whose style sets the marks not written",
+	"symbols.behind_main":    "it is behind_main under [symbols.branch], whose style sets the marks not written",
+	"symbols.github_ahead":   "it is github_ahead under [symbols.branch], whose style sets the marks not written",
+}
+
+// styled is s with the marks of the styles data names, so that the marks
+// data writes are decoded over them. A style that is not one is left for
+// the check to name.
+func styled(s Symbols, data []byte) Symbols {
+	var raw struct {
+		Symbols struct {
+			Branch  struct{ Style string } `toml:"branch"`
+			Changes struct{ Style string } `toml:"changes"`
+		} `toml:"symbols"`
+	}
+	if toml.Unmarshal(data, &raw) != nil {
+		return s // the strict decode says where
+	}
+	if b, ok := branchStyles[raw.Symbols.Branch.Style]; ok {
+		s.Branch = b
+	}
+	if c, ok := changeStyles[raw.Symbols.Changes.Style]; ok {
+		s.Changes = c
+	}
+	return s
 }
 
 func removedSettings(data []byte) error {
