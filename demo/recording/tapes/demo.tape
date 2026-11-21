@@ -12,7 +12,7 @@ Set TypingSpeed 60ms
 Set Theme "Catppuccin Mocha"
 
 Hide
-Type "rm -rf demo/recording/out/world && go build -o demo/recording/out/recording ./demo/recording && ./demo/recording/out/recording build demo/recording/out/world && gh() { ./demo/recording/out/recording run demo/recording/out/world; } && echo world-$((40+2))"
+Type `w=${TMPDIR:-/tmp}/gh-tidy-demo-world && rm -rf "$w" && go build -o demo/recording/out/recording ./demo/recording && ./demo/recording/out/recording build "$w" && gh() { ./demo/recording/out/recording run "$w"; } && echo world-$((40+2))`
 Enter
 Wait+Screen@90s /world-42/
 Type "clear"

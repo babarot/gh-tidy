@@ -27,14 +27,12 @@ const (
 	around     = 7
 )
 
-// The activity box: how long it stays after the run ends, how many tasks
-// it shows, and how many lines of the list it leaves at the least; a
-// shorter screen shows the work on the status line instead. The rate
-// limit stays rateFor after the last request to GitHub's API.
+// The activity box: how long it stays after the run ends, and how many
+// tasks it shows at the most. The rate limit stays rateFor after the last
+// request to GitHub's API.
 const (
 	foldAfter = 3 * time.Second
 	boxTasks  = 3
-	minList   = 3
 	rateFor   = 10 * time.Second
 )
 
@@ -50,10 +48,11 @@ func (m *Model) filterRows() int {
 // filter and the column titles.
 func (m *Model) listTop() int { return 2 + m.filterRows() }
 
-// listHeight is how many lines the list shows: what the activity box,
-// as last drawn, leaves.
+// listHeight is how many lines the list shows. The activity box takes
+// none: it is drawn over the preview, so that nothing moves as it comes
+// and goes.
 func (m *Model) listHeight() int {
-	return max(1, m.height-m.ph-around-m.filterRows()-m.boxRows)
+	return max(1, m.height-m.ph-around-m.filterRows())
 }
 
 // scroll keeps the cursor on the screen.
@@ -98,13 +97,6 @@ func (m *Model) screen() []drawn {
 	w := m.width
 	a := m.eng.Activity()
 	box, rateIn := m.activityBox(a)
-	if m.height-m.ph-around-m.filterRows()-len(box) < minList {
-		box, rateIn = nil, false
-	}
-	if len(box) != m.boxRows {
-		m.boxRows = len(box)
-		m.scroll()
-	}
 	var ls []drawn
 	ls = append(ls, m.header())
 	if m.filterRows() > 0 {
@@ -122,9 +114,15 @@ func (m *Model) screen() []drawn {
 		ls = append(ls, m.row(m.lines[j], j == m.sel, cols, ws))
 	}
 	ls = append(ls, m.summary())
-	ls = append(ls, m.preview(len(ls))...)
-	ls = append(ls, box...)
-	ls = append(ls, m.statusLine(a, len(box) > 0, rateIn), m.hintLine(len(ls)+1))
+	pane := m.preview(len(ls))
+	// The box covers the bottom of the preview, as many lines as it
+	// shows; what it covers takes no click meanwhile.
+	box = box[:min(len(box), len(pane))]
+	from := len(ls) + len(pane) - len(box)
+	copy(pane[len(pane)-len(box):], box)
+	m.hits = slices.DeleteFunc(m.hits, func(h hit) bool { return h.y >= from && h.y < from+len(box) })
+	ls = append(ls, pane...)
+	ls = append(ls, m.statusLine(a, rateIn), m.hintLine(len(ls)+1))
 	return ls
 }
 
@@ -436,17 +434,13 @@ func (m *Model) preview(top int) []drawn {
 	return out
 }
 
-// statusLine says what was said last, or else, when the activity box is
-// not shown, what is being done: the spinner, the first kind of work not
-// done with its count and its bar, and the counts of the others. On the
-// right is the rate limit, when it is shown and the box's head has no
-// room for it.
-func (m *Model) statusLine(a model.Activity, boxed, rateIn bool) drawn {
+// statusLine says what was said last; the work being done is in the
+// activity box. On the right is the rate limit, when it is shown and the
+// box's head has no room for it.
+func (m *Model) statusLine(a model.Activity, rateIn bool) drawn {
 	left := []cell{{text: " "}}
 	if msg, ok := m.line.Current(m.now()); ok {
 		left = append(left, cell{text: msg.Text, role: kindRole[msg.Kind]})
-	} else if a.Busy() && !boxed {
-		left = append(left, m.progress(a)...)
 	}
 	var right []cell
 	if m.rateShown(a) && !rateIn {
@@ -563,9 +557,6 @@ func (m *Model) activityBox(a model.Activity) (box []drawn, rateIn bool) {
 	if n := boxTasks - len(shown); n > 0 {
 		shown = append(slices.Clone(a.Done[max(0, len(a.Done)-n):]), shown...)
 	}
-	for range boxTasks - len(shown) {
-		box = append(box, drawn{parts: cut(nil, w)})
-	}
 	for _, t := range shown {
 		box = append(box, m.taskLine(t, now))
 	}
@@ -635,39 +626,6 @@ func thousands(n int) string {
 var kindRole = map[statusline.Kind]columns.Role{
 	statusline.Info: roleMuted, statusline.Working: roleAccent, statusline.Done: roleOK,
 	statusline.Refused: rolePrompt, statusline.Failed: roleWarn,
-}
-
-// countWords say what a count of each kind of work does.
-var countWords = map[string]string{"clones": "reading clones", "GitHub": "reading GitHub", "fetched": "fetching", "updated": "updating",
-	"cleaned": "cleaning up", "cloned": "cloning"}
-
-// progressBar is how many cells the bar takes.
-const progressBar = 10
-
-// progress is the spinner and the counts of a run going on.
-func (m *Model) progress(a model.Activity) []cell {
-	var open []model.Count
-	for _, c := range a.Counts {
-		if c.Done < c.Total {
-			open = append(open, c)
-		}
-	}
-	parts := []cell{{text: statusline.Spinner(m.now()) + " ", role: roleAccent}}
-	if len(open) == 0 {
-		return append(parts, cell{text: strings.ToLower(a.Verb), role: roleAccent})
-	}
-	first := open[0]
-	words := countWords[first.Name]
-	if words == "" {
-		words = first.Name
-	}
-	full := statusline.Bar(first.Done, first.Total, progressBar)
-	parts = append(parts, cell{text: fmt.Sprintf("%s %d/%d ", words, first.Done, first.Total), role: roleAccent},
-		cell{text: strings.Repeat("▰", full), role: roleAccent}, cell{text: strings.Repeat("▱", progressBar-full), role: roleBorder})
-	for _, c := range open[1:] {
-		parts = append(parts, cell{text: fmt.Sprintf(" · %s %d/%d", c.Name, c.Done, c.Total), role: roleMuted})
-	}
-	return parts
 }
 
 // hint is a key in the key line and what it does; changes says the key
