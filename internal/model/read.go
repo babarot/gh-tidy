@@ -115,8 +115,9 @@ type Row struct {
 	// for a clone with linked worktrees.
 	Facts Read[CleanupFacts]
 
-	// Op is what is being done to the clone, or what was done, until the
-	// user puts the results away. Not kept between starts.
+	// Op is what is being done to the clone, or what was done: until a
+	// while after, or for a failure until the user puts the results away.
+	// Not kept between starts.
 	Op Op `json:"-"`
 	// New counts the open issues and pull requests made since the user
 	// last saw the repository, worked out when the owner is handed out.
