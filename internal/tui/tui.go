@@ -512,7 +512,7 @@ func (m *Model) quit() tea.Cmd {
 // resultFor is how long the result of a change that went well, or was
 // left with why, stays on its row; a failure stays until esc. A constant:
 // long enough to read, short enough that the list takes its order again.
-const resultFor = 10 * time.Second
+const resultFor = 4 * time.Second
 
 // ageResults puts away the results shown longer than resultFor, but on
 // the row the cursor is on, whose time starts when the cursor leaves it,
