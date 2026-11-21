@@ -345,3 +345,12 @@ func TestTwinsSayTheirRoot(t *testing.T) {
 		}
 	}
 }
+
+func TestShortWritesHomeAsTilde(t *testing.T) {
+	x := Ctx{Home: "/home/me"}
+	for in, want := range map[string]string{"/home/me/src/a": "~/src/a", "/home/meow/a": "/home/meow/a", "/tmp/a": "/tmp/a"} {
+		if got := x.Short(in); got != want {
+			t.Errorf("Short(%s) = %s; want %s", in, got, want)
+		}
+	}
+}
