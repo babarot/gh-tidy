@@ -497,10 +497,11 @@ func (m *Model) rate(a model.Activity, compact bool) []cell {
 // pastVerbs say what a run did, once it ended.
 var pastVerbs = map[string]string{"Reading": "Read", "Fetching": "Fetched", "Updating": "Updated", "Cleaning up": "Cleaned up", "Cloning": "Cloned"}
 
-// taskKinds name each kind of task in the box, and taskDoing say what one
+// taskKinds name each kind of task in the box: a read by where it reads
+// (local, github), a change by what it does; taskDoing say what one
 // running does.
 var (
-	taskKinds = map[string]string{"clone": "clone", "github": "github", "fetch": "fetch", "update": "update", "cleanup": "cleanup", "create": "new"}
+	taskKinds = map[string]string{"clone": "local", "github": "github", "fetch": "fetch", "update": "update", "cleanup": "cleanup", "create": "clone"}
 	taskDoing = map[string]string{"clone": "reading", "github": "asking GitHub", "fetch": "fetching", "update": "updating main",
 		"cleanup": "cleaning up", "create": "cloning"}
 )
