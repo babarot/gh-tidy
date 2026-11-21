@@ -23,6 +23,7 @@ import (
 	"github.com/babarot/gh-tidy/internal/theme"
 	"github.com/babarot/gh-tidy/internal/tui/columns"
 	"github.com/babarot/gh-tidy/internal/tui/keymap"
+	"github.com/babarot/gh-tidy/internal/tui/statusline"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files")
@@ -1651,5 +1652,35 @@ func TestTheActivityBoxTakesThePreviewsBottom(t *testing.T) {
 			}
 			return out
 		}())
+	}
+}
+
+// While a clone is fetched, a light runs over what MAIN says: its colors
+// change from frame to frame, never its text.
+func TestTheShimmerMovesAndKeepsTheText(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	cs := []cell{{text: "fetching", role: roleAccent}}
+	plainOf := func(cs []cell) string { return plain(drawn{parts: cs}) }
+	first := m.shimmer(cs)
+	m.now = func() time.Time { return later.Add(3 * statusline.FrameEvery) }
+	second := m.shimmer(cs)
+	if plainOf(first) != "fetching" || plainOf(second) != "fetching" {
+		t.Fatalf("the text changed: %q, %q", plainOf(first), plainOf(second))
+	}
+	roles := func(cs []cell) []columns.Role {
+		var out []columns.Role
+		for _, c := range cs {
+			for range []rune(c.text) {
+				out = append(out, c.role)
+			}
+		}
+		return out
+	}
+	if slices.Equal(roles(first), roles(second)) {
+		t.Error("the light did not move")
+	}
+	if !slices.Contains(roles(second), roleStrong) || !slices.Contains(roles(second), roleAccent) {
+		t.Errorf("roles = %v; want the light and the text's own color", roles(second))
 	}
 }

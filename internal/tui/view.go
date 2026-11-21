@@ -261,6 +261,10 @@ func (m *Model) row(l line, sel bool, cs []columns.Column, ws []int) drawn {
 			parts = append(parts, cell{text: strings.Repeat(" ", columns.Gap)})
 		}
 		content := fromCell(c.Cell(x, l.item()))
+		// What is being done to the clone has a light running over it.
+		if c.Name == "main" && l.row != nil && l.row.Op.Doing != "" {
+			content = m.shimmer(content)
+		}
 		if c.Name == "repo" && l.kind == columns.KindWorktree {
 			tree := "  ├ "
 			if l.last {
@@ -618,6 +622,44 @@ func workersLine(a model.Activity) []cell {
 		role = roleMuted
 	}
 	return append(parts, cell{text: " · ", role: roleBorder}, cell{text: fmt.Sprintf("%d queued", a.Queued), role: role})
+}
+
+// shimmer runs a light over cs, the text of what is being done: its
+// brightest color on one character, the title color on those beside it,
+// moving one character each frame of the one clock (ADR-007), from before
+// the text to past its end. It changes colors, never the text or its
+// width.
+func (m *Model) shimmer(cs []cell) []cell {
+	const before, after, beside = 4, 8, 2
+	var rs []rune
+	var base []cell
+	for _, c := range cs {
+		for _, r := range c.text {
+			rs = append(rs, r)
+			base = append(base, c)
+		}
+	}
+	if len(rs) == 0 {
+		return cs
+	}
+	at := int(m.now().UnixMilli()/statusline.FrameEvery.Milliseconds())%(len(rs)+before+after) - before
+	var out []cell
+	for i, r := range rs {
+		c := base[i]
+		switch d := max(i-at, at-i); {
+		case d == 0:
+			c.role = roleStrong
+		case d <= beside:
+			c.role = roleTitle
+		}
+		c.text = string(r)
+		if n := len(out); n > 0 && out[n-1].role == c.role && out[n-1].bold == c.bold && out[n-1].underline == c.underline {
+			out[n-1].text += c.text
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
 }
 
 // seconds writes a duration as seconds with a tenth.
