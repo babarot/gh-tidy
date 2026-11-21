@@ -1606,14 +1606,14 @@ func TestTheQuietHeadStaysAcrossALensSwitch(t *testing.T) {
 	}
 }
 
-// The box is as tall as what it shows, and it is drawn over the bottom of
-// the preview: the list keeps its height and the preview its place.
-func TestTheActivityBoxCoversThePreview(t *testing.T) {
+// The box is as tall as what it shows, and takes the bottom of the
+// preview, which closes above it: the list keeps its height and the
+// preview its top.
+func TestTheActivityBoxTakesThePreviewsBottom(t *testing.T) {
 	w := newWorld(t)
 	m := w.model(nil)
-	m.screen()
-	height := m.listHeight()
 	before := m.screen()
+	height := m.listHeight()
 	a := model.Activity{Verb: "Reading", What: "mika", Started: later.Add(-time.Second), Counts: []model.Count{{Name: "GitHub", Done: 1, Total: 1}},
 		Done: []model.Task{{Kind: "github", Name: "list mika", Note: "304", Start: later.Add(-time.Second), End: later}}}
 	box, _ := m.activityBox(a)
@@ -1627,12 +1627,29 @@ func TestTheActivityBoxCoversThePreview(t *testing.T) {
 	}
 	status := len(after) - 2
 	if got := plain(after[status-2]); !strings.Contains(got, "[+] Reading mika") {
-		t.Errorf("the box's head is not over the preview's bottom: %q", got)
+		t.Errorf("the box's head is not at the preview's bottom: %q", got)
 	}
-	if !strings.Contains(plain(after[status-1]), "local") && !strings.Contains(plain(after[status-1]), "github") {
-		t.Errorf("the task line: %q", plain(after[status-1]))
+	if got := plain(after[status-3]); !strings.HasPrefix(got, "╰") {
+		t.Errorf("the preview does not close above the box: %q", got)
 	}
-	if plain(after[status-3]) != plain(before[status-3]) {
-		t.Error("the preview above the box moved")
+	top := m.listTop() + height + 1
+	// The top is where it was; only how many lines are below the fold,
+	// which it counts, may differ.
+	title := func(d drawn) string { return strings.Fields(plain(d))[0] + " " + strings.Fields(plain(d))[1] }
+	if !strings.HasPrefix(plain(after[top]), "╭") || title(after[top]) != title(before[top]) {
+		t.Errorf("the preview's top moved: %q, was %q", plain(after[top]), plain(before[top]))
+	}
+	// A low preview keeps its two borders; the box keeps its head and its
+	// newest tasks.
+	tasks := []model.Task{{Kind: "clone", Name: "a"}, {Kind: "clone", Name: "b"}, {Kind: "clone", Name: "c"}}
+	big, _ := m.activityBox(model.Activity{Verb: "Reading", What: "mika", Started: later.Add(-time.Second), Running: tasks})
+	if got := fitBox(big, 3); len(got) != 3 || !strings.Contains(plain(got[0]), "[+]") || !strings.Contains(plain(got[2]), " c ") {
+		t.Errorf("fitBox = %q", func() []string {
+			var out []string
+			for _, d := range got {
+				out = append(out, plain(d))
+			}
+			return out
+		}())
 	}
 }

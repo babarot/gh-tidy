@@ -114,14 +114,11 @@ func (m *Model) screen() []drawn {
 		ls = append(ls, m.row(m.lines[j], j == m.sel, cols, ws))
 	}
 	ls = append(ls, m.summary())
-	pane := m.preview(len(ls))
-	// The box covers the bottom of the preview, as many lines as it
-	// shows; what it covers takes no click meanwhile.
-	box = box[:min(len(box), len(pane))]
-	from := len(ls) + len(pane) - len(box)
-	copy(pane[len(pane)-len(box):], box)
-	m.hits = slices.DeleteFunc(m.hits, func(h hit) bool { return h.y >= from && h.y < from+len(box) })
-	ls = append(ls, pane...)
+	// The box takes the bottom of the preview, which closes above it: the
+	// preview keeps its top and its two borders, and shows fewer lines.
+	box = fitBox(box, m.ph)
+	ls = append(ls, m.preview(len(ls), m.ph-len(box))...)
+	ls = append(ls, box...)
 	ls = append(ls, m.statusLine(a, rateIn), m.hintLine(len(ls)+1))
 	return ls
 }
@@ -357,9 +354,9 @@ func (m *Model) paneOf(l line) pane {
 	return p
 }
 
-// preview draws the pane below the list; top is the screen line it
-// starts on.
-func (m *Model) preview(top int) []drawn {
+// preview draws the pane below the list, rows lines of it between its
+// borders; top is the screen line it starts on.
+func (m *Model) preview(top, rows int) []drawn {
 	w := m.width
 	l, ok := m.selected()
 	var p pane
@@ -397,8 +394,8 @@ func (m *Model) preview(top int) []drawn {
 			lefts = append(lefts, left{parts: fromCell(c)})
 		}
 	}
-	m.pscroll = max(0, min(m.pscroll, max(0, len(lefts)-m.ph)))
-	more := len(lefts) - m.pscroll - m.ph
+	m.pscroll = max(0, min(m.pscroll, max(0, len(lefts)-rows)))
+	more := len(lefts) - m.pscroll - rows
 	title := ""
 	if p.title != "" {
 		title = "─ " + p.title + " "
@@ -409,7 +406,7 @@ func (m *Model) preview(top int) []drawn {
 	}
 	fill := max(0, w-2-ansi.StringWidth(title)-ansi.StringWidth(tail))
 	out := []drawn{{parts: cut([]cell{{text: "╭" + title + strings.Repeat("─", fill) + tail + "╮", role: roleBorder}}, w)}}
-	for i := range m.ph {
+	for i := range rows {
 		var lp []cell
 		if j := m.pscroll + i; j < len(lefts) {
 			lp = lefts[j].parts
@@ -561,6 +558,22 @@ func (m *Model) activityBox(a model.Activity) (box []drawn, rateIn bool) {
 		box = append(box, m.taskLine(t, now))
 	}
 	return box, rateIn
+}
+
+// fitBox keeps the box within n lines: its head and the workers' line,
+// then the newest tasks.
+func fitBox(box []drawn, n int) []drawn {
+	if len(box) <= n {
+		return box
+	}
+	keep := 1
+	if len(box) > 1 && strings.Contains(plain(box[1]), "workers") {
+		keep = 2
+	}
+	if n <= keep {
+		return box[:max(0, n)]
+	}
+	return append(slices.Clone(box[:keep]), box[len(box)-(n-keep):]...)
 }
 
 // taskLine is one task in the activity box: how it is, its kind, its

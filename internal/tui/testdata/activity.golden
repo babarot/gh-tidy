@@ -25,11 +25,11 @@
 
 
  7 clones · 2 not cloned
-╭─ agent-runner ────────────────────────────────────────────────────────────────────────────────────────────────────── ↓ 7 more · +/- size ╮
+╭─ agent-runner ───────────────────────────────────────────────────────────────────────────────────────────────────── ↓ 12 more · +/- size ╮
 │ ▾ <6  on origin/main, not in your main · p brings them in                           │ path     ~/github.com/mika/agent-runner            │
 │   d3665f0 Bump golang.org/x/net from 0.45.0 to 0.47.0  hana 1h                      │ fetched  5h ago                                    │
 │   f02d507 Document the cache layout  kai 2h                                         │ p        updates main · ff, not checked out        │
-│   … 4 more                                                                          │ d        removes 1 worktree · keeps 2 worktrees    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
  [+] Reading mika 5/7 clones · GitHub 1/3                                       rate limit 4,952/5,000  │ this load 12 used · 3 saved  4.0s
      workers  disk 1/8 · net 0/4 · api 2/2 · 3 queued
  ✔ local   dotfiles                      read                                                                                          2.0s
@@ -120,12 +120,7 @@ L30 88-89 fg=#b0b8d1
 L30 97-109 fg=#b5f0b0
 L30 110-131 fg=#8888a4
 L30 139-140 fg=#525270
-L31 0-1 fg=#525270
-L31 4-87 fg=#706f87
-L31 88-89 fg=#b0b8d1
-L31 97-115 fg=#b5f0b0
-L31 116-135 fg=#8888a4
-L31 139-140 fg=#525270
+L31 0-140 fg=#525270
 L32 1-4 fg=#96bfff bold
 L32 5-17 fg=#d0d6e8 bold
 L32 18-90 fg=#8888a4
