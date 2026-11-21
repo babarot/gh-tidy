@@ -354,3 +354,21 @@ func TestShortWritesHomeAsTilde(t *testing.T) {
 		}
 	}
 }
+
+// PATH is where the clone is, or the worktree on its row, under ~.
+func TestPathCell(t *testing.T) {
+	x := ctx(true)
+	x.Home = "/home/me"
+	r := row(nil)
+	r.Clone = "/home/me/src/github.com/me/app"
+	if got := text(pathCell(x, Item{Kind: KindClone, Row: r})); got != "~/src/github.com/me/app" {
+		t.Errorf("clone: %q", got)
+	}
+	tree := &model.Worktree{Path: "/home/me/worktrees/app/fix"}
+	if got := text(pathCell(x, Item{Kind: KindWorktree, Row: r, Tree: tree})); got != "~/worktrees/app/fix" {
+		t.Errorf("worktree: %q", got)
+	}
+	if got := text(pathCell(x, Item{Kind: KindRemote, Row: &model.Row{}})); got != "" {
+		t.Errorf("not cloned: %q", got)
+	}
+}

@@ -215,7 +215,7 @@ var settings = []setting{
 		Doc: `Color scheme: "auto" (default) picks catppuccin-mocha on a dark terminal and catppuccin-latte on a light one. Also: tokyo-night, dracula, nord, gruvbox-dark, and ansi (the terminal's own 16 colors).`},
 
 	{Key: "columns.local", Kind: listKind{NonEmpty: true}, Value: func(f File) any { return f.Columns.Local },
-		Doc: "The local set, of: repo, main, checked_out, changes, worktrees, fetched."},
+		Doc: "The local set, of: repo, main, checked_out, changes, worktrees, fetched, path (where the clone is)."},
 	{Key: "columns.github", Kind: listKind{NonEmpty: true}, Value: func(f File) any { return f.Columns.GitHub },
 		Doc: "The github set, of: repo, issues, prs, dependabot, ci, stars, pushed, visibility, main."},
 

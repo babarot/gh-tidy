@@ -486,10 +486,23 @@ func TestNoCounts(t *testing.T) {
 	golden(t, "local-no-counts", m)
 }
 
+// PATH in place of WORKTREES: where each clone is, and each worktree on
+// its row.
+func TestPathColumn(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(func(o *Options) {
+		o.Config.Columns.Local = []string{"repo", "main", "checked_out", "changes", "path", "fetched"}
+	})
+	press(w, m, "enter")
+	golden(t, "local-path", m)
+}
+
 func TestEveryColumnAndSectionIsDrawn(t *testing.T) {
 	d := config.Default()
+	// Columns in no default set, each drawn by a golden of its own.
+	own := map[string]bool{"path": true} // TestPathColumn
 	for _, c := range columns.All {
-		if !slices.Contains(d.Columns.Local, c.Name) && !slices.Contains(d.Columns.GitHub, c.Name) {
+		if !own[c.Name] && !slices.Contains(d.Columns.Local, c.Name) && !slices.Contains(d.Columns.GitHub, c.Name) {
 			t.Errorf("column %s is in no default set, so no golden draws it", c.Name)
 		}
 	}

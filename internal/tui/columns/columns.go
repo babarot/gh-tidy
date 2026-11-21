@@ -182,6 +182,7 @@ var All = []Column{
 	{"changes", "CHANGES", 14, 3, []Lens{Local}, 0, changesCell},
 	{"worktrees", "WORKTREES", 0, 1, []Lens{Local}, 0, worktreesCell},
 	{"fetched", "FETCHED", 9, 4, []Lens{Local}, 0, fetchedCell},
+	{"path", "PATH", 0, 5, []Lens{Local}, 0, pathCell},
 	{"issues", "ISSUES", 8, 2, []Lens{GitHub}, model.NeedCounts | model.NeedNewest, issuesCell},
 	{"prs", "PRS", 8, 2, []Lens{GitHub}, model.NeedCounts | model.NeedNewest, prsCell},
 	{"dependabot", "DEPENDABOT", 10, 3, []Lens{GitHub}, model.NeedAlerts, dependabotCell},
