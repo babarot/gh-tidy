@@ -362,6 +362,10 @@ func (m *Model) folded(head string) bool {
 	return !ok || f
 }
 
+// unpin lets the rows go from their places: the order they keep, and
+// which were above the first head, together.
+func (m *Model) unpin() { m.order, m.top = map[string]int{}, map[string]bool{} }
+
 // relayout builds the lines again from the copy of the owner, keeping the
 // cursor on the row it was on. While rows show what was done to them, or
 // GitHub is being read, rows keep their places.
@@ -373,7 +377,7 @@ func (m *Model) relayout() {
 		}
 	}
 	if !hold {
-		m.order, m.top = map[string]int{}, map[string]bool{}
+		m.unpin()
 	}
 	m.lines = m.buildLines()
 	// Every row shown keeps its place in its part of the list while rows

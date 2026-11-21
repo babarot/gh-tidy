@@ -592,7 +592,7 @@ func (m *Model) setLens(l columns.Lens) {
 		m.cursor, m.moved = sel.key(), true
 	}
 	m.lens = l
-	m.order = map[string]int{}
+	m.unpin()
 	m.relayout()
 	m.keep()
 }
@@ -608,7 +608,7 @@ func (m *Model) openOwner(o string) {
 		return
 	}
 	m.owner = o
-	m.order = map[string]int{}
+	m.unpin()
 	m.filter, m.filtering = "", false
 	m.sel, m.offset, m.cursor, m.moved = 0, 0, "", false
 	m.eng.Open(o)

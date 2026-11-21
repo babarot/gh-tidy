@@ -604,7 +604,7 @@ func TestTheQuietHeadStaysWhileRowsHold(t *testing.T) {
 	m.relayout()
 	// Rows hold their places while something is read.
 	m.snap.Reading = "reading GitHub"
-	m.order = map[string]int{}
+	m.unpin()
 	m.relayout()
 	m.relayout()
 	if !strings.Contains(screen(m), "▾ nothing to do") {
@@ -1581,5 +1581,27 @@ func TestRowsInASectionKeepTheirPlaces(t *testing.T) {
 	m.relayout()
 	if got := names(); got[0] != "tool-shed" {
 		t.Errorf("after reading: %q", got)
+	}
+}
+
+// Switching the columns there and back while rows keep their places
+// leaves nothing to do as it was: which rows were above the first head is
+// let go with their order.
+func TestTheQuietHeadStaysAcrossALensSwitch(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	m.snap.Reading = "reading GitHub"
+	m.relayout()
+	if !strings.Contains(screen(m), "nothing to do  2") {
+		t.Fatalf("before:\n%s", screen(m))
+	}
+	m.setLens(columns.GitHub)
+	m.snap.Reading = "reading GitHub"
+	m.relayout()
+	m.setLens(columns.Local)
+	m.snap.Reading = "reading GitHub"
+	m.relayout()
+	if s := screen(m); !strings.Contains(s, "nothing to do  2") {
+		t.Errorf("after switching there and back:\n%s", s)
 	}
 }
