@@ -14,7 +14,7 @@ const SeenVersion = 1
 // repository (host and GitHub's number for it, which a rename keeps),
 // and for each owner (host and lower-case login) when its creation times
 // were first read, the time seen of a repository not yet looked at. The
-// times only move forward (ADR-009).
+// times seen only move forward, and a baseline only back (ADR-009).
 type Seen struct {
 	Version int
 	Repos   map[string]time.Time
@@ -39,9 +39,10 @@ func (s Store) LoadSeen() (Seen, error) {
 	return sn, err
 }
 
-// SaveSeen keeps what sn adds: the file is read again and each time kept
-// is the later of the two, so that another gh tidy writing meanwhile, or
-// a holder of an older copy, loses nothing. It returns the merged times.
+// SaveSeen keeps what sn adds: the file is read again and each time seen
+// kept is the later of the two, each baseline the earlier, so that
+// another gh tidy writing meanwhile, or a holder of an older copy, hides
+// no mark. It returns the merged times.
 func (s Store) SaveSeen(sn Seen) (Seen, error) {
 	cur, _ := s.LoadSeen()
 	for k, t := range sn.Repos {
@@ -49,8 +50,10 @@ func (s Store) SaveSeen(sn Seen) (Seen, error) {
 			cur.Repos[k] = t
 		}
 	}
+	// An owner's baseline keeps the earlier: a later one, set by another
+	// gh tidy started meanwhile, would hide what came between.
 	for k, t := range sn.Owners {
-		if old, ok := cur.Owners[k]; !ok || t.After(old) {
+		if old, ok := cur.Owners[k]; !ok || t.Before(old) {
 			cur.Owners[k] = t
 		}
 	}

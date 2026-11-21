@@ -1436,3 +1436,44 @@ func TestNewIssuesAreMarkedUntilSeen(t *testing.T) {
 		t.Errorf("after the cursor left: %q", s)
 	}
 }
+
+// With the timers on, resting on a row whose titles are already held
+// still marks them seen once the rest is over: no read is needed for it.
+func TestRestingOnHeldTitlesMarksThemSeen(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	m.setLens(columns.GitHub)
+	w.settle(m)
+	i := -1
+	for j, l := range m.lines {
+		if l.row != nil && l.row.Remote == "github.com/mika/agent-runner" {
+			i = j
+		}
+	}
+	m.moveTo(i)
+	m.sync()
+	w.settle(m) // read and held, the timers off
+	m.moveTo(0)
+	m.sync()
+	w.settle(m)
+	cols, ws := m.layout()
+	if s := plain(m.row(m.lines[i], false, cols, ws)); strings.Contains(s, "+1") {
+		t.Fatalf("seen while the timers were off: %q", s)
+	}
+	m.noTimers = false
+	m.ghdRested = ""
+	// Back on the row: the titles are held, and passing marks nothing.
+	m.moveTo(i)
+	m.sync()
+	if m.ghd.State != model.DetailRead || m.settle() == nil {
+		t.Fatalf("no rest started over held titles: %+v", m.ghd.State)
+	}
+	m.Update(detailMsg{k: "github.com/mika/agent-runner"})
+	w.settle(m)
+	m.moveTo(0)
+	m.sync()
+	w.settle(m)
+	if s := plain(m.row(m.lines[i], false, cols, ws)); strings.Contains(s, "+1") {
+		t.Errorf("the held titles were not marked seen: %q", s)
+	}
+}

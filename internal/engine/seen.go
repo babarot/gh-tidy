@@ -174,7 +174,7 @@ func (e *Engine) saveSeen(add store.Seen) {
 			}
 		}
 		for key, t := range merged.Owners {
-			if _, ok := e.seenAt.Owners[key]; !ok {
+			if old, ok := e.seenAt.Owners[key]; !ok || t.Before(old) {
 				e.seenAt.Owners[key] = t
 			}
 		}

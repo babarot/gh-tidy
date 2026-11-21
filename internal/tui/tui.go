@@ -316,7 +316,10 @@ func (m *Model) sync() {
 	}
 	read := k != "" && (m.noTimers || m.ghdRested == k)
 	m.ghd, m.ghdOf, m.ghdDue = m.eng.GitHubDetail(k, read), k, ""
-	if k != "" && !read && m.ghd.State == model.DetailReading {
+	// The row waits to rest when its detail is to be read, and when the
+	// titles held could be marked seen: passing over it marks nothing.
+	if k != "" && !read && (m.ghd.State == model.DetailReading ||
+		m.lens == columns.GitHub && m.ghd.State == model.DetailRead && m.ghd.Value.TitlesAsked) {
 		m.ghdDue = k
 	}
 	// The titles shown, the cursor resting on the row in the github

@@ -309,7 +309,7 @@ func (m *memStore) SaveSeen(add store.Seen) (store.Seen, error) {
 		}
 	}
 	for k, t := range add.Owners {
-		if old, ok := m.seen.Owners[k]; !ok || t.After(old) {
+		if old, ok := m.seen.Owners[k]; !ok || t.Before(old) {
 			m.seen.Owners[k] = t
 		}
 	}

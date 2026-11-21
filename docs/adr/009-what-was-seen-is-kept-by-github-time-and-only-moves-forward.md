@@ -12,7 +12,7 @@ The state file holds what the user chose (the owner, the columns, the pane's hei
 
 ## Decision
 
-- What was seen is kept in a file of its own, apart from the state and the cache, written only by the engine. Each write reads the file again and keeps the later time of each key, so that two gh tidy processes, or a holder of an older copy, do not undo each other. The times only move forward; [internal/store/seen.go](../../internal/store/seen.go) is the format.
+- What was seen is kept in a file of its own, apart from the state and the cache, written only by the engine. Each write reads the file again and keeps, of each repository, the later time seen, and of each owner, the earlier baseline, so that two gh tidy processes, or a holder of an older copy, hide no mark. Times seen only move forward, and a baseline only back; [internal/store/seen.go](../../internal/store/seen.go) is the format.
 - A time seen is GitHub's: the newest creation time among the titles the pane showed, never the local clock. A repository not yet looked at takes its owner's baseline: when GitHub answered the first read of that owner's creation times, from the response's own date. With no baseline, or for a value read without the creation times, which items are new is shown as not known, never as none.
 - A repository is named by GitHub's number for it, which a rename and a move to another owner keep.
 - The time seen moves only when the cursor has rested on the row in the github columns and both the issues and the pull requests were read and shown; the marks stay until the cursor leaves the row. all reads no more of GitHub (ADR-005), so its marks clear only from the owner's own table.

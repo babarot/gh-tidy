@@ -128,6 +128,11 @@ func TestSeenOnlyMovesForward(t *testing.T) {
 	if !got.Repos["github.com/1"].Equal(at(10)) || !got.Repos["github.com/2"].Equal(at(12)) || !got.Owners["github.com/me"].Equal(at(9)) {
 		t.Errorf("merged = %+v", got)
 	}
+	// A later baseline, set by another gh tidy started meanwhile, does not
+	// replace the earlier one: it would hide what came between.
+	if got, _ := s.SaveSeen(Seen{Owners: map[string]time.Time{"github.com/me": at(11)}}); !got.Owners["github.com/me"].Equal(at(9)) {
+		t.Errorf("baseline = %v; want the earlier kept", got.Owners["github.com/me"])
+	}
 	loaded, _ := s.LoadSeen()
 	if !loaded.Repos["github.com/2"].Equal(at(12)) {
 		t.Errorf("loaded = %+v", loaded)
