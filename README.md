@@ -42,7 +42,7 @@ A clone is matched to GitHub by its origin, not its directory name, so a clone i
 
 ## The list
 
-Each row is a clone, the ones that need looking at first. Clones with nothing to do and repositories not cloned (neither forks nor archived) are folded at the end; `enter` on a head opens it. `enter` on a clone shows its linked worktrees under it.
+Each row is a clone, the ones that need looking at first. Clones with nothing to do and repositories not cloned (neither forks nor archived) are folded at the end; `l` or a click on a head opens it, and `h` folds it again. `l` on a clone shows its linked worktrees under it, and `h` hides them.
 
 The marks are those of [starship](https://starship.rs) by default, and each one is compared with one thing on every row:
 
@@ -69,7 +69,7 @@ gh tidy reads GitHub on its own only within a share of your rate limit, leaving 
 
 | Key | Does |
 |---|---|
-| `enter` | show the clone's worktrees; open a folded section |
+| `l` `h` | open or close: a folded section, or the clone's worktrees |
 | `v` | local / github columns |
 | `<` `>` `O` | previous, next, or choose an owner |
 | `/` | filter by name or branch |

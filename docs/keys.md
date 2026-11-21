@@ -28,7 +28,8 @@ This page is written from the code (`go test ./internal/tui -run TestKeysReferen
 
 | Key | Action | Does |
 |---|---|---|
-| `enter` | `expand` | shows a clone's worktrees, or folds a section |
+| `l` `right` | `open` | opens a folded section, or shows a clone's worktrees |
+| `h` `left` | `close` | folds a section, or hides a clone's worktrees |
 | `v` | `lens` | switches between the local and the github columns |
 | `<` | `prev_owner` | shows the previous owner |
 | `>` | `next_owner` | shows the next owner |
@@ -77,8 +78,7 @@ This page is written from the code (`go test ./internal/tui -run TestKeysReferen
 
 | | Does |
 |---|---|
-| click | puts the cursor on a row |
-| double click | shows a clone's worktrees, or folds a section |
+| click | puts the cursor on a row; on a section's head, folds or unfolds it |
 | wheel | over the list moves the cursor; over the pane scrolls it |
 | click the owner | chooses an owner; ‹ and › step to the previous and next |
 | click local, github | switches the columns |

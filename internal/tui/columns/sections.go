@@ -268,7 +268,7 @@ func worktreeList(x Ctx, it Item, _ *model.Detail) *Part {
 	}
 	var p *Part
 	if len(linked) > 0 {
-		p = &Part{Head: head(x.Symbols.Worktree+strconv.Itoa(len(linked)), Worktree, "worktrees · enter shows them as rows")}
+		p = &Part{Head: head(x.Symbols.Worktree+strconv.Itoa(len(linked)), Worktree, "worktrees · "+x.OpenKey+" shows them as rows")}
 		for _, w := range linked {
 			name := w.Holds()
 			if name == "" {

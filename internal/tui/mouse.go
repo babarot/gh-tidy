@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"time"
-
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -11,15 +9,6 @@ type hit struct {
 	y, x0, x1 int
 	act       func(*Model) tea.Cmd
 }
-
-// click is the last click on the list, to tell a double click.
-type click struct {
-	y  int
-	at time.Time
-}
-
-// doubleClick is how close two clicks on one row must be to open it.
-const doubleClick = 400 * time.Millisecond
 
 // mouse acts on a click or the wheel. The mouse only moves, opens and
 // folds: whatever changes a clone or GitHub goes through a key and its
@@ -67,14 +56,9 @@ func (m *Model) mouse(msg tea.MouseMsg) tea.Cmd {
 			if i >= len(m.lines) {
 				return nil
 			}
-			now := m.now()
-			again := m.lastClick.y == mo.Y && now.Sub(m.lastClick.at) < doubleClick && i == m.sel
+			// A click on a section's head folds or unfolds it.
 			m.moveTo(i)
-			m.lastClick = click{y: mo.Y, at: now}
-			if again {
-				m.lastClick = click{}
-				m.toggle()
-			}
+			m.toggle()
 			return nil
 		}
 		for _, h := range m.hits {

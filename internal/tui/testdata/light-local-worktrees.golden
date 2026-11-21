@@ -36,7 +36,7 @@
 │ ▾ ⇠5  on main, not in retry-backoff                                                 │                                                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
- enter worktrees · v github · P pull all · p pull · f fetch · d clean up · D clean up all · / filter · O owner · + - preview · ? keys
+ l h open / close · v github · P pull all · p pull · f fetch · d clean up · D clean up all · / filter · O owner · + - preview · ? keys
 -- styles --
 L1 0-6 fg=#1e66f5 bg=#ccd0da bold
 L1 6-9 fg=#9ca0b0 bg=#ccd0da
@@ -167,35 +167,35 @@ L35 8-37 fg=#6c6f85
 L35 86-87 fg=#9ca0b0
 L35 139-140 fg=#bcc0cc
 L36 0-140 fg=#bcc0cc
-L38 1-6 fg=#1e66f5 bold
-L38 7-16 fg=#8c8fa1
-L38 17-18 fg=#bcc0cc
-L38 19-20 fg=#1e66f5 bold
-L38 21-27 fg=#8c8fa1
-L38 28-29 fg=#bcc0cc
-L38 30-31 fg=#1e66f5 bold
-L38 32-40 fg=#8c8fa1
-L38 41-42 fg=#bcc0cc
-L38 43-44 fg=#1e66f5 bold
-L38 45-49 fg=#8c8fa1
-L38 50-51 fg=#bcc0cc
-L38 52-53 fg=#1e66f5 bold
-L38 54-59 fg=#8c8fa1
-L38 60-61 fg=#bcc0cc
-L38 62-63 fg=#1e66f5 bold
-L38 64-72 fg=#8c8fa1
-L38 73-74 fg=#bcc0cc
-L38 75-76 fg=#1e66f5 bold
-L38 77-89 fg=#8c8fa1
-L38 90-91 fg=#bcc0cc
-L38 92-93 fg=#1e66f5 bold
-L38 94-100 fg=#8c8fa1
-L38 101-102 fg=#bcc0cc
-L38 103-104 fg=#1e66f5 bold
-L38 105-110 fg=#8c8fa1
-L38 111-112 fg=#bcc0cc
-L38 113-116 fg=#1e66f5 bold
-L38 117-124 fg=#8c8fa1
-L38 125-126 fg=#bcc0cc
-L38 127-128 fg=#1e66f5 bold
-L38 129-133 fg=#8c8fa1
+L38 1-4 fg=#1e66f5 bold
+L38 5-17 fg=#8c8fa1
+L38 18-19 fg=#bcc0cc
+L38 20-21 fg=#1e66f5 bold
+L38 22-28 fg=#8c8fa1
+L38 29-30 fg=#bcc0cc
+L38 31-32 fg=#1e66f5 bold
+L38 33-41 fg=#8c8fa1
+L38 42-43 fg=#bcc0cc
+L38 44-45 fg=#1e66f5 bold
+L38 46-50 fg=#8c8fa1
+L38 51-52 fg=#bcc0cc
+L38 53-54 fg=#1e66f5 bold
+L38 55-60 fg=#8c8fa1
+L38 61-62 fg=#bcc0cc
+L38 63-64 fg=#1e66f5 bold
+L38 65-73 fg=#8c8fa1
+L38 74-75 fg=#bcc0cc
+L38 76-77 fg=#1e66f5 bold
+L38 78-90 fg=#8c8fa1
+L38 91-92 fg=#bcc0cc
+L38 93-94 fg=#1e66f5 bold
+L38 95-101 fg=#8c8fa1
+L38 102-103 fg=#bcc0cc
+L38 104-105 fg=#1e66f5 bold
+L38 106-111 fg=#8c8fa1
+L38 112-113 fg=#bcc0cc
+L38 114-117 fg=#1e66f5 bold
+L38 118-125 fg=#8c8fa1
+L38 126-127 fg=#bcc0cc
+L38 128-129 fg=#1e66f5 bold
+L38 130-134 fg=#8c8fa1

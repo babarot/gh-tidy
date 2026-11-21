@@ -137,7 +137,7 @@ func (m *Model) layout() ([]columns.Column, []int) {
 }
 
 func (m *Model) ctx() columns.Ctx {
-	return columns.Ctx{Owner: &m.snap, Symbols: m.sym, Now: m.now(), Roots: m.roots, Twins: m.twins, Home: m.home}
+	return columns.Ctx{Owner: &m.snap, Symbols: m.sym, Now: m.now(), Roots: m.roots, Twins: m.twins, Home: m.home, OpenKey: m.keys.First("open")}
 }
 
 func (m *Model) header() drawn {
@@ -322,7 +322,7 @@ func (m *Model) paneOf(l line) pane {
 				{{Text: "  other owner it looks up only what you have cloned, so a big organization costs nothing", Role: roleMuted}},
 				{{Text: "  until you ask.", Role: roleMuted}}}
 		} else {
-			p.Lines = []columns.Cell{{{Text: "  " + m.keys.First("expand") + " or a click folds and unfolds it", Role: roleDim}}}
+			p.Lines = []columns.Cell{{{Text: "  " + m.keys.First("open") + " opens it, " + m.keys.First("close") + " folds it, and so does a click", Role: roleDim}}}
 		}
 		return pane{parts: []columns.Part{p}}
 	}
@@ -712,7 +712,8 @@ func (m *Model) hints() []hint {
 	if m.lens == columns.GitHub {
 		return []hint{lens, h("open_browser"), h("clone"), h("search"), h("choose_owner"), h("help"), h("quit")}
 	}
-	return []hint{h("expand"), lens, h("pull_all"), h("pull"), h("fetch"), h("cleanup"), h("cleanup_all"), h("search"), h("choose_owner"), pane, h("help")}
+	open := hint{key: strings.TrimSpace(m.keys.First("open") + " " + m.keys.First("close")), does: "open / close"}
+	return []hint{open, lens, h("pull_all"), h("pull"), h("fetch"), h("cleanup"), h("cleanup_all"), h("search"), h("choose_owner"), pane, h("help")}
 }
 
 // hintLine draws the keys that work now; y is its screen line.

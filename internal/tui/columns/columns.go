@@ -86,6 +86,9 @@ type Ctx struct {
 	Twins map[string]bool
 	// Home is written as ~ in paths.
 	Home string
+	// OpenKey is the key that shows a clone's worktrees, as the keymap
+	// has it: the columns write no key of their own.
+	OpenKey string
 }
 
 // Short writes p with ~ for the home directory.

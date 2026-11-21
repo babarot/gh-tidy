@@ -469,7 +469,7 @@ func TestLocal(t *testing.T) {
 	w := newWorld(t)
 	m := w.model(nil)
 	golden(t, "local", m)
-	press(w, m, "enter")
+	press(w, m, "l")
 	golden(t, "local-worktrees", m)
 }
 
@@ -493,7 +493,7 @@ func TestPathColumn(t *testing.T) {
 	m := w.model(func(o *Options) {
 		o.Config.Columns.Local = []string{"repo", "main", "checked_out", "changes", "path", "fetched"}
 	})
-	press(w, m, "enter")
+	press(w, m, "l")
 	golden(t, "local-path", m)
 }
 
@@ -561,13 +561,13 @@ func TestFilter(t *testing.T) {
 func TestFoldsAndMouse(t *testing.T) {
 	w := newWorld(t)
 	m := w.model(nil)
-	// The cursor goes to the head of not cloned, which enter opens.
+	// The cursor goes to the head of not cloned, which l opens.
 	for i, l := range m.lines {
 		if l.head == headNotCloned {
 			m.moveTo(i)
 		}
 	}
-	press(w, m, "enter")
+	press(w, m, "l")
 	if !strings.Contains(screen(m), "tool-shed") {
 		t.Errorf("not cloned did not open:\n%s", screen(m))
 	}
@@ -710,7 +710,7 @@ func TestCloneOpenCopyAndActions(t *testing.T) {
 			m.moveTo(i)
 		}
 	}
-	press(w, m, "enter")
+	press(w, m, "l")
 	w.to(m, "github.com/mika/tool-shed")
 	press(w, m, "c")
 	if !slices.Contains(w.change.seen(), "clone mika/tool-shed /src/github.com/mika/tool-shed") {
@@ -877,7 +877,7 @@ var scenes = []struct {
 	keys []string
 }{
 	{"local", nil},
-	{"local-worktrees", []string{"enter"}},
+	{"local-worktrees", []string{"l"}},
 	{"github", []string{"v"}},
 	{"confirm", []string{"P"}},
 }
@@ -1309,7 +1309,7 @@ func TestHelpListsEveryKey(t *testing.T) {
 	for _, l := range text {
 		words = append(words, strings.Join(strings.Fields(l), " "))
 	}
-	for _, want := range []string{"x fetch", "H open in herdr · runs on the repo", "A popup that asks before a change", "double click", "Typing the filter"} {
+	for _, want := range []string{"x fetch", "H open in herdr · runs on the repo", "A popup that asks before a change", "click puts the cursor on a row; on a section's head", "Typing the filter"} {
 		if !slices.ContainsFunc(words, func(l string) bool { return strings.HasPrefix(l, want) }) {
 			t.Errorf("? lacks %q:\n%s", want, all)
 		}
@@ -1751,5 +1751,63 @@ func TestResultsGoAfterAWhile(t *testing.T) {
 	press(w, m, "esc")
 	if got := results(); len(got) != 0 {
 		t.Errorf("esc left %v", got)
+	}
+}
+
+// l opens and h closes: a section from its head or from a row in it, and
+// a clone's worktrees from the clone or from a worktree, the cursor going
+// to what closed. enter opens nothing. A click folds or unfolds a head,
+// and on a clone only puts the cursor there.
+func TestOpenAndClose(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	shown := func(s string) bool { return strings.Contains(screen(m), s) }
+	w.to(m, runner)
+	press(w, m, "enter")
+	if shown("├ ⌥") {
+		t.Fatal("enter showed the worktrees")
+	}
+	press(w, m, "l")
+	if !shown("├ ⌥") {
+		t.Fatalf("l did not show the worktrees:\n%s", screen(m))
+	}
+	press(w, m, "down", "h")
+	if sel, _ := m.selected(); shown("├ ⌥") || sel.kind != columns.KindClone || sel.row.Key() != runner {
+		t.Errorf("h on a worktree: worktrees shown %v, cursor on %v", shown("├ ⌥"), sel.key())
+	}
+	press(w, m, "right")
+	press(w, m, "left")
+	if shown("├ ⌥") {
+		t.Error("left on the clone did not hide its worktrees")
+	}
+
+	head := func() int { return slices.IndexFunc(m.lines, func(l line) bool { return l.head == headNotCloned }) }
+	m.moveTo(head())
+	press(w, m, "l", "down")
+	if !shown("tool-shed") {
+		t.Fatalf("l did not open not cloned:\n%s", screen(m))
+	}
+	press(w, m, "h")
+	if sel, _ := m.selected(); shown("tool-shed") || sel.head != headNotCloned {
+		t.Errorf("h in a section: open %v, cursor on %v", shown("tool-shed"), sel.key())
+	}
+
+	m.render()
+	click := func(i int) {
+		m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: 5, Y: m.listTop() + i - m.offset})
+	}
+	click(head())
+	if !shown("tool-shed") {
+		t.Error("a click on the head did not open it")
+	}
+	click(head())
+	if shown("tool-shed") {
+		t.Error("a second click on the head did not fold it")
+	}
+	i := slices.IndexFunc(m.lines, func(l line) bool { return l.row != nil && l.row.Key() == runner })
+	click(i)
+	click(i)
+	if shown("├ ⌥") || m.sel != i {
+		t.Errorf("clicks on a clone: worktrees shown %v, cursor %d, want %d", shown("├ ⌥"), m.sel, i)
 	}
 }
