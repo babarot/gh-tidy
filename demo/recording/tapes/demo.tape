@@ -24,17 +24,17 @@ Show
 Type "gh tidy"
 Sleep 400ms
 Enter
-Wait+Screen /can update/
+Wait+Screen /can pull/
 Sleep 2.5s
 
 # P: every default branch moved forward, the work in the activity box.
 Type "P"
-Wait+Screen /update all/
+Wait+Screen /pull all/
 Sleep 1.5s
 Type "y"
-Wait+Screen /\[\+\] Updat/
+Wait+Screen /\[\+\] Pull/
 Sleep 3s
-Wait+Screen /Updated/
+Wait+Screen /Pulled/
 Sleep 1.5s
 
 # d on agent-runner: the worktree done goes, the one being worked on stays.

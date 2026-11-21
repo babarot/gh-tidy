@@ -672,7 +672,7 @@ func TestUpdateAllAsksFirst(t *testing.T) {
 	w := newWorld(t)
 	m := w.model(nil)
 	press(w, m, "P")
-	if m.popup == nil || !strings.Contains(strings.Join(popupText(m), "\n"), "can update") {
+	if m.popup == nil || !strings.Contains(strings.Join(popupText(m), "\n"), "can pull") {
 		t.Fatalf("no confirm:\n%s", strings.Join(popupText(m), "\n"))
 	}
 	press(w, m, "esc")
@@ -819,7 +819,7 @@ func TestAStalePlanIsNotShown(t *testing.T) {
 		t.Fatal("no plan read")
 	}
 	m.Update(msg)
-	if !strings.Contains(strings.Join(popupText(m), "\n"), "update all") {
+	if !strings.Contains(strings.Join(popupText(m), "\n"), "pull all") {
 		t.Errorf("the plan replaced the popup open:\n%s", strings.Join(popupText(m), "\n"))
 	}
 }

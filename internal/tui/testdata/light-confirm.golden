@@ -1,16 +1,16 @@
 -- screen --
- tidy // ‹ mika ›    local │ github                                                         4 can update · 4 with changes · 1 worktree done
+ tidy // ‹ mika ›    local │ github                                                           4 can pull · 4 with changes · 1 worktree done
   REPO                        MAIN            CHECKED OUT                   CHANGES         WORKTREES                              FETCHED
 ▎ agent-runner ⌥3             ⇣6              retry-backoff ⇡2 ⇠5           !1              1 busy  1 new  1 done                  5h ago
   scratchpad local only       no origin       main                          ?4                                                     -
   dotfiles                    ⇣2              main                          !3 ?2 $1                                               1h ago
   calendar-sync               ⇣1              feat/ics-export = ⇠1          !1 +2                                                  1h ago
   trail-notes                 ⇣?              main                                                                                 1h ago
-  ▸ nothing to do  2╭─ update all ─────────────────────────────────────────────────────────────────────────────────────╮
+  ▸ nothing to do  2╭─ pull all ───────────────────────────────────────────────────────────────────────────────────────╮
   ▸ not cloned  2   │ Fetch the 6 clones of mika, then fast-forward each default branch                                │
                     │ where nothing is in the way. Branches being worked on are not touched.                           │
                     │                                                                                                  │
-                    │ as last read: 4 can update · 0 in the way                                                        │
+                    │ as last read: 4 can pull · 0 in the way                                                          │
                     │ each is decided again after its fetch                                                            │
                     │                                                                                                  │
                     │ y yes · esc cancel                                                                               │
@@ -55,8 +55,8 @@ L10 20-21 fg=#1e66f5
 L10 22-92 fg=#4c4f69
 L10 119-120 fg=#1e66f5
 L11 20-120 fg=#1e66f5
-L12 20-48 fg=#1e66f5
-L12 49-63 fg=#df8e1d
+L12 20-46 fg=#1e66f5
+L12 47-61 fg=#df8e1d
 L12 119-120 fg=#1e66f5
 L13 20-21 fg=#1e66f5
 L13 22-59 fg=#8c8fa1

@@ -53,7 +53,7 @@ func (t *tracker) idled() {
 }
 
 // verbs say what a run does, by the kind of its first task.
-var verbs = map[string]string{"clone": "Reading", "github": "Reading", "fetch": "Fetching", "update": "Updating", "cleanup": "Cleaning up", "create": "Cloning"}
+var verbs = map[string]string{"clone": "Reading", "github": "Reading", "fetch": "Fetching", "pull": "Pulling", "cleanup": "Cleaning up", "create": "Cloning"}
 
 // tracked is a piece of work followed from when it is queued.
 type tracked struct {

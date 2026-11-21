@@ -228,11 +228,11 @@ func (e *Engine) Fetch(keys []model.CloneKey) (busy []model.CloneKey) {
 func (e *Engine) Advance(keys []model.CloneKey) (busy []model.CloneKey) {
 	defer e.busy()()
 	for _, k := range keys {
-		if !e.lane(k, "waiting to update") {
+		if !e.lane(k, "waiting to pull") {
 			busy = append(busy, k)
 			continue
 		}
-		t := e.trackOp("updated", "update", k)
+		t := e.trackOp("pulled", "pull", k)
 		e.netPool.add(prioAsked, nil, func() {
 			t.start()
 			e.doing(k, "fetching")
