@@ -6,6 +6,7 @@ package recording
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -47,6 +48,8 @@ type repo struct {
 	head    string // the bare remote's main, read once built
 	private bool
 	id      int64 // GitHub's number for it, set once built
+	behind  int   // commits GitHub has that the clone has not fetched
+	dirty   bool  // a change not committed in the clone
 }
 
 type alert struct{ severity, pkg, ecosystem, vulnerable, fixed, manifest string }
@@ -62,33 +65,55 @@ type opened struct {
 // read: what is made after it is new.
 const baseline = 24 * time.Hour
 
+// repos are the repositories of the world.
+func repos() []repo {
+	h := time.Hour
+	return []repo{
+		{name: "agent-runner", cloned: true, stars: 128, pushed: 2*h + 30*time.Minute, ci: "SUCCESS", behind: 3,
+			issues: []opened{{41, "Retry the runner when the socket closes", "kai", 3*h + 10*time.Minute}, {37, "Document the cache layout", "ren", 52 * h}},
+			prs:    []opened{{40, "Speed up status parsing", "hana", 75 * h}}},
+		{name: "calendar-sync", cloned: true, stars: 41, pushed: 26 * h, ci: "FAILURE", behind: 2,
+			alerts: []alert{{"critical", "ical-parser", "npm", "< 2.4.1", "2.4.1", "package-lock.json"}, {"moderate", "tmp-dir", "npm", "<= 0.9.0", "", "package-lock.json"}},
+			issues: []opened{{12, "Events after midnight land on the wrong day", "ren", 98 * h}}},
+		{name: "dotfiles", cloned: true, stars: 16, pushed: 5*h + 20*time.Minute, ci: "SUCCESS", private: true, dirty: true},
+		{name: "fern-docs", stars: 57, pushed: 50 * h, ci: "SUCCESS",
+			alerts: []alert{{"high", "markdown-it-lite", "npm", "< 13.0.2", "13.0.2", "package-lock.json"}, {"moderate", "glob-walk", "npm", "< 4.1.0", "4.1.0", "package-lock.json"}, {"low", "ansi-tint", "npm", "< 2.0.1", "2.0.1", "package-lock.json"}}},
+		{name: "harbor-proxy", cloned: true, stars: 88, pushed: 9*h + 40*time.Minute, ci: "SUCCESS", behind: 1, dirty: true,
+			prs: []opened{{21, "Pass the client's address on", "kai", 130 * h}}},
+		{name: "kata-notes", cloned: true, stars: 12, pushed: 410 * h, ci: "SUCCESS"},
+		{name: "ledger-cli", cloned: true, stars: 64, pushed: 14*h + 15*time.Minute, ci: "SUCCESS", behind: 3,
+			alerts: []alert{{"low", "csv-quick", "go", "< 0.8.2", "0.8.2", "go.mod"}},
+			issues: []opened{{9, "Import OFX files", "ren", 160 * h}, {7, "Round to the cent", "hana", 300 * h}}},
+		{name: "mdlint-action", cloned: true, stars: 31, pushed: 70 * h, ci: "FAILURE"},
+		{name: "orbit-sim", stars: 19, pushed: 260 * h, ci: "SUCCESS"},
+		{name: "paper-cranes", cloned: true, stars: 7, pushed: 520 * h, ci: "SUCCESS"},
+		{name: "pixel-garden", cloned: true, stars: 9, pushed: 20*h + 10*time.Minute, ci: "SUCCESS"},
+		{name: "quill-md", cloned: true, stars: 45, pushed: 7*h + 50*time.Minute, ci: "SUCCESS", behind: 4},
+		{name: "river-bench", cloned: true, stars: 22, pushed: 180 * h, ci: "SUCCESS"},
+		{name: "sakura-theme", cloned: true, stars: 214, pushed: 90 * h, ci: "SUCCESS"},
+		{name: "sundial", stars: 33, pushed: 6 * h, ci: "SUCCESS",
+			prs: []opened{{5, "Show the hour hand in the dark theme", "kai", 5*h + 30*time.Minute}}},
+		{name: "tiny-kv", cloned: true, stars: 73, pushed: 40 * h, ci: "SUCCESS", dirty: true},
+		{name: "tool-shed", stars: 23, pushed: 100 * h, ci: "SUCCESS",
+			alerts: []alert{{"high", "yaml-lite", "go", "< 1.3.0", "1.3.0", "go.mod"}},
+			issues: []opened{{3, "Explain the shelf layout", "kai", 120 * h}}},
+		{name: "trail-notes", cloned: true, stars: 37, pushed: 30 * h, ci: "PENDING", behind: 2,
+			prs: []opened{{8, "Add a map of the trail", "hana", 54 * h}}},
+		{name: "weather-cli", cloned: true, stars: 4, pushed: 230 * h, ci: "SUCCESS"},
+	}
+}
+
+// stamp is the file that says when the world was built.
+const stamp = "world.json"
+
 // Build makes the world under dir. The caller has set the environment so
 // that git reads none of the user's settings (see the demo's main).
 func Build(ctx context.Context, dir string) (*World, error) {
-	home, err := filepath.EvalSymlinks(dir)
+	w, err := newWorld(dir, time.Now())
 	if err != nil {
 		return nil, err
 	}
-	w := &World{Home: home, Root: filepath.Join(home, "src"), Config: filepath.Join(home, "config.toml"), Built: time.Now(),
-		remotes: filepath.Join(home, "remotes")}
-	w.repos = []repo{
-		{name: "agent-runner", cloned: true, stars: 128, pushed: 2*time.Hour + 30*time.Minute, ci: "SUCCESS",
-			issues: []opened{{41, "Retry the runner when the socket closes", "kai", 3*time.Hour + 10*time.Minute}, {37, "Document the cache layout", "ren", 52 * time.Hour}},
-			prs:    []opened{{40, "Speed up status parsing", "hana", 75 * time.Hour}}},
-		{name: "calendar-sync", cloned: true, stars: 41, pushed: 26 * time.Hour, ci: "FAILURE",
-			alerts: []alert{{"critical", "ical-parser", "npm", "< 2.4.1", "2.4.1", "package-lock.json"}, {"moderate", "tmp-dir", "npm", "<= 0.9.0", "", "package-lock.json"}},
-			issues: []opened{{12, "Events after midnight land on the wrong day", "ren", 98 * time.Hour}}},
-		{name: "dotfiles", cloned: true, stars: 16, pushed: 5*time.Hour + 20*time.Minute, ci: "SUCCESS", private: true},
-		{name: "pixel-garden", cloned: true, stars: 9, pushed: 20*time.Hour + 10*time.Minute, ci: "SUCCESS"},
-		{name: "trail-notes", cloned: true, stars: 37, pushed: 30 * time.Hour, ci: "PENDING",
-			prs: []opened{{8, "Add a map of the trail", "hana", 54 * time.Hour}}},
-		{name: "tool-shed", stars: 23, pushed: 100 * time.Hour, ci: "SUCCESS",
-			alerts: []alert{{"high", "yaml-lite", "go", "< 1.3.0", "1.3.0", "go.mod"}},
-			issues: []opened{{3, "Explain the shelf layout", "kai", 120 * time.Hour}}},
-		{name: "weather-cli", cloned: true, stars: 4, pushed: 230 * time.Hour, ci: "SUCCESS"},
-	}
 	for i := range w.repos {
-		w.repos[i].id = int64(1001 + i)
 		if err := w.make(ctx, &w.repos[i]); err != nil {
 			return nil, fmt.Errorf("%s: %w", w.repos[i].name, err)
 		}
@@ -100,6 +125,60 @@ func Build(ctx context.Context, dir string) (*World, error) {
 	cfg := fmt.Sprintf("[core]\nroots = [%q]\n\n[tui]\ntheme = \"catppuccin-mocha\"\n", w.Root)
 	if err := os.WriteFile(w.Config, []byte(cfg), 0o644); err != nil {
 		return nil, err
+	}
+	data, _ := json.Marshal(map[string]time.Time{"built": w.Built})
+	if err := os.WriteFile(filepath.Join(w.Home, stamp), data, 0o644); err != nil {
+		return nil, err
+	}
+	return w, nil
+}
+
+// Open reads back a world Build made under dir, so that the recording
+// starts at once: building it takes a few seconds of git.
+func Open(ctx context.Context, dir string) (*World, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
+	home, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(filepath.Join(home, stamp))
+	if err != nil {
+		return nil, fmt.Errorf("no world built under %s: %w", dir, err)
+	}
+	var st map[string]time.Time
+	if err := json.Unmarshal(data, &st); err != nil {
+		return nil, err
+	}
+	w, err := newWorld(home, st["built"])
+	if err != nil {
+		return nil, err
+	}
+	for i := range w.repos {
+		head, err := gitx.Run(ctx, filepath.Join(w.remotes, w.repos[i].name+".git"), "rev-parse", "refs/heads/main")
+		if err != nil {
+			return nil, err
+		}
+		w.repos[i].head = strings.TrimSpace(head)
+	}
+	return w, nil
+}
+
+func newWorld(dir string, built time.Time) (*World, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
+	home, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return nil, err
+	}
+	w := &World{Home: home, Root: filepath.Join(home, "src"), Config: filepath.Join(home, "config.toml"), Built: built,
+		remotes: filepath.Join(home, "remotes"), repos: repos()}
+	for i := range w.repos {
+		w.repos[i].id = int64(1001 + i)
 	}
 	return w, nil
 }
@@ -236,15 +315,19 @@ func (w *World) make(ctx context.Context, r *repo) error {
 				return err
 			}
 		}
-	case "calendar-sync", "trail-notes":
+	}
+	// What GitHub has that the clone has not fetched.
+	if r.name != "agent-runner" && r.behind > 0 {
 		w.at(r.pushed)
-		for i, msg := range []string{"Fix the time zone of all-day events", "Keep the sync token between runs"} {
-			if err := commit(ctx, seed, fmt.Sprintf("change%d.txt", i), msg+"\n", msg); err != nil {
+		msgs := []string{"Fix the time zone of all-day events", "Keep the sync token between runs", "Read the config once", "Name the flags as the docs do"}
+		for i := range r.behind {
+			if err := commit(ctx, seed, fmt.Sprintf("change%d.txt", i), msgs[i%len(msgs)]+"\n", msgs[i%len(msgs)]); err != nil {
 				return err
 			}
 		}
-	case "dotfiles":
-		if err := os.WriteFile(filepath.Join(clone, "README.md"), []byte("# dotfiles\n\nwip\n"), 0o644); err != nil {
+	}
+	if r.dirty {
+		if err := os.WriteFile(filepath.Join(clone, "README.md"), []byte("# "+r.name+"\n\nwip\n"), 0o644); err != nil {
 			return err
 		}
 	}

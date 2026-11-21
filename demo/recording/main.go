@@ -2,9 +2,12 @@
 // recording in the README: real git clones in a temporary directory and a
 // made-up GitHub (ADR-010). It is never built into gh tidy.
 //
-//	go run ./demo/recording
+//	go run ./demo/recording            builds a world, runs, and removes it
+//	go run ./demo/recording build DIR  builds a world under DIR
+//	go run ./demo/recording run DIR    runs on the world under DIR
 //
-// demo/recording/tapes/demo.tape records it with VHS (make demo).
+// demo/recording/tapes/demo.tape records it with VHS (make demo): it
+// builds the world out of sight first, so that gh tidy starts at once.
 package main
 
 import (
@@ -25,11 +28,30 @@ func main() {
 }
 
 func run() error {
-	dir, err := os.MkdirTemp("", "gh-tidy-demo-")
+	var dir string
+	switch {
+	case len(os.Args) == 3 && (os.Args[1] == "build" || os.Args[1] == "run"):
+		dir = os.Args[2]
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	case len(os.Args) == 1:
+		d, err := os.MkdirTemp("", "gh-tidy-demo-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(d)
+		dir = d
+	default:
+		return fmt.Errorf("usage: %s [build DIR | run DIR]", os.Args[0])
+	}
+	dir, err := filepath.Abs(dir)
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(dir)
+	if dir, err = filepath.EvalSymlinks(dir); err != nil {
+		return err
+	}
 	// git and gh read none of the user's settings and sign-in, git makes
 	// commits as a made-up person, and nothing reaches beyond the disk: the
 	// origins name GitHub, and only a per-clone insteadOf sends them to
@@ -52,9 +74,17 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	w, err := recording.Build(ctx, dir)
+	var w *recording.World
+	if len(os.Args) == 3 && os.Args[1] == "run" {
+		w, err = recording.Open(ctx, dir)
+	} else {
+		w, err = recording.Build(ctx, dir)
+	}
 	if err != nil {
 		return err
+	}
+	if len(os.Args) == 3 && os.Args[1] == "build" {
+		return nil
 	}
 	if err := os.Setenv("HOME", w.Home); err != nil {
 		return err

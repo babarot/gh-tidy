@@ -12,9 +12,12 @@ Set TypingSpeed 60ms
 Set Theme "Catppuccin Mocha"
 
 Hide
-Type "go build -o demo/recording/out/recording ./demo/recording && gh() { ./demo/recording/out/recording; } && clear"
+Type "rm -rf demo/recording/out/world && go build -o demo/recording/out/recording ./demo/recording && ./demo/recording/out/recording build demo/recording/out/world && gh() { ./demo/recording/out/recording run demo/recording/out/world; } && echo world-$((40+2))"
 Enter
-Wait
+Wait+Screen@90s /world-42/
+Type "clear"
+Enter
+Sleep 300ms
 Show
 
 # Open: the clones in the order of what needs doing.
@@ -42,6 +45,10 @@ Wait+Screen /clean up agent-runner/
 Sleep 2.5s
 Type "y"
 Sleep 2.5s
+
+# esc puts the results away, so that the rows take their order again.
+Escape
+Sleep 800ms
 
 # v: the github columns. The cursor rests on agent-runner, with a new
 # issue; then calendar-sync, with alerts and failing checks.
