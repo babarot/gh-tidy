@@ -278,7 +278,7 @@ func worktreeList(x Ctx, it Item, _ *model.Detail) *Part {
 			if w.Prunable {
 				role = Warn
 			}
-			line := Cell{{Text: "  " + name + "  ", Role: Worktree}, {Text: w.Path + "  ", Role: role}}
+			line := Cell{{Text: "  " + name + "  ", Role: Worktree}, {Text: x.Short(w.Path) + "  ", Role: role}}
 			p.Lines = append(p.Lines, append(line, x.worktreeVerdict(r, w)...))
 		}
 	} else {

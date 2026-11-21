@@ -142,7 +142,7 @@ func (m *Model) layout() ([]columns.Column, []int) {
 }
 
 func (m *Model) ctx() columns.Ctx {
-	return columns.Ctx{Owner: &m.snap, Symbols: m.sym, Now: m.now(), Roots: m.roots, Twins: m.twins}
+	return columns.Ctx{Owner: &m.snap, Symbols: m.sym, Now: m.now(), Roots: m.roots, Twins: m.twins, Home: m.home}
 }
 
 func (m *Model) header() drawn {

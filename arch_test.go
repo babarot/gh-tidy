@@ -45,6 +45,9 @@ var layers = []layer{
 	{"internal/app", 5, []string{"internal/command", "internal/config", "internal/engine", "internal/github", "internal/local", "internal/locate", "internal/logging", "internal/model", "internal/store", "internal/tui", "internal/version"},
 		[]string{"charm.land/bubbletea/v2"}, "Putting gh-tidy together: flags, settings, the engine built from the concrete packages, the owner to open, the screen"},
 	{"", 6, []string{"internal/app"}, nil, "Running gh tidy"},
+	{"demo/internal/recording", 6, []string{"internal/app", "internal/config", "internal/engine", "internal/github", "internal/gitx", "internal/locate", "internal/logging", "internal/model", "internal/store", "internal/tui"},
+		[]string{"charm.land/bubbletea/v2"}, "The made-up world the demo recording runs gh tidy against: real git clones in a temporary directory and a made-up GitHub; never part of gh tidy (ADR-010)"},
+	{"demo/recording", 7, []string{"demo/internal/recording"}, nil, "Running gh tidy against the made-up world, for the recording in the README"},
 }
 
 // layer is a package's place: its layer, the packages of this module

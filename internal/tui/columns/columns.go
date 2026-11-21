@@ -84,6 +84,16 @@ type Ctx struct {
 	// another clone shares (Twins): those say which root they are in.
 	Roots []string
 	Twins map[string]bool
+	// Home is written as ~ in paths.
+	Home string
+}
+
+// Short writes p with ~ for the home directory.
+func (x Ctx) Short(p string) string {
+	if x.Home != "" && strings.HasPrefix(p, x.Home+"/") {
+		return "~" + p[len(x.Home):]
+	}
+	return p
 }
 
 // twin is what two clones of one name share: their owner's directory and
