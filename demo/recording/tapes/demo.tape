@@ -1,7 +1,7 @@
 # The recording in the README: gh tidy against a made-up world (ADR-010).
-# make demo records it into demo/recording/out/demo.gif.
+# make demo records it into docs/demo.gif, which the README shows.
 
-Output demo/recording/out/demo.gif
+Output docs/demo.gif
 
 Set Shell "bash"
 Set FontSize 14

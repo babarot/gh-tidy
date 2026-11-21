@@ -2,6 +2,8 @@
 
 A gh extension that keeps one GitHub owner's local clones up to date and clear of what you are done with, so they are ready to hand to a coding agent.
 
+![gh tidy updating an owner's clones, cleaning up a finished worktree, and showing alerts and new issues on GitHub](docs/demo.gif)
+
 A coding agent works from the clone it is given. If the clone's default branch is behind GitHub's, the agent starts its work from old code, or reads old code as context and decides on it. gh tidy lists an owner's clones with what stands in the way, moves their default branches forward where nothing is in the way, and removes the worktrees and branches you are done with.
 
 ```

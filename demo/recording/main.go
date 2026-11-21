@@ -6,8 +6,9 @@
 //	go run ./demo/recording build DIR  builds a world under DIR
 //	go run ./demo/recording run DIR    runs on the world under DIR
 //
-// demo/recording/tapes/demo.tape records it with VHS (make demo): it
-// builds the world out of sight first, so that gh tidy starts at once.
+// demo/recording/tapes/demo.tape records it with VHS into docs/demo.gif
+// (make demo): it builds the world out of sight first, so that gh tidy
+// starts at once.
 package main
 
 import (
