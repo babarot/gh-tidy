@@ -1667,7 +1667,7 @@ func TestTheActivityBoxTakesThePreviewsBottom(t *testing.T) {
 func TestTheShimmerMovesAndKeepsTheText(t *testing.T) {
 	w := newWorld(t)
 	m := w.model(nil)
-	cs := []cell{{text: "fetching", role: roleAccent}}
+	cs := []cell{{text: "fetching", role: roleMuted}}
 	plainOf := func(cs []cell) string { return plain(drawn{parts: cs}) }
 	first := m.shimmer(cs)
 	m.now = func() time.Time { return later.Add(3 * statusline.FrameEvery) }
@@ -1687,7 +1687,7 @@ func TestTheShimmerMovesAndKeepsTheText(t *testing.T) {
 	if slices.Equal(roles(first), roles(second)) {
 		t.Error("the light did not move")
 	}
-	if !slices.Contains(roles(second), roleStrong) || !slices.Contains(roles(second), roleAccent) {
+	if !slices.Contains(roles(second), roleText) || !slices.Contains(roles(second), roleAccent) || !slices.Contains(roles(second), roleMuted) {
 		t.Errorf("roles = %v; want the light and the text's own color", roles(second))
 	}
 }

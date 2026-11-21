@@ -132,7 +132,9 @@ func slugOf(k model.RemoteKey) string {
 func opCell(r *model.Row) (Cell, bool) {
 	switch {
 	case r.Op.Doing != "":
-		return Cell{{Text: r.Op.Doing, Role: Accent}}, true
+		// Muted, so that the light the screen runs over it shows, and it
+		// reads apart from the results.
+		return Cell{{Text: r.Op.Doing, Role: Muted}}, true
 	case r.Op.Result == "":
 		return nil, false
 	case r.Op.Failed:

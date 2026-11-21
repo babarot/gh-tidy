@@ -624,11 +624,11 @@ func workersLine(a model.Activity) []cell {
 	return append(parts, cell{text: " · ", role: roleBorder}, cell{text: fmt.Sprintf("%d queued", a.Queued), role: role})
 }
 
-// shimmer runs a light over cs, the text of what is being done: its
-// brightest color on one character, the title color on those beside it,
-// moving one character each frame of the one clock (ADR-007), from before
-// the text to past its end. It changes colors, never the text or its
-// width.
+// shimmer runs a light over cs, the muted text of what is being done:
+// the text color on one character and the accent color on those beside
+// it, brighter than the words in every theme. It moves one character each
+// frame of the one clock (ADR-007), from before the text to past its end,
+// and changes colors, never the text or its width.
 func (m *Model) shimmer(cs []cell) []cell {
 	const before, after, beside = 4, 8, 2
 	var rs []rune
@@ -648,9 +648,9 @@ func (m *Model) shimmer(cs []cell) []cell {
 		c := base[i]
 		switch d := max(i-at, at-i); {
 		case d == 0:
-			c.role = roleStrong
+			c.role = roleText
 		case d <= beside:
-			c.role = roleTitle
+			c.role = roleAccent
 		}
 		c.text = string(r)
 		if n := len(out); n > 0 && out[n-1].role == c.role && out[n-1].bold == c.bold && out[n-1].underline == c.underline {
