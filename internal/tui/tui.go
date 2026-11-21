@@ -39,6 +39,7 @@ type Engine interface {
 	PlanCleanup(key model.CloneKey, opts policy.Cleanup, cwd string) (policy.Plan, error)
 	Cleanup(plans map[model.CloneKey]policy.Plan, opts policy.Cleanup, cwd string) (busy []model.CloneKey)
 	ClearResults()
+	ClearResultsOf(keys []string)
 	Clone(key model.RemoteKey) (string, error)
 	ReadList()
 	Refresh()
@@ -158,6 +159,9 @@ type Model struct {
 	spinning bool
 	// workers says w asked for the workers' line in the activity box.
 	workers bool
+	// resultsAt is when each result that will go was first shown, by the
+	// row's key; the row the cursor is on keeps restarting it.
+	resultsAt map[string]time.Time
 
 	width, height int
 	dark          bool
@@ -211,8 +215,9 @@ func New(o Options) (*Model, error) {
 		save: o.Save, home: o.Home, now: now, noTimers: o.NoTimers, roots: o.Roots,
 		owners: append([]string{All}, o.Owners...), owner: o.Owner, lens: columns.Local, cursor: o.Select,
 		order: map[string]int{}, expanded: map[string]bool{}, folds: map[string]bool{}, pfold: map[string]bool{}, top: map[string]bool{},
-		groups: o.Config.Groups,
-		ph:     previewDefault, dark: true}
+		resultsAt: map[string]time.Time{},
+		groups:    o.Config.Groups,
+		ph:        previewDefault, dark: true}
 	for _, g := range m.groups {
 		m.folds[groupHead(g)] = g.Folded
 	}
@@ -247,7 +252,7 @@ type frameMsg struct{}
 // spin asks for the spinner's next frame while work goes on, and while
 // the activity box or the rate limit waits to fold.
 func (m *Model) spin() tea.Cmd {
-	if a := m.eng.Activity(); m.noTimers || m.spinning || (!a.Busy() && !m.boxShown(a) && !m.rateShown(a)) {
+	if a := m.eng.Activity(); m.noTimers || m.spinning || (!a.Busy() && !m.boxShown(a) && !m.rateShown(a) && len(m.resultsAt) == 0) {
 		return nil
 	}
 	m.spinning = true
@@ -282,6 +287,7 @@ func (m *Model) refresh() {
 	m.twins = columns.Twins(m.snap.Rows)
 	m.relayout()
 	m.sync()
+	m.ageResults()
 }
 
 // sync tells the engine what the screen shows, and takes the detail of
@@ -379,6 +385,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.line.Expire(msg.id)
 	case frameMsg:
 		m.spinning = false
+		m.ageResults()
 		return m, m.spin()
 	case sayMsg:
 		return m, m.say(msg.kind, msg.text)
@@ -502,6 +509,46 @@ func (m *Model) quit() tea.Cmd {
 }
 
 // hasResults reports whether rows show what was done to them.
+// resultFor is how long the result of a change that went well, or was
+// left with why, stays on its row; a failure stays until esc. A constant:
+// long enough to read, short enough that the list takes its order again.
+const resultFor = 10 * time.Second
+
+// ageResults puts away the results shown longer than resultFor, but on
+// the row the cursor is on, whose time starts when the cursor leaves it,
+// and but failures, which stay until esc.
+func (m *Model) ageResults() {
+	now := m.now()
+	sel := ""
+	if l, ok := m.selected(); ok && l.row != nil {
+		sel = l.row.Key()
+	}
+	shown := map[string]bool{}
+	var gone []string
+	for _, r := range m.snap.Rows {
+		if r.Op.Doing != "" || r.Op.Result == "" || r.Op.Failed {
+			continue
+		}
+		k := r.Key()
+		shown[k] = true
+		at, ok := m.resultsAt[k]
+		switch {
+		case !ok || k == sel:
+			m.resultsAt[k] = now
+		case now.Sub(at) >= resultFor:
+			gone = append(gone, k)
+		}
+	}
+	for k := range m.resultsAt {
+		if !shown[k] {
+			delete(m.resultsAt, k)
+		}
+	}
+	if len(gone) > 0 {
+		m.eng.ClearResultsOf(gone)
+	}
+}
+
 func (m *Model) hasResults() bool {
 	for _, r := range m.snap.Rows {
 		if r.Op.Doing == "" && r.Op.Result != "" {

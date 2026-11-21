@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"image/color"
@@ -200,6 +201,7 @@ type fakeChange struct {
 	local *fakeLocal
 	calls []string
 	block chan struct{} // when set, Fetch waits for it
+	fail  string        // the clone whose fetch fails
 }
 
 func (f *fakeChange) record(s string) { f.mu.Lock(); f.calls = append(f.calls, s); f.mu.Unlock() }
@@ -216,6 +218,11 @@ func (f *fakeChange) Fetch(_ context.Context, path string) error {
 		<-block
 	}
 	f.record("fetch " + filepath.Base(path))
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.fail != "" && filepath.Base(path) == f.fail {
+		return errors.New("fatal: could not read from remote repository")
+	}
 	return nil
 }
 func (f *fakeChange) AdvanceFacts(_ context.Context, path, name string, src model.DefaultSource) model.AdvanceFacts {
@@ -1682,5 +1689,54 @@ func TestTheShimmerMovesAndKeepsTheText(t *testing.T) {
 	}
 	if !slices.Contains(roles(second), roleStrong) || !slices.Contains(roles(second), roleAccent) {
 		t.Errorf("roles = %v; want the light and the text's own color", roles(second))
+	}
+}
+
+// A result that went well goes after a while, but on the row the cursor
+// is on, whose time starts when it leaves; a failure stays until esc.
+func TestResultsGoAfterAWhile(t *testing.T) {
+	w := newWorld(t)
+	clock := later
+	m := w.model(func(o *Options) { o.Now = func() time.Time { return clock } })
+	w.change.mu.Lock()
+	w.change.fail = "dotfiles"
+	w.change.mu.Unlock()
+	press(w, m, "F")
+	results := func() map[string]string {
+		out := map[string]string{}
+		for _, r := range m.snap.Rows {
+			if r.Op.Result != "" {
+				out[r.Local.Value.Name] = r.Op.Result
+			}
+		}
+		return out
+	}
+	before := results()
+	if len(before) < 2 {
+		t.Fatalf("results after F: %v", before)
+	}
+	sel, _ := m.selected()
+	clock = clock.Add(resultFor + time.Second)
+	m.ageResults()
+	w.settle(m)
+	after := results()
+	if _, ok := after[sel.row.Local.Value.Name]; !ok {
+		t.Errorf("the result under the cursor went: %v", after)
+	}
+	if len(after) != 2 || after["dotfiles"] == "" {
+		t.Errorf("results after %s: %v; want the cursor's and the failure", resultFor, after)
+	}
+	// The cursor leaves: that row's time starts now.
+	m.moveTo(len(m.lines) - 1)
+	m.ageResults()
+	clock = clock.Add(resultFor + time.Second)
+	m.ageResults()
+	w.settle(m)
+	if got := results(); len(got) != 1 || got["dotfiles"] == "" {
+		t.Errorf("results after the cursor left and %s passed: %v; want the failure only", resultFor, got)
+	}
+	press(w, m, "esc")
+	if got := results(); len(got) != 0 {
+		t.Errorf("esc left %v", got)
 	}
 }

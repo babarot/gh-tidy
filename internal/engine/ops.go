@@ -141,6 +141,25 @@ func (e *Engine) ClearResults() {
 	}
 }
 
+// ClearResultsOf puts away the results shown on the rows of keys (a row's
+// Key), leaving the others and any change still going on.
+func (e *Engine) ClearResultsOf(keys []string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, o := range e.owners {
+		changed := false
+		for _, k := range keys {
+			if r := o.rows[k]; r != nil && r.Op.Doing == "" && r.Op.Result != "" {
+				r.Op = model.Op{}
+				changed = true
+			}
+		}
+		if changed {
+			e.changedOwner(o)
+		}
+	}
+}
+
 // clone returns the clone of key as last read, from any owner holding it.
 func (e *Engine) clone(key model.CloneKey) (model.Clone, bool) {
 	e.mu.Lock()
