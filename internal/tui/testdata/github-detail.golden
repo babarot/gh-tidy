@@ -25,15 +25,15 @@
 
 
  7 clones · 2 not cloned
-╭─ calendar-sync ───────────────────────────────────────────────────────────────────────────────────────────────────── ↓ 1 more · +/- size ╮
-│ OPEN                                                                                │ path     ~/github.com/mika/calendar-sync           │
-│   1 issues · 0 pull requests                                                        │ fetched  1h ago                                    │
-│ DEPENDABOT 2  open alerts · o opens the repository                                  │ p        updates main · ff, not checked out        │
-│   critical  ical-parser (npm)  < 2.4.1   fixed in 2.4.1  package-lock.json          │ d        nothing to clean up                       │
-│   low       tmp-dir (npm)      <= 0.9.0  no fix yet      package-lock.json          │ default  main from github                          │
-│   … 10 more                                                                         │                                                    │
+╭─ calendar-sync ──────────────────────────────────────────────────────────────────────────────────────────────────────────────── +/- size ╮
+│ OPEN 1 issues · 0 pull requests                                                     │ path     ~/github.com/mika/calendar-sync           │
+│ DEPENDABOT 2  open alerts · o opens the repository                                  │ fetched  1h ago                                    │
+│   critical  ical-parser (npm)  < 2.4.1   fixed in 2.4.1  package-lock.json          │ p        updates main · ff, not checked out        │
+│   low       tmp-dir (npm)      <= 0.9.0  no fix yet      package-lock.json          │ d        nothing to clean up                       │
+│   … 10 more                                                                         │ default  main from github                          │
 │ CI ✗  on main                                                                       │                                                    │
 │   ✗ test (ubuntu-latest)                                                            │                                                    │
+│   ~ build                                                                           │                                                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
  v local · o open on GitHub · c clone · / filter · O owner · ? keys · q quit
@@ -108,54 +108,55 @@ L11 30-105 fg=#706f87
 L26 1-24 fg=#8888a4
 L27 0-140 fg=#525270
 L28 0-1 fg=#525270
-L28 2-6 fg=#b0b8d1 bold
+L28 2-33 fg=#b0b8d1 bold
 L28 86-87 fg=#706f87
 L28 88-92 fg=#b0b8d1
 L28 97-128 fg=#e0e4f0
 L28 139-140 fg=#525270
 L29 0-1 fg=#525270
-L29 4-30 fg=#e0e4f0
+L29 2-14 fg=#f5a3b5 bold
+L29 16-52 fg=#b0b8d1
 L29 86-87 fg=#706f87
 L29 88-95 fg=#b0b8d1
 L29 97-103 fg=#8888a4
 L29 139-140 fg=#525270
 L30 0-1 fg=#525270
-L30 2-14 fg=#f5a3b5 bold
-L30 16-52 fg=#b0b8d1
-L30 86-87 fg=#706f87
+L30 4-12 fg=#f5a3b5
+L30 14-31 fg=#e0e4f0
+L30 33-40 fg=#8888a4
+L30 43-57 fg=#b5f0b0
+L30 59-87 fg=#706f87
 L30 88-89 fg=#b0b8d1
 L30 97-109 fg=#b5f0b0
 L30 110-131 fg=#8888a4
 L30 139-140 fg=#525270
 L31 0-1 fg=#525270
-L31 4-12 fg=#f5a3b5
-L31 14-31 fg=#e0e4f0
-L31 33-40 fg=#8888a4
-L31 43-57 fg=#b5f0b0
+L31 4-7 fg=#8888a4
+L31 14-27 fg=#e0e4f0
+L31 33-53 fg=#8888a4
 L31 59-87 fg=#706f87
 L31 88-89 fg=#b0b8d1
 L31 97-116 fg=#8888a4
 L31 139-140 fg=#525270
 L32 0-1 fg=#525270
-L32 4-7 fg=#8888a4
-L32 14-27 fg=#e0e4f0
-L32 33-53 fg=#8888a4
-L32 59-87 fg=#706f87
+L32 4-87 fg=#706f87
 L32 88-95 fg=#b0b8d1
 L32 97-101 fg=#d0d6e8
 L32 102-113 fg=#706f87
 L32 139-140 fg=#525270
 L33 0-1 fg=#525270
-L33 4-87 fg=#706f87
+L33 2-6 fg=#f5a3b5 bold
+L33 8-15 fg=#b0b8d1
+L33 86-87 fg=#706f87
 L33 139-140 fg=#525270
 L34 0-1 fg=#525270
-L34 2-6 fg=#f5a3b5 bold
-L34 8-15 fg=#b0b8d1
+L34 4-5 fg=#f5a3b5
+L34 6-26 fg=#e0e4f0
 L34 86-87 fg=#706f87
 L34 139-140 fg=#525270
 L35 0-1 fg=#525270
-L35 4-5 fg=#f5a3b5
-L35 6-26 fg=#e0e4f0
+L35 4-5 fg=#ffe5a0
+L35 6-11 fg=#e0e4f0
 L35 86-87 fg=#706f87
 L35 139-140 fg=#525270
 L36 0-140 fg=#525270

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -152,9 +153,10 @@ type fakeGitHub struct {
 
 	details   map[string]model.RepoDetail // by slug
 	detailErr error
-	detailed  []string      // slugs whose detail was asked for
-	detailGo  chan struct{} // when set, RepoDetail waits for it
-	waiting   int           // RepoDetail calls waiting on detailGo
+	detailed  []string          // slugs whose detail was asked for
+	detailGo  chan struct{}     // when set, RepoDetail waits for it
+	waiting   int               // RepoDetail calls waiting on detailGo
+	prsFail   map[string]string // repositories whose pull requests are not read
 }
 
 func (f *fakeGitHub) RepoDetail(ctx context.Context, slug string, want github.DetailWant) (model.RepoDetail, github.Rate, error) {
@@ -178,7 +180,10 @@ func (f *fakeGitHub) RepoDetail(ctx context.Context, slug string, want github.De
 		return model.RepoDetail{}, f.rate, f.detailErr
 	}
 	d := f.details[slug]
-	d.AlertsAsked, d.ChecksAsked = want.Alerts, want.Oid != ""
+	d.AlertsAsked, d.ChecksAsked, d.TitlesAsked = want.Alerts, want.Oid != "", want.Titles
+	if want.Titles {
+		d.IssuesRead, d.PRsRead = true, f.prsFail[slug] == ""
+	}
 	r := f.rate
 	r.Cost, r.Resource = 1, "graphql"
 	return d, r, nil
@@ -279,6 +284,37 @@ func (f *fakeGitHub) setList(owner string, complete github.Completeness, etag st
 type memStore struct {
 	mu     sync.Mutex
 	owners map[string]store.OwnerCache
+	seen   store.Seen
+	saves  int // writes of what was seen
+}
+
+func (m *memStore) LoadSeen() (store.Seen, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := store.Seen{Repos: map[string]time.Time{}, Owners: map[string]time.Time{}}
+	maps.Copy(out.Repos, m.seen.Repos)
+	maps.Copy(out.Owners, m.seen.Owners)
+	return out, nil
+}
+
+func (m *memStore) SaveSeen(add store.Seen) (store.Seen, error) {
+	m.mu.Lock()
+	m.saves++
+	if m.seen.Repos == nil {
+		m.seen = store.Seen{Repos: map[string]time.Time{}, Owners: map[string]time.Time{}}
+	}
+	for k, t := range add.Repos {
+		if t.After(m.seen.Repos[k]) {
+			m.seen.Repos[k] = t
+		}
+	}
+	for k, t := range add.Owners {
+		if old, ok := m.seen.Owners[k]; !ok || t.Before(old) {
+			m.seen.Owners[k] = t
+		}
+	}
+	m.mu.Unlock()
+	return m.LoadSeen()
 }
 
 func (m *memStore) LoadOwner(host, viewer, owner string) (store.OwnerCache, bool, error) {

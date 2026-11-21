@@ -111,3 +111,33 @@ func TestSafeNames(t *testing.T) {
 		}
 	}
 }
+
+// What was seen is kept apart from the state, and a write keeps the later
+// time of each key, whoever wrote it.
+func TestSeenOnlyMovesForward(t *testing.T) {
+	s := Store{StateDir: t.TempDir()}
+	at := func(h int) time.Time { return time.Date(2026, 11, 21, h, 0, 0, 0, time.UTC) }
+	if _, err := s.SaveSeen(Seen{Repos: map[string]time.Time{"github.com/1": at(10), "github.com/2": at(10)}, Owners: map[string]time.Time{"github.com/me": at(9)}}); err != nil {
+		t.Fatal(err)
+	}
+	// Another copy, older for one repository and newer for another.
+	got, err := s.SaveSeen(Seen{Repos: map[string]time.Time{"github.com/1": at(8), "github.com/2": at(12)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Repos["github.com/1"].Equal(at(10)) || !got.Repos["github.com/2"].Equal(at(12)) || !got.Owners["github.com/me"].Equal(at(9)) {
+		t.Errorf("merged = %+v", got)
+	}
+	// A later baseline, set by another gh tidy started meanwhile, does not
+	// replace the earlier one: it would hide what came between.
+	if got, _ := s.SaveSeen(Seen{Owners: map[string]time.Time{"github.com/me": at(11)}}); !got.Owners["github.com/me"].Equal(at(9)) {
+		t.Errorf("baseline = %v; want the earlier kept", got.Owners["github.com/me"])
+	}
+	loaded, _ := s.LoadSeen()
+	if !loaded.Repos["github.com/2"].Equal(at(12)) {
+		t.Errorf("loaded = %+v", loaded)
+	}
+	if st, _ := s.LoadState(); len(st.LastOwner) != 0 {
+		t.Error("the seen times touched the state")
+	}
+}

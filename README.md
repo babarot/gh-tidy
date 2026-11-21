@@ -53,7 +53,7 @@ The marks are those of [zsh-mini-prompt](https://github.com/babarot/zsh-mini-pro
 
 WORKTREES judges each linked worktree: `busy` (changes, unpushed commits, or touched lately), `new` (never committed to: about to be used), `done` (merged and clean: `d` removes it), `idle` (clean, not merged, untouched for two weeks), with how long ago it was made or last touched. `+N br` counts branches in no worktree that hold work found nowhere else.
 
-`v` switches to the github columns: open issues and pull requests, Dependabot alerts (`off` when they are not turned on, `n/a` when your token may not read them), the checks on the default branch, its stars, and when it was last pushed. They are ordered by what needs attention on GitHub, and the repositories not cloned are mixed in.
+`v` switches to the github columns: open issues and pull requests (`4 +1` when one was made since you last rested on the row and read its titles), Dependabot alerts (`off` when they are not turned on, `n/a` when your token may not read them), the checks on the default branch, its stars, and when it was last pushed. They are ordered by what needs attention on GitHub, and the repositories not cloned are mixed in.
 
 The pane below the list shows what is behind the selected row's marks: the commits `p` would bring in, those not pushed, those on the default branch the branch lacks, the files changed and the stash; on the right, where the row is and what `p` and `d` would do to it now. `+` and `-`, or dragging its top line, change its height.
 

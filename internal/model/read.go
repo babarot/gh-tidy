@@ -73,6 +73,11 @@ type Heavy struct {
 	Issues     int
 	PRs        int
 	Stars      int
+	// ID is GitHub's number for the repository, which a rename or a move
+	// keeps; IssuesNewest and PRsNewest are when the newest open issues
+	// and pull requests were made, the newest first (NeedNewest).
+	ID                      int64
+	IssuesNewest, PRsNewest []time.Time
 	// Alerts counts open Dependabot alerts; AlertsOff says they are not
 	// turned on, AlertsDenied that the token may not read them.
 	Alerts       int
@@ -113,6 +118,22 @@ type Row struct {
 	// Op is what is being done to the clone, or what was done, until the
 	// user puts the results away. Not kept between starts.
 	Op Op `json:"-"`
+	// New counts the open issues and pull requests made since the user
+	// last saw the repository, worked out when the owner is handed out.
+	// Not kept: it follows what was seen.
+	New New `json:"-"`
+}
+
+// New is how many open issues and pull requests are new. Known is false
+// when it cannot be told: the creation times were not read, or there is
+// no time seen to tell them by. More says there may be more than counted
+// (every one read was new). Since is the time seen they were counted
+// against, for the pane to mark the titles by.
+type New struct {
+	Known               bool
+	Issues, PRs         int
+	MoreIssues, MorePRs bool
+	Since               time.Time
 }
 
 // Op is a change being made to a clone or its result.
@@ -178,7 +199,13 @@ const (
 	// NeedNotCloned reads the needed fields of repositories not cloned too,
 	// as the github columns do.
 	NeedNotCloned
+	// NeedNewest: when the newest open issues and pull requests were made,
+	// to tell which are new.
+	NeedNewest
 )
 
-// Has reports whether n includes m.
+// Has reports whether n includes any of m; All whether it includes each.
 func (n Need) Has(m Need) bool { return n&m != 0 }
+
+// All reports whether n includes every one of m.
+func (n Need) All(m Need) bool { return n&m == m }
