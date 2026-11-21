@@ -17,7 +17,7 @@ This page is written from the code (`go test ./internal/config -run TestConfigur
 [owners]
 # The owners offered are the viewer, the viewer's organizations and the owners
 # with clones under root.
-# Offer these owners too, as "owner" or "host/owner".
+# Offer these owners too, by login.
 # add = []
 # Leave these owners out, written the same way.
 # hide = []

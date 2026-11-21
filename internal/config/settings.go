@@ -72,7 +72,8 @@ type (
 	// Which names a list of columns or sections may hold is checked where
 	// they are known.
 	listKind struct{ NonEmpty bool }
-	// ownersKind is a list of owners, as "owner" or "host/owner".
+	// ownersKind is a list of owners, as "owner" or "github.com/owner":
+	// gh tidy reads github.com only.
 	ownersKind struct{}
 	// markKind is a mark the list writes: printed, with no space, and one
 	// cell wide per character, or the columns would not line up. Empty
@@ -107,8 +108,12 @@ func (listKind) toml(v any) string { return tomlList(as[[]string](v)) }
 func (ownersKind) check(key string, v any) []error {
 	var errs []error
 	for _, o := range as[[]string](v) {
-		if n := strings.Count(o, "/"); o == "" || n > 1 || strings.HasPrefix(o, "/") || strings.HasSuffix(o, "/") {
-			errs = append(errs, fmt.Errorf("%s: %q is not \"owner\" or \"host/owner\"", where(key), o))
+		host, _, named := strings.Cut(o, "/")
+		switch n := strings.Count(o, "/"); {
+		case o == "" || n > 1 || strings.HasPrefix(o, "/") || strings.HasSuffix(o, "/"):
+			errs = append(errs, fmt.Errorf("%s: %q is not \"owner\"", where(key), o))
+		case named && !strings.EqualFold(host, "github.com"):
+			errs = append(errs, fmt.Errorf("%s: %q is on %s; gh tidy reads github.com only", where(key), o, host))
 		}
 	}
 	return errs
@@ -183,7 +188,7 @@ var settings = []setting{
 		Doc: `Where clones live, each laid out as <host>/<owner>/<repo>, such as ["~/src", "~/work"]. c clones into the first that holds the owner's directory, else the first. Empty (default): gh tidy offers the root of the clone it starts in, and writes it here when you say yes.`},
 
 	{Key: "owners.add", Kind: ownersKind{}, Value: func(f File) any { return f.Owners.Add },
-		Doc: `Offer these owners too, as "owner" or "host/owner".`},
+		Doc: `Offer these owners too, by login.`},
 	{Key: "owners.hide", Kind: ownersKind{}, Value: func(f File) any { return f.Owners.Hide },
 		Doc: "Leave these owners out, written the same way."},
 

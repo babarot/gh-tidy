@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/babarot/gh-tidy/internal/config"
@@ -45,5 +46,15 @@ func TestOwners(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("owners = %v, want %v", got, want)
 		}
+	}
+}
+
+// An owner on another host is refused, not read on github.com under the
+// same name.
+func TestAnotherHostIsRefused(t *testing.T) {
+	var out strings.Builder
+	err := Run("gh tidy", []string{"ghe.example.com/acme"}, &out)
+	if err == nil || !strings.Contains(err.Error(), "github.com only") {
+		t.Errorf("Run(ghe.example.com/acme) = %v", err)
 	}
 }

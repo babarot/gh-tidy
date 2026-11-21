@@ -43,7 +43,7 @@ const usage = `gh tidy keeps one owner's local clones up to date and clear of wh
 done with, so they are ready to hand to a coding agent.
 
 Usage:
-  %s [flags] [OWNER | HOST/OWNER]
+  %s [flags] [OWNER]
 
 Without OWNER, it opens the owner of the clone it is started in, the owner
 directory under a root it is started in, the owner opened last, or you.
@@ -82,6 +82,9 @@ func Run(cmd string, args []string, stderr io.Writer) error {
 	}
 	if fs.NArg() > 1 {
 		return errors.New("one owner at most")
+	}
+	if h, _, ok := strings.Cut(fs.Arg(0), "/"); ok && !strings.EqualFold(h, locate.DefaultHost) {
+		return fmt.Errorf("%s: gh tidy reads %s only; GitHub Enterprise Server is not supported", h, locate.DefaultHost)
 	}
 	log, closeLog := openLog(*debug, stderr)
 	defer closeLog()
@@ -209,7 +212,8 @@ func startOwner(ctx context.Context, arg string, roots []string, last, viewer st
 		return arg, ""
 	}
 	if cwd, err := os.Getwd(); err == nil {
-		if t, err := locate.Resolve(ctx, cwd, roots); err == nil && t.Kind == locate.Owner {
+		// A clone of another host names no owner on github.com.
+		if t, err := locate.Resolve(ctx, cwd, roots); err == nil && t.Kind == locate.Owner && strings.EqualFold(t.Host, locate.DefaultHost) {
 			if t.Select != "" {
 				sel = string(model.NewCloneKey(t.Select))
 			}

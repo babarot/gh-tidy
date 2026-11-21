@@ -24,6 +24,8 @@ A coding agent works from the clone it is given. If the clone's default branch i
 gh extension install babarot/gh-tidy
 ```
 
+gh tidy reads github.com only; GitHub Enterprise Server is not supported.
+
 ## Usage
 
 ```sh

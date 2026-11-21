@@ -84,6 +84,7 @@ func TestParseErrors(t *testing.T) {
 		{"removed in core", "[core]\nstale_check = false\n", "stale_check is no longer a setting"},
 		{"remove without path", "[cleanup]\nworktree_remove = [\"rm\"]\n", "{path}"},
 		{"bad owner", "[owners]\nadd = [\"a/b/c\"]\n", `"a/b/c"`},
+		{"owner on another host", "[owners]\nadd = [\"ghe.example.com/acme\"]\n", "github.com only"},
 		{"no columns", "[columns]\nlocal = []\n", "[columns]"},
 		{"wide symbol", "[symbols]\nstash = \"💰\"\n", "stash"},
 		{"action without run", "[[actions]]\nkey = \"H\"\nname = \"h\"\n", "#1 (h): run"},
