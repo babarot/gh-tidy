@@ -45,7 +45,8 @@ type File struct {
 // Owners changes the owners offered: the viewer, the viewer's
 // organizations and the owners with clones under the root.
 type Owners struct {
-	// Add offers these owners too, as "owner" or "host/owner".
+	// Add offers these owners too, by login (github.com/ before it is
+	// allowed: gh tidy reads github.com only).
 	Add []string `toml:"add"`
 	// Hide leaves these owners out, written the same way.
 	Hide []string `toml:"hide"`
