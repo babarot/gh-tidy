@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -38,6 +39,7 @@ type File struct {
 	Cleanup Cleanup        `toml:"cleanup"`
 	Keys    map[string]any `toml:"keys"`
 	Actions []Action       `toml:"actions"`
+	Groups  []Group        `toml:"sections"`
 }
 
 // Owners changes the owners offered: the viewer, the viewer's
@@ -122,6 +124,24 @@ type Action struct {
 	// changes something.
 	Confirm bool `toml:"confirm"`
 }
+
+// Group is a section of the list the user names: every row whose
+// repository matches one of Repos goes in it, the first group it matches,
+// whatever it needs. It groups rows for the screen; it does not match
+// clones to GitHub.
+type Group struct {
+	Name string `toml:"name"`
+	// Repos are glob patterns (path.Match) of the repository's name, or of
+	// owner/name when they hold a slash, in any case. A clone is matched by
+	// where it lies, <owner>/<directory>; a repository not cloned by its
+	// name on GitHub.
+	Repos []string `toml:"repos"`
+	// Folded starts the section folded.
+	Folded bool `toml:"folded"`
+}
+
+// builtinHeads are the names of the sections gh tidy makes itself.
+var builtinHeads = []string{"nothing to do", "not cloned"}
 
 // Default returns the settings used when the file sets nothing.
 func Default() File {
@@ -228,6 +248,28 @@ func removedSettings(data []byte) error {
 func (f File) validate() error {
 	errs := []error{checkSettings(f)}
 	bad := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) }
+	seen := map[string]bool{}
+	for i, g := range f.Groups {
+		where := fmt.Sprintf("[[sections]] #%d", i+1)
+		name := strings.ToLower(strings.TrimSpace(g.Name))
+		switch {
+		case name == "":
+			bad("%s: name is missing", where)
+		case seen[name]:
+			bad("%s: %q is the name of another section", where, g.Name)
+		case slices.Contains(builtinHeads, name):
+			bad("%s: %q is a section gh tidy makes itself", where, g.Name)
+		}
+		seen[name] = true
+		if len(g.Repos) == 0 {
+			bad("%s (%s): repos must name a repository", where, g.Name)
+		}
+		for _, p := range g.Repos {
+			if _, err := path.Match(p, ""); err != nil || strings.Count(p, "/") > 1 || p == "" {
+				bad("%s (%s): %q is not a pattern of a name or of owner/name", where, g.Name, p)
+			}
+		}
+	}
 	for i, a := range f.Actions {
 		where := fmt.Sprintf("[[actions]] #%d", i+1)
 		if a.Name != "" {
@@ -305,6 +347,21 @@ const keysTemplate = `[keys]
 # confirm = ["y", "enter"]
 # accept = "enter"
 # erase = "backspace"
+`
+
+// groupsTemplate is [[sections]] in the template: an example, not a
+// default, so it stays commented.
+const groupsTemplate = `# Sections of the list you name: every row whose repository matches one of
+# repos goes in the first section it matches, whatever it needs, in both
+# sets of columns. A pattern with a slash is matched against owner/name, one
+# without against the name, in any case. A clone is matched by where it
+# lies (<owner>/<directory>, so a clone of other/x under acme/ is acme/x);
+# a repository not cloned by its name on GitHub.
+#
+# [[sections]]
+# name = "experiments"
+# repos = ["play-*", "scratch*", "acme/sandbox-*"]
+# folded = true        # start folded
 `
 
 // actionsTemplate is [[actions]] in the template: an example, not a

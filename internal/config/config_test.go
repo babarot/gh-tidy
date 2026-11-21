@@ -87,6 +87,12 @@ func TestParseErrors(t *testing.T) {
 		{"no columns", "[columns]\nlocal = []\n", "[columns]"},
 		{"wide symbol", "[symbols]\nstash = \"💰\"\n", "stash"},
 		{"action without run", "[[actions]]\nkey = \"H\"\nname = \"h\"\n", "#1 (h): run"},
+		{"section without name", "[[sections]]\nrepos = [\"x\"]\n", "[[sections]] #1: name is missing"},
+		{"section twice", "[[sections]]\nname = \"a\"\nrepos = [\"x\"]\n[[sections]]\nname = \"A\"\nrepos = [\"y\"]\n", "another section"},
+		{"section of gh tidy", "[[sections]]\nname = \"not cloned\"\nrepos = [\"x\"]\n", "gh tidy makes itself"},
+		{"section without repos", "[[sections]]\nname = \"a\"\n", "repos must name"},
+		{"bad pattern", "[[sections]]\nname = \"a\"\nrepos = [\"[x\"]\n", `"[x" is not a pattern`},
+		{"pattern of a host", "[[sections]]\nname = \"a\"\nrepos = [\"github.com/acme/x\"]\n", "is not a pattern"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Parse("x.toml", []byte(tc.src))

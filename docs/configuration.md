@@ -123,6 +123,18 @@ This page is written from the code (`go test ./internal/config -run TestConfigur
 # accept = "enter"
 # erase = "backspace"
 
+# Sections of the list you name: every row whose repository matches one of
+# repos goes in the first section it matches, whatever it needs, in both
+# sets of columns. A pattern with a slash is matched against owner/name, one
+# without against the name, in any case. A clone is matched by where it
+# lies (<owner>/<directory>, so a clone of other/x under acme/ is acme/x);
+# a repository not cloned by its name on GitHub.
+#
+# [[sections]]
+# name = "experiments"
+# repos = ["play-*", "scratch*", "acme/sandbox-*"]
+# folded = true        # start folded
+
 # Custom commands, run on the selected repository or worktree. run is the
 # command and its arguments; these are replaced in each argument:
 # {path}, {repo} (owner/name), {owner}, {name}, {branch}, {default}, {url}.

@@ -17,8 +17,9 @@ import (
 // --print-config prints and docs/configuration.md shows, and the check of
 // each value, are made from this table. The file is decoded into File,
 // and a test keeps the table and File's toml tags one to one. [keys] and
-// [[actions]] are not in the table: an action's keys come from the
-// keymap, and an action's fields are checked together.
+// [[actions]] and [[sections]] are not in the table: an action's keys come
+// from the keymap, and the fields of an action or a section are checked
+// together.
 
 // setting is one key of a table.
 type setting struct {
@@ -229,7 +230,9 @@ func checkSettings(f File) error {
 }
 
 // template writes the tables from the table, every setting at its
-// default, commented out, then [keys] and [[actions]].
+// default, commented out, then [keys], [[sections]] and [[actions]]. The
+// examples of the arrays of tables come after [keys]: they stay commented
+// when the template's test uncomments the rest.
 func template() string {
 	var b strings.Builder
 	b.WriteString("# gh tidy settings. Uncomment a line to change it.\n")
@@ -243,7 +246,7 @@ func template() string {
 			}
 		}
 	}
-	return b.String() + "\n" + keysTemplate + "\n" + actionsTemplate
+	return b.String() + "\n" + keysTemplate + "\n" + groupsTemplate + "\n" + actionsTemplate
 }
 
 // comment is text as comment lines, wrapped at 78 columns.
