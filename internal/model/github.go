@@ -19,6 +19,34 @@ type RepoDetail struct {
 	Checks                      []Check // failed and running, as GitHub lists them
 	ChecksFailed, ChecksRunning int     // counted by GitHub, beyond those read
 	ChecksErr                   string
+
+	// TitlesAsked says the open issues and pull requests were asked for,
+	// the newest first. IssuesRead and PRsRead say each list came back:
+	// only with both read is what was shown seen. The titles are held in
+	// memory only, never written to a file or the log.
+	TitlesAsked         bool
+	Issues, PRs         []Opened
+	IssuesRead, PRsRead bool
+}
+
+// Opened is an open issue or pull request, as the pane lists it.
+type Opened struct {
+	Number  int
+	Title   string
+	Author  string
+	Created time.Time
+}
+
+// Newest is when the newest of what d listed was made, issues and pull
+// requests together; zero for none.
+func (d RepoDetail) Newest() time.Time {
+	var t time.Time
+	for _, o := range slices.Concat(d.Issues, d.PRs) {
+		if o.Created.After(t) {
+			t = o.Created
+		}
+	}
+	return t
 }
 
 // Alert is one open Dependabot alert.

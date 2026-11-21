@@ -421,7 +421,7 @@ func issuesCell(_ Ctx, it Item) Cell {
 	if !ok {
 		return c
 	}
-	return count(h.Issues)
+	return withNew(count(h.Issues), h.Issues, it.Row.New, it.Row.New.Issues, it.Row.New.MoreIssues)
 }
 
 func prsCell(_ Ctx, it Item) Cell {
@@ -429,7 +429,26 @@ func prsCell(_ Ctx, it Item) Cell {
 	if !ok {
 		return c
 	}
-	return count(h.PRs)
+	return withNew(count(h.PRs), h.PRs, it.Row.New, it.Row.New.PRs, it.Row.New.MorePRs)
+}
+
+// withNew follows an open count with how many of them are new: +2, or
+// +5+ when every one read was new. When which are new cannot be told yet,
+// the unread sign says so; it is never shown as none new.
+func withNew(c Cell, open int, n model.New, fresh int, more bool) Cell {
+	switch {
+	case open == 0:
+		return c
+	case !n.Known:
+		return append(c, Seg{Text: " "}, Unread[0])
+	case fresh == 0:
+		return c
+	}
+	text := " +" + strconv.Itoa(fresh)
+	if more {
+		text += "+"
+	}
+	return append(c, Seg{Text: text, Role: Accent})
 }
 
 func dependabotCell(_ Ctx, it Item) Cell {

@@ -135,7 +135,8 @@ func (f *fakeGitHub) RepoDetail(_ context.Context, slug string, want github.Deta
 	defer f.mu.Unlock()
 	f.detailed++
 	d := f.details[strings.ToLower(slug)]
-	d.AlertsAsked, d.ChecksAsked = want.Alerts, want.Oid != ""
+	d.AlertsAsked, d.ChecksAsked, d.TitlesAsked = want.Alerts, want.Oid != "", want.Titles
+	d.IssuesRead, d.PRsRead = want.Titles, want.Titles
 	return d, github.Rate{Cost: 1}, nil
 }
 
@@ -164,7 +165,7 @@ func (f *fakeGitHub) Heavy(_ context.Context, slugs []string, _ github.Want) ([]
 		h.Asked, h.Key, h.Found = k, k, true
 		out = append(out, h)
 	}
-	return out, github.Rate{Cost: 1}, nil
+	return out, github.Rate{Cost: 1, Date: now}, nil
 }
 
 // clone is a clone of mika/name on main, up to date, fetched an hour ago.
@@ -261,6 +262,9 @@ func (f *fakeCommands) Copy(t string) error                                   { 
 func newWorld(t *testing.T) *world {
 	w := &world{t: t, local: &fakeLocal{clones: map[string]model.Clone{}, facts: map[string]model.CleanupFacts{}},
 		gh: &fakeGitHub{lists: map[string]github.Listing{}, heavy: map[string]github.HeavyRepo{}, details: map[string]model.RepoDetail{
+			"mika/agent-runner": {Issues: []model.Opened{{Number: 41, Title: "Retry the runner when the socket closes", Author: "kai", Created: now.Add(30 * time.Second)},
+				{Number: 37, Title: "Document the cache layout", Author: "ren", Created: ago(2 * 24 * time.Hour)}},
+				PRs: []model.Opened{{Number: 40, Title: "Speed up status parsing", Author: "hana", Created: ago(3 * 24 * time.Hour)}}},
 			"mika/calendar-sync": {AlertsTotal: 12, Alerts: []model.Alert{
 				{Package: "ical-parser", Ecosystem: "npm", Severity: "critical", Range: "< 2.4.1", Fixed: "2.4.1", Manifest: "package-lock.json"},
 				{Package: "tmp-dir", Ecosystem: "npm", Severity: "low", Range: "<= 0.9.0", Manifest: "package-lock.json"}},
@@ -321,8 +325,20 @@ func newWorld(t *testing.T) *world {
 		if r.name == "trail-notes" {
 			oid = "newer"
 		}
+		// Every open issue and pull request was made before the first
+		// read, but one of agent-runner's issues, made since.
+		var issues, prs []time.Time
+		for i := range r.issues {
+			issues = append(issues, ago(time.Duration(i+2)*24*time.Hour))
+		}
+		for i := range r.prs {
+			prs = append(prs, ago(time.Duration(i+3)*24*time.Hour))
+		}
+		if r.name == "agent-runner" {
+			issues[0] = now.Add(30 * time.Second)
+		}
 		w.gh.heavy[slug] = github.HeavyRepo{PushedAt: ago(r.pushed), Default: "main", DefaultOid: oid, CI: r.ci,
-			Issues: r.issues, PRs: r.prs, Alerts: r.al, AlertsOff: r.name == "weather-cli"}
+			Issues: r.issues, PRs: r.prs, Alerts: r.al, AlertsOff: r.name == "weather-cli", ID: int64(len(listed)), IssuesNewest: issues, PRsNewest: prs}
 	}
 	w.gh.lists["mika"] = github.Listing{Repos: listed, Completeness: github.Complete,
 		Pages: github.Pages{ETags: []string{"e1"}, Ended: true, Completeness: github.Complete}}
@@ -1354,6 +1370,9 @@ func TestTheDetailWaitsForTheCursorToRest(t *testing.T) {
 	m.setLens(columns.GitHub)
 	w.settle(m)
 	m.noTimers = false
+	w.gh.mu.Lock()
+	before := w.gh.detailed
+	w.gh.mu.Unlock()
 	row := func(name string) int {
 		for i, l := range m.lines {
 			if l.row != nil && l.row.Remote == model.RemoteKey("github.com/mika/"+name) {
@@ -1373,7 +1392,7 @@ func TestTheDetailWaitsForTheCursorToRest(t *testing.T) {
 	m.Update(detailMsg{k: "github.com/mika/tool-shed"}) // its wait ends elsewhere
 	w.settle(m)
 	w.gh.mu.Lock()
-	n := w.gh.detailed
+	n := w.gh.detailed - before
 	w.gh.mu.Unlock()
 	if n != 0 {
 		t.Fatalf("read %d details for rows only passed", n)
@@ -1382,5 +1401,38 @@ func TestTheDetailWaitsForTheCursorToRest(t *testing.T) {
 	w.settle(m)
 	if m.ghd.State != model.DetailRead || len(m.ghd.Value.Alerts) == 0 {
 		t.Errorf("after resting: %+v", m.ghd)
+	}
+}
+
+// A new issue shows as +1 in ISSUES, and its title is marked in the pane;
+// once the cursor rested on the row and left, it is seen.
+func TestNewIssuesAreMarkedUntilSeen(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	m.setLens(columns.GitHub)
+	w.settle(m)
+	i := -1
+	for j, l := range m.lines {
+		if l.row != nil && l.row.Remote == "github.com/mika/agent-runner" {
+			i = j
+		}
+	}
+	cols, ws := m.layout()
+	if s := plain(m.row(m.lines[i], false, cols, ws)); !strings.Contains(s, "4 +1") {
+		t.Errorf("agent-runner's row: %q", s)
+	}
+	m.moveTo(i)
+	m.sync()
+	w.settle(m)
+	s := screen(m)
+	if !strings.Contains(s, "• issue #41 Retry the runner when the socket closes") || strings.Contains(s, "• issue #37") {
+		t.Errorf("the pane does not mark the new issue alone:\n%s", s)
+	}
+	golden(t, "github-new", m)
+	m.moveTo(0)
+	m.sync()
+	w.settle(m)
+	if s := plain(m.row(m.lines[i], false, cols, ws)); strings.Contains(s, "+1") {
+		t.Errorf("after the cursor left: %q", s)
 	}
 }

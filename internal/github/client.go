@@ -83,6 +83,9 @@ type Rate struct {
 	// conditional request answered with 304.
 	Cost      int
 	RequestID string
+	// Date is GitHub's clock when it answered, from the Date header; zero
+	// when it is missing or does not parse.
+	Date time.Time
 }
 
 // Known reports whether the response carried rate limit headers.
@@ -94,6 +97,9 @@ func rateFrom(h http.Header) Rate {
 		Used: n("X-Ratelimit-Used"), RequestID: h.Get("X-Github-Request-Id")}
 	if s := n("X-Ratelimit-Reset"); s > 0 {
 		r.Reset = time.Unix(int64(s), 0)
+	}
+	if d, err := http.ParseTime(h.Get("Date")); err == nil {
+		r.Date = d
 	}
 	return r
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/babarot/gh-tidy/internal/logging"
 	"github.com/babarot/gh-tidy/internal/model"
@@ -19,7 +20,12 @@ const detailFirst = 100
 type DetailWant struct {
 	Alerts bool
 	Oid    string
+	// Titles asks for the open issues and pull requests, the newest first.
+	Titles bool
 }
+
+// titlesFirst is how many open issues and pull requests the pane lists.
+const titlesFirst = 10
 
 // RepoDetail reads the open Dependabot alerts and the checks of one
 // repository, each part only when want asks for it. A part GitHub refuses
@@ -35,6 +41,11 @@ func (c *Client) RepoDetail(ctx context.Context, slug string, want DetailWant) (
 		parts = append(parts, fmt.Sprintf("object(oid: %s) { ... on Commit { statusCheckRollup { state contexts(first: %d) { "+
 			"checkRunCountsByState { state count } statusContextCountsByState { state count } "+
 			"nodes { __typename ... on CheckRun { name status conclusion } ... on StatusContext { context state } } } } } }", quote(want.Oid), detailFirst))
+	}
+	if want.Titles {
+		order := fmt.Sprintf("states: OPEN, first: %d, orderBy: {field: CREATED_AT, direction: DESC}", titlesFirst)
+		items := "nodes { number title createdAt author { login } }"
+		parts = append(parts, "issues("+order+") { "+items+" }", "pullRequests("+order+") { "+items+" }")
 	}
 	var d model.RepoDetail
 	if len(parts) == 0 {
@@ -53,6 +64,14 @@ func (c *Client) RepoDetail(ctx context.Context, slug string, want DetailWant) (
 						Package                struct{ Name, Ecosystem string }
 						FirstPatchedVersion    *struct{ Identifier string }
 					}
+				}
+			}
+			Issues, PullRequests *struct {
+				Nodes []struct {
+					Number    int
+					Title     string
+					CreatedAt time.Time
+					Author    *struct{ Login string }
 				}
 			}
 			Object *struct {
@@ -87,7 +106,8 @@ func (c *Client) RepoDetail(ctx context.Context, slug string, want DetailWant) (
 	}
 	rate.Cost = data.RateLimit.Cost
 	c.log.Debug("github detail", logging.KeyRepo, slug, logging.KeyGQLCost, rate.Cost, logging.KeyGQLRemaining, rate.Remaining)
-	d.AlertsAsked, d.ChecksAsked = want.Alerts, want.Oid != ""
+	d.AlertsAsked, d.ChecksAsked, d.TitlesAsked = want.Alerts, want.Oid != "", want.Titles
+	issuesErr, prsErr := false, false
 	for _, e := range errs {
 		field := ""
 		if len(e.Path) > 1 {
@@ -100,6 +120,10 @@ func (c *Client) RepoDetail(ctx context.Context, slug string, want DetailWant) (
 			d.AlertsDenied = true
 		case field == "object":
 			d.ChecksErr = e.Message
+		case field == "issues":
+			issuesErr = true
+		case field == "pullRequests":
+			prsErr = true
 		default:
 			return d, rate, &StatusError{Status: 200, Message: e.Message}
 		}
@@ -168,6 +192,32 @@ func (c *Client) RepoDetail(ctx context.Context, slug string, want DetailWant) (
 				continue
 			}
 			d.Checks = append(d.Checks, ch)
+		}
+	}
+	if want.Titles {
+		opened := func(l *struct {
+			Nodes []struct {
+				Number    int
+				Title     string
+				CreatedAt time.Time
+				Author    *struct{ Login string }
+			}
+		}) []model.Opened {
+			var out []model.Opened
+			for _, n := range l.Nodes {
+				o := model.Opened{Number: n.Number, Title: n.Title, Created: n.CreatedAt}
+				if n.Author != nil {
+					o.Author = n.Author.Login
+				}
+				out = append(out, o)
+			}
+			return out
+		}
+		if !issuesErr && r.Issues != nil {
+			d.Issues, d.IssuesRead = opened(r.Issues), true
+		}
+		if !prsErr && r.PullRequests != nil {
+			d.PRs, d.PRsRead = opened(r.PullRequests), true
 		}
 	}
 	return d, rate, nil

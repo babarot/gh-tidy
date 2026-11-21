@@ -197,8 +197,21 @@ func TestGitHubCells(t *testing.T) {
 		t.Errorf("unread: %q", got)
 	}
 	r.Heavy.Set(model.Heavy{Found: true, Issues: 3, Alerts: 2, CI: "FAILURE", Fields: model.NeedCounts | model.NeedCI}, now)
-	if got := text(issuesCell(ctx(true), it)); got != "3" {
+	// Read without the creation times: which are new is not known.
+	if got := text(issuesCell(ctx(true), it)); got != "3 ⋅" {
 		t.Errorf("issues: %q", got)
+	}
+	r.New = model.New{Known: true, Issues: 1}
+	if got := text(issuesCell(ctx(true), it)); got != "3 +1" {
+		t.Errorf("one new: %q", got)
+	}
+	r.New = model.New{Known: true, Issues: 5, MoreIssues: true}
+	if got := text(issuesCell(ctx(true), it)); got != "3 +5+" {
+		t.Errorf("more new than read: %q", got)
+	}
+	r.New = model.New{Known: true}
+	if got := text(issuesCell(ctx(true), it)); got != "3" {
+		t.Errorf("none new: %q", got)
 	}
 	if got := text(dependabotCell(ctx(true), it)); got != "⋅" {
 		t.Errorf("alerts not asked for: %q", got)

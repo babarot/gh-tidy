@@ -56,6 +56,8 @@ type Cloner interface {
 type Store interface {
 	LoadOwner(host, viewer, owner string) (store.OwnerCache, bool, error)
 	SaveOwner(store.OwnerCache) error
+	LoadSeen() (store.Seen, error)
+	SaveSeen(store.Seen) (store.Seen, error)
 }
 
 // All is the owner that stands for every owner under the roots.
@@ -137,6 +139,12 @@ type Engine struct {
 	// tried; ghLast is the repository the screen asked for last.
 	ghDetails map[model.RemoteKey]*ghEntry
 	ghLast    model.RemoteKey
+	// seenAt is what the user has seen of the repositories' issues and
+	// pull requests (store.Seen); rest holds the time seen of the
+	// repository the cursor rests on as it was when the cursor came, so
+	// that its marks stay until the cursor leaves.
+	seenAt store.Seen
+	rest   restSeen
 	// reads counts the reads of each clone put, so that a detail read
 	// from an older copy of the clone is dropped.
 	reads map[model.CloneKey]int64
@@ -220,6 +228,23 @@ func (e *Engine) Start(ctx context.Context) error {
 	}
 	e.viewer, e.known = v, true
 	return nil
+}
+
+// loadSeen reads what was seen, once, before the first owner is read.
+// Called with e.mu held.
+func (e *Engine) loadSeen() {
+	if e.seenAt.Repos != nil {
+		return
+	}
+	e.seenAt = store.Seen{Repos: map[string]time.Time{}, Owners: map[string]time.Time{}}
+	if e.store == nil {
+		return
+	}
+	if sn, err := e.store.LoadSeen(); err == nil {
+		e.seenAt = sn
+	} else {
+		e.log.Warn("what was seen not read", "err", err.Error())
+	}
 }
 
 // Viewer is who is signed in; empty when it could not be read.
@@ -349,8 +374,11 @@ func (e *Engine) Owner() model.Owner {
 		keys = append(keys, k)
 	}
 	slices.Sort(keys)
+	e.loadSeen()
 	for _, k := range keys {
-		out.Rows = append(out.Rows, *o.rows[k])
+		r := *o.rows[k]
+		r.New = e.newOf(&r)
+		out.Rows = append(out.Rows, r)
 	}
 	return out
 }

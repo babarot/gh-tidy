@@ -503,7 +503,8 @@ func (e *Engine) readHeavy(o *owner) {
 	// are asked for, not held back by the budget gh tidy keeps for itself.
 	force := o.refresh
 	o.refresh = false
-	want := github.Want{Default: true, CI: needs.Has(model.NeedCI), Counts: needs.Has(model.NeedCounts), Alerts: needs.Has(model.NeedAlerts)}
+	want := github.Want{Default: true, CI: needs.Has(model.NeedCI), Counts: needs.Has(model.NeedCounts), Alerts: needs.Has(model.NeedAlerts),
+		Newest: needs.Has(model.NeedNewest)}
 	fields := fieldsOf(want)
 	extra := fields != 0
 	seen := map[string]bool{}
@@ -628,6 +629,9 @@ func (e *Engine) queueHeavy(o *owner, gen int, part []string, want github.Want, 
 			e.failHeavy(o, gen, part, err.Error())
 			return
 		}
+		if want.Newest {
+			e.setBaselines(got, rate.Date)
+		}
 		if again := e.putHeavy(o, gen, got, fieldsOf(want)); len(again) > 0 {
 			// GitHub named another default branch than the clone was
 			// measured on: measure those clones again now.
@@ -725,7 +729,7 @@ func (e *Engine) putHeavy(o *owner, gen int, got []github.HeavyRepo, fields mode
 					r.Remote = h.Key
 				}
 				r.Heavy.Set(model.Heavy{Key: h.Key, Found: true, PushedAt: h.PushedAt, Default: h.Default, DefaultOid: h.DefaultOid, CI: h.CI,
-					Issues: h.Issues, PRs: h.PRs, Stars: h.Stars, Alerts: h.Alerts, AlertsOff: h.AlertsOff, AlertsDenied: h.AlertsDenied, Fields: fields}, now)
+					Issues: h.Issues, PRs: h.PRs, Stars: h.Stars, ID: h.ID, IssuesNewest: h.IssuesNewest, PRsNewest: h.PRsNewest, Alerts: h.Alerts, AlertsOff: h.AlertsOff, AlertsDenied: h.AlertsDenied, Fields: fields}, now)
 				if c := r.Local.Value; r.Local.Has && h.Default != "" && (c.Default != h.Default || c.DefaultSource != model.DefaultFromGitHub) {
 					again = append(again, c.Path)
 				}
@@ -747,6 +751,9 @@ func fieldsOf(w github.Want) model.Need {
 	}
 	if w.Alerts {
 		n |= model.NeedAlerts
+	}
+	if w.Newest {
+		n |= model.NeedNewest | model.NeedCounts
 	}
 	return n
 }

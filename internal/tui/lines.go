@@ -89,8 +89,9 @@ func attention(r *model.Row) int {
 }
 
 // githubAttention ranks a repository in the github set: open Dependabot
-// alerts, then checks failing on the default branch, then open pull
-// requests and issues.
+// alerts, then checks failing on the default branch, then new issues and
+// pull requests (only when they can be told), then open pull requests and
+// issues.
 func githubAttention(r *model.Row) int {
 	if !r.Heavy.Has || !r.Heavy.Value.Found {
 		return 0
@@ -102,6 +103,9 @@ func githubAttention(r *model.Row) int {
 	}
 	if h.CI == "FAILURE" || h.CI == "ERROR" {
 		s += 500
+	}
+	if n := r.New; n.Known && n.Issues+n.PRs > 0 {
+		s += 250
 	}
 	return s + min(h.PRs, 99)*2 + min(h.Issues, 99)
 }

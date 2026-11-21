@@ -452,7 +452,7 @@ func GitHubParts(x Ctx, it Item, d model.GitHubDetail) []Part {
 		ps = append(ps, Part{Head: head("ABOUT", Subtle, ""), Lines: []Cell{{{Text: "  " + r.Listed.Value.Description, Role: Text}}}})
 	}
 	if h.Fields.Has(model.NeedCounts) {
-		ps = append(ps, Part{Head: head("OPEN", Subtle, ""), Lines: []Cell{{{Text: fmt.Sprintf("  %d issues · %d pull requests", h.Issues, h.PRs), Role: Text}}}})
+		ps = append(ps, Part{Head: head(fmt.Sprintf("OPEN %d issues · %d pull requests", h.Issues, h.PRs), Subtle, ""), Lines: openLines(x, r.New, d)})
 	}
 	if h.Fields.Has(model.NeedAlerts) {
 		switch {
@@ -473,6 +473,58 @@ func GitHubParts(x Ctx, it Item, d model.GitHubDetail) []Part {
 		}
 	}
 	return ps
+}
+
+// openLines list the open issues and pull requests, the newest first, a
+// new one marked: made after the time seen, as the counts tell them.
+func openLines(x Ctx, n model.New, d model.GitHubDetail) []Cell {
+	if c, ok := detailState(d); !ok {
+		if c == nil {
+			return nil
+		}
+		if d.State == model.DetailAll {
+			c = Cell{{Text: "  open the owner to read the titles: all reads no more of GitHub", Role: Dim}}
+		}
+		return []Cell{c}
+	}
+	v := d.Value
+	if !v.TitlesAsked {
+		return nil
+	}
+	type item struct {
+		o  model.Opened
+		pr bool
+	}
+	var items []item
+	for _, o := range v.Issues {
+		items = append(items, item{o, false})
+	}
+	for _, o := range v.PRs {
+		items = append(items, item{o, true})
+	}
+	slices.SortStableFunc(items, func(a, b item) int { return b.o.Created.Compare(a.o.Created) })
+	var out []Cell
+	for _, it := range items {
+		mark := Seg{Text: "    "}
+		if n.Known && it.o.Created.After(n.Since) {
+			mark = Seg{Text: "  • ", Role: Accent}
+		}
+		kind := Seg{Text: "issue ", Role: Dim}
+		if it.pr {
+			kind = Seg{Text: "pr    ", Role: Dim}
+		}
+		out = append(out, Cell{mark, kind, {Text: fmt.Sprintf("#%d ", it.o.Number), Role: Muted}, {Text: it.o.Title, Role: Text},
+			{Text: "  " + it.o.Author + " " + Ago(it.o.Created, x.Now), Role: Dim}})
+	}
+	switch {
+	case !v.IssuesRead && !v.PRsRead:
+		out = append(out, Cell{{Text: "  not read: GitHub did not list them", Role: Muted}})
+	case !v.IssuesRead:
+		out = append(out, Cell{{Text: "  the issues were not read", Role: Muted}})
+	case !v.PRsRead:
+		out = append(out, Cell{{Text: "  the pull requests were not read", Role: Muted}})
+	}
+	return out
 }
 
 // detailState says where the read of d stands, when it is not read; ok

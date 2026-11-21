@@ -18,7 +18,16 @@ type Want struct {
 	CI      bool // the state of the checks on the default branch's commit
 	Counts  bool // open issues and pull requests
 	Alerts  bool // open Dependabot alerts, and whether they are turned on
+	// Newest is when the newest open issues and pull requests were made,
+	// to tell which are new.
+	Newest bool
 }
+
+// newest is how many of the newest open issues and pull requests a heavy
+// read reads the creation time of: more than this many new are written
+// as that many and more. It costs no more points (measured on
+// 2026-11-21: 1 for a batch of ten, with 5 or 10).
+const newest = 5
 
 // HeavyRepo is what GitHub said of one repository asked for by name.
 type HeavyRepo struct {
@@ -36,6 +45,12 @@ type HeavyRepo struct {
 	Issues     int
 	PRs        int
 	Stars      int
+	// ID is GitHub's number for the repository, which a rename or a move
+	// to another owner keeps.
+	ID int64
+	// IssuesNewest and PRsNewest are when the newest open issues and pull
+	// requests were made, the newest first, when Newest was asked.
+	IssuesNewest, PRsNewest []time.Time
 	// Alerts is the count of open Dependabot alerts. AlertsOff says they are
 	// not turned on for the repository; AlertsDenied that the token may not
 	// read them. Neither is zero.
@@ -52,7 +67,7 @@ type HeavyRepo struct {
 // GitHub cuts off a query it takes more than ten seconds over (ErrTimeout).
 func (c *Client) Heavy(ctx context.Context, slugs []string, want Want) ([]HeavyRepo, Rate, error) {
 	// stargazerCount is a field of the repository, which costs no point.
-	fields := []string{"nameWithOwner", "pushedAt", "stargazerCount"}
+	fields := []string{"nameWithOwner", "pushedAt", "stargazerCount", "databaseId"}
 	if want.Default || want.CI {
 		ci := ""
 		if want.CI {
@@ -60,7 +75,11 @@ func (c *Client) Heavy(ctx context.Context, slugs []string, want Want) ([]HeavyR
 		}
 		fields = append(fields, "defaultBranchRef { name target { oid"+ci+" } }")
 	}
-	if want.Counts {
+	switch {
+	case want.Newest:
+		order := fmt.Sprintf("states: OPEN, first: %d, orderBy: {field: CREATED_AT, direction: DESC}", newest)
+		fields = append(fields, "issues("+order+") { totalCount nodes { createdAt } }", "pullRequests("+order+") { totalCount nodes { createdAt } }")
+	case want.Counts:
 		fields = append(fields, "issues(states: OPEN) { totalCount }", "pullRequests(states: OPEN) { totalCount }")
 	}
 	if want.Alerts {
@@ -131,7 +150,15 @@ func (c *Client) Heavy(ctx context.Context, slugs []string, want Want) ([]HeavyR
 			}
 			continue
 		}
-		h.Found, h.Key, h.PushedAt, h.Stars = true, model.NewRemoteKey(c.host, n.NameWithOwner), n.PushedAt, n.StargazerCount
+		h.Found, h.Key, h.PushedAt, h.Stars, h.ID = true, model.NewRemoteKey(c.host, n.NameWithOwner), n.PushedAt, n.StargazerCount, n.DatabaseID
+		if want.Newest {
+			for _, x := range n.Issues.Nodes {
+				h.IssuesNewest = append(h.IssuesNewest, x.CreatedAt)
+			}
+			for _, x := range n.PullRequests.Nodes {
+				h.PRsNewest = append(h.PRsNewest, x.CreatedAt)
+			}
+		}
 		if n.DefaultBranchRef != nil {
 			h.Default, h.DefaultOid = n.DefaultBranchRef.Name, n.DefaultBranchRef.Target.Oid
 			if r := n.DefaultBranchRef.Target.StatusCheckRollup; r != nil {
@@ -163,6 +190,7 @@ type node2 struct {
 	NameWithOwner    string
 	PushedAt         time.Time
 	StargazerCount   int
+	DatabaseID       int64 `json:"databaseId"`
 	DefaultBranchRef *struct {
 		Name   string
 		Target struct {
@@ -170,11 +198,17 @@ type node2 struct {
 			StatusCheckRollup *struct{ State string }
 		}
 	}
-	Issues                        struct{ TotalCount int }
-	PullRequests                  struct{ TotalCount int }
+	Issues                        newestNodes
+	PullRequests                  newestNodes
 	ViewerPermission              string
 	HasVulnerabilityAlertsEnabled *bool
 	VulnerabilityAlerts           *struct{ TotalCount int }
+}
+
+// newestNodes are an open count, and the creation time of the newest.
+type newestNodes struct {
+	TotalCount int
+	Nodes      []struct{ CreatedAt time.Time }
 }
 
 // readsAlerts reports whether a role on a repository reads its Dependabot

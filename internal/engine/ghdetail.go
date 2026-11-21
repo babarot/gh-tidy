@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/babarot/gh-tidy/internal/github"
@@ -17,12 +18,16 @@ import (
 const keepGitHubDetails = 256
 
 // ghKey is what a repository's detail was read for: the heavy fields it
-// follows, and when they were read. When one changes, or the heavy fields
-// are read again, the detail is read again.
+// follows. When one changes the detail is read again; so it is when the
+// heavy fields are read again (at), for a detail with alerts or checks.
+// The titles alone follow the counts and the newest creation times, so
+// that a row with only issues is not read again every few minutes.
 type ghKey struct {
-	alerts  int
-	oid, ci string
-	at      time.Time
+	alerts      int
+	oid, ci     string
+	at          time.Time
+	issues, prs int
+	newest      time.Time
 }
 
 // ghEntry is a repository's detail, as read or tried.
@@ -35,6 +40,7 @@ type ghEntry struct {
 // when there are some, and the checks when they failed or run.
 func detailWant(h model.Heavy) github.DetailWant {
 	var w github.DetailWant
+	w.Titles = h.Fields.All(model.NeedNewest) && h.Issues+h.PRs > 0
 	w.Alerts = h.Fields.Has(model.NeedAlerts) && h.Alerts > 0 && !h.AlertsOff && !h.AlertsDenied
 	if h.Fields.Has(model.NeedCI) {
 		switch h.CI {
@@ -56,6 +62,17 @@ func detailWant(h model.Heavy) github.DetailWant {
 // another row is dropped.
 func (e *Engine) GitHubDetail(k model.RemoteKey, read bool) model.GitHubDetail {
 	e.mu.Lock()
+	left := e.leaveRest(k)
+	e.mu.Unlock()
+	d := e.githubDetail(k, read)
+	if left {
+		e.notify() // the marks of the row left now follow its time seen
+	}
+	return d
+}
+
+func (e *Engine) githubDetail(k model.RemoteKey, read bool) model.GitHubDetail {
+	e.mu.Lock()
 	e.ghLast = k
 	o := e.owners[e.shown]
 	if o == nil {
@@ -72,7 +89,7 @@ func (e *Engine) GitHubDetail(k model.RemoteKey, read bool) model.GitHubDetail {
 		}
 	}
 	want := detailWant(h)
-	if !want.Alerts && want.Oid == "" {
+	if !want.Alerts && want.Oid == "" && !want.Titles {
 		e.mu.Unlock()
 		return model.GitHubDetail{}
 	}
@@ -80,7 +97,15 @@ func (e *Engine) GitHubDetail(k model.RemoteKey, read bool) model.GitHubDetail {
 		e.mu.Unlock()
 		return model.GitHubDetail{State: model.DetailAll}
 	}
-	key := ghKey{h.Alerts, h.DefaultOid, h.CI, at}
+	key := ghKey{alerts: h.Alerts, oid: h.DefaultOid, ci: h.CI, issues: h.Issues, prs: h.PRs}
+	if want.Alerts || want.Oid != "" {
+		key.at = at
+	}
+	for _, t := range slices.Concat(h.IssuesNewest, h.PRsNewest) {
+		if t.After(key.newest) {
+			key.newest = t
+		}
+	}
 	now := e.now()
 	if ent := e.ghDetails[k]; ent != nil && ent.key == key {
 		switch ent.d.State {
@@ -164,7 +189,7 @@ func (e *Engine) queueGitHubDetail(o *owner, gen int, k model.RemoteKey, ent *gh
 			t.end("failed", true)
 			e.setGitHubDetail(k, ent, model.GitHubDetail{State: model.DetailFailed, Why: "GitHub did not answer"})
 		default:
-			t.end(fmt.Sprintf("%d alerts · %d checks", len(d.Alerts), len(d.Checks)), false)
+			t.end(fmt.Sprintf("%d alerts · %d checks · %d open", len(d.Alerts), len(d.Checks), len(d.Issues)+len(d.PRs)), false)
 			e.setGitHubDetail(k, ent, model.GitHubDetail{State: model.DetailRead, Value: d})
 		}
 	}, func() {
