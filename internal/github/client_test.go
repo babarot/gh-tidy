@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -325,5 +326,66 @@ func TestViewerWithOrganizationsLeftOut(t *testing.T) {
 	v, _, err := f.client(t).Viewer(context.Background())
 	if err != nil || v.Login != "me" || !v.OrgsIncomplete || v.KindOf("me") != OwnerViewer {
 		t.Errorf("viewer = %+v, %v", v, err)
+	}
+}
+
+func TestRepoDetail(t *testing.T) {
+	f := newFake()
+	alert := func(sev, pkg, fixed string) map[string]any {
+		v := map[string]any{"severity": sev, "vulnerableVersionRange": "< 2", "package": map[string]string{"name": pkg, "ecosystem": "NPM"}}
+		if fixed != "" {
+			v["firstPatchedVersion"] = map[string]string{"identifier": fixed}
+		}
+		return map[string]any{"vulnerableManifestPath": "package-lock.json", "securityVulnerability": v}
+	}
+	f.nodes["me/app"] = fakeNode{def: "main", oid: "abc", ci: "FAILURE",
+		alertList: []map[string]any{alert("LOW", "a", "2"), alert("CRITICAL", "b", ""), alert("MODERATE", "c", "2.1")},
+		checks: []map[string]any{{"__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "FAILURE"},
+			{"__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "SUCCESS"},
+			{"__typename": "CheckRun", "name": "build", "status": "IN_PROGRESS"},
+			{"__typename": "StatusContext", "context": "ci/ext", "state": "ERROR"}}}
+	f.nodes["org/secret"] = fakeNode{def: "main", oid: "def", ci: "FAILURE",
+		checks: []map[string]any{{"__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "TIMED_OUT"}}}
+	f.denied["org/secret"] = true
+	c := f.client(t)
+	ctx := context.Background()
+
+	d, rate, err := c.RepoDetail(ctx, "me/app", DetailWant{Alerts: true, Oid: "abc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rate.Cost != 1 {
+		t.Errorf("cost = %d; the budget would not count it", rate.Cost)
+	}
+	var sev []string
+	for _, a := range d.Alerts {
+		sev = append(sev, a.Severity+" "+a.Package+" "+a.Fixed)
+	}
+	if want := []string{"critical b ", "moderate c 2.1", "low a 2"}; !slices.Equal(sev, want) || d.AlertsTotal != 3 || d.Alerts[0].Ecosystem != "npm" {
+		t.Errorf("alerts = %q (total %d); want the most severe first", sev, d.AlertsTotal)
+	}
+	var checks []string
+	for _, ch := range d.Checks {
+		checks = append(checks, fmt.Sprintf("%s %v", ch.Name, ch.Running))
+	}
+	if want := []string{"test false", "build true", "ci/ext false"}; !slices.Equal(checks, want) {
+		t.Errorf("checks = %q; want the failed and running, not the passed", checks)
+	}
+
+	// Alerts refused: the checks stand.
+	d, _, err = c.RepoDetail(ctx, "org/secret", DetailWant{Alerts: true, Oid: "def"})
+	if err != nil || !d.AlertsDenied || len(d.Checks) != 1 || d.Checks[0].Running {
+		t.Errorf("refused alerts: %+v, %v", d, err)
+	}
+	// Only the parts asked for are in the query.
+	f.queries = nil
+	if _, _, err := c.RepoDetail(ctx, "me/app", DetailWant{Oid: "abc"}); err != nil {
+		t.Fatal(err)
+	}
+	if q := f.queries[len(f.queries)-1]; strings.Contains(q, "vulnerabilityAlerts") {
+		t.Error("asked for the alerts, not wanted")
+	}
+	if _, _, err := c.RepoDetail(ctx, "me/gone", DetailWant{Alerts: true}); err == nil {
+		t.Error("a repository not found read as having nothing")
 	}
 }

@@ -53,6 +53,47 @@ type fakeNode struct {
 	// perm is the token's role; empty is ADMIN. A role that cannot read
 	// the alerts gets a count of 0 and turned on, as GitHub answers.
 	perm string
+	// alertList and checks are what the detail of the repository holds:
+	// alerts as GitHub gives them, and check nodes of the commit.
+	alertList []map[string]any
+	checks    []map[string]any
+}
+
+var detailRe = regexp.MustCompile(`^query \{ repository\(owner: "([^"]+)", name: "([^"]+)"\)`)
+
+// detail answers the query of one repository's detail.
+func (f *fake) detail(w http.ResponseWriter, query, slug string) {
+	n, ok := f.nodes[slug]
+	if !ok {
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"repository": nil},
+			"errors": []map[string]any{{"type": "NOT_FOUND", "path": []string{"repository"}, "message": "Could not resolve to a Repository"}}})
+		return
+	}
+	repo := map[string]any{}
+	var errs []map[string]any
+	if strings.Contains(query, "vulnerabilityAlerts") {
+		if f.denied[slug] {
+			repo["vulnerabilityAlerts"] = nil
+			errs = append(errs, map[string]any{"type": "FORBIDDEN", "path": []string{"repository", "vulnerabilityAlerts"}, "message": "no access"})
+		} else {
+			repo["vulnerabilityAlerts"] = map[string]any{"totalCount": len(n.alertList), "nodes": n.alertList}
+		}
+	}
+	if strings.Contains(query, "object(oid:") {
+		failed, running := 0, 0
+		for _, c := range n.checks {
+			switch {
+			case c["conclusion"] == "FAILURE" || c["state"] == "FAILURE":
+				failed++
+			case c["status"] == "IN_PROGRESS" || c["state"] == "PENDING":
+				running++
+			}
+		}
+		repo["object"] = map[string]any{"statusCheckRollup": map[string]any{"state": n.ci, "contexts": map[string]any{
+			"checkRunCountsByState":      []map[string]any{{"state": "FAILURE", "count": failed}, {"state": "IN_PROGRESS", "count": running}},
+			"statusContextCountsByState": []map[string]any{}, "nodes": n.checks}}}
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"repository": repo, "rateLimit": map[string]int{"cost": 1}}, "errors": errs})
 }
 
 func newFake() *fake {
@@ -178,6 +219,10 @@ func (f *fake) graphql(w http.ResponseWriter, r *http.Request) {
 	}
 	if f.failWhole {
 		_, _ = io.WriteString(w, `{"data":null,"errors":[{"message":"Something went wrong while executing your query."}]}`)
+		return
+	}
+	if m := detailRe.FindStringSubmatch(req.Query); m != nil {
+		f.detail(w, req.Query, strings.ToLower(m[1]+"/"+m[2]))
 		return
 	}
 	if strings.Contains(req.Query, "viewer {") && f.orgsFail {

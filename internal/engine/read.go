@@ -808,6 +808,7 @@ func (e *Engine) readAhead(o *owner) {
 // keeps none.
 func (e *Engine) Tick() {
 	defer e.busy()()
+	e.retryGitHubDetail()
 	e.mu.Lock()
 	o := e.owners[e.shown]
 	if o == nil || o.login == All {

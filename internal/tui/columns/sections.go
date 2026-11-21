@@ -427,9 +427,14 @@ func dFact(x Ctx, r *model.Row) Cell {
 	return c
 }
 
+// detailLines is how many alerts or checks the pane lists; the rest are
+// counted.
+const detailLines = 8
+
 // GitHubParts are what the github set's pane shows of a repository: what
-// the heavy fields say, without reading more.
-func GitHubParts(x Ctx, it Item) []Part {
+// the heavy fields say, and under them the alerts and checks of d, read
+// for the repository selected.
+func GitHubParts(x Ctx, it Item, d model.GitHubDetail) []Part {
 	r := it.Row
 	switch {
 	case it.Kind == KindHead || it.Kind == KindWorktree:
@@ -456,18 +461,125 @@ func GitHubParts(x Ctx, it Item) []Part {
 		case h.AlertsOff:
 			ps = append(ps, Part{Head: head("DEPENDABOT off", Muted, ""), Lines: []Cell{{{Text: "  Dependabot alerts are not turned on for this repository, so nothing is checked", Role: Muted}}}})
 		case h.Alerts > 0:
-			ps = append(ps, Part{Head: head(fmt.Sprintf("DEPENDABOT %d", h.Alerts), Warn, "open alerts · o opens the repository")})
+			ps = append(ps, Part{Head: head(fmt.Sprintf("DEPENDABOT %d", h.Alerts), Warn, "open alerts · o opens the repository"), Lines: alertLines(d)})
 		}
 	}
 	if h.Fields.Has(model.NeedCI) {
 		switch h.CI {
 		case "FAILURE", "ERROR":
-			ps = append(ps, Part{Head: head("CI ✗", Warn, "on "+h.Default)})
+			ps = append(ps, Part{Head: head("CI ✗", Warn, "on "+h.Default), Lines: checkLines(d, false)})
 		case "PENDING", "EXPECTED":
-			ps = append(ps, Part{Head: head("CI ~", Prompt, "on "+h.Default+", running")})
+			ps = append(ps, Part{Head: head("CI ~", Prompt, "on "+h.Default+", running"), Lines: checkLines(d, true)})
 		}
 	}
 	return ps
+}
+
+// detailState says where the read of d stands, when it is not read; ok
+// is true when it is.
+func detailState(d model.GitHubDetail) (Cell, bool) {
+	switch d.State {
+	case model.DetailRead:
+		return nil, true
+	case model.DetailReading:
+		return Cell{{Text: "  reading…", Role: Dim}}, false
+	case model.DetailHeld:
+		return Cell{{Text: "  not read: " + d.Why, Role: Muted}}, false
+	case model.DetailFailed:
+		return Cell{{Text: "  not read: " + d.Why + ", tried again in a while", Role: Muted}}, false
+	case model.DetailAll:
+		return Cell{{Text: "  open the owner to read them: all reads no more of GitHub", Role: Dim}}, false
+	}
+	return nil, false
+}
+
+// severityRole colors an alert by how severe it is.
+var severityRole = map[string]Role{"critical": Warn, "high": Warn, "moderate": Prompt, "medium": Prompt, "low": Muted}
+
+// alertLines list the open alerts, the most severe first.
+func alertLines(d model.GitHubDetail) []Cell {
+	if c, ok := detailState(d); !ok {
+		if c == nil {
+			return nil
+		}
+		return []Cell{c}
+	}
+	v := d.Value
+	switch {
+	case !v.AlertsAsked:
+		return nil
+	case v.AlertsDenied:
+		return []Cell{{{Text: "  this token may not read them", Role: Muted}}}
+	case len(v.Alerts) == 0:
+		return []Cell{{{Text: "  GitHub listed none: this token may not read them", Role: Muted}}}
+	}
+	shown := v.Alerts[:min(len(v.Alerts), detailLines)]
+	fixedText := func(a model.Alert) string {
+		if a.Fixed == "" {
+			return "no fix yet"
+		}
+		return "fixed in " + a.Fixed
+	}
+	pw, rw, fw := 0, 0, 0
+	for _, a := range shown {
+		pw = max(pw, len([]rune(a.Package+" ("+a.Ecosystem+")")))
+		rw = max(rw, len([]rune(a.Range)))
+		fw = max(fw, len([]rune(fixedText(a))))
+	}
+	var out []Cell
+	for _, a := range shown {
+		ft := fixedText(a)
+		fixed := Seg{Text: ft + strings.Repeat(" ", fw-len([]rune(ft))), Role: Muted}
+		if a.Fixed != "" {
+			fixed.Role = OK
+		}
+		pkg := a.Package + " (" + a.Ecosystem + ")"
+		out = append(out, Cell{{Text: "  "}, {Text: fmt.Sprintf("%-8s", a.Severity), Role: severityRole[a.Severity]},
+			{Text: "  " + pkg + strings.Repeat(" ", pw-len([]rune(pkg))), Role: Text},
+			{Text: "  " + a.Range + strings.Repeat(" ", rw-len([]rune(a.Range))) + "  ", Role: Muted}, fixed,
+			{Text: "  " + a.Manifest, Role: Dim}})
+	}
+	if more := max(v.AlertsTotal, len(v.Alerts)) - len(shown); more > 0 {
+		out = append(out, Cell{{Text: fmt.Sprintf("  … %d more", more), Role: Dim}})
+	}
+	return out
+}
+
+// checkLines list the checks that failed or run; pending says the commit's
+// checks are running, not failed.
+func checkLines(d model.GitHubDetail, pending bool) []Cell {
+	if c, ok := detailState(d); !ok {
+		if c == nil {
+			return nil
+		}
+		return []Cell{c}
+	}
+	v := d.Value
+	switch {
+	case !v.ChecksAsked:
+		return nil
+	case v.ChecksErr != "":
+		return []Cell{{{Text: "  not read: GitHub could not read the commit", Role: Muted}}}
+	case len(v.Checks) == 0 && v.ChecksFailed+v.ChecksRunning > 0:
+		return []Cell{{{Text: fmt.Sprintf("  %d failed · %d running, beyond the checks read", v.ChecksFailed, v.ChecksRunning), Role: Muted}}}
+	case len(v.Checks) == 0 && pending:
+		return []Cell{{{Text: "  no check has reported: a required one may be waiting", Role: Muted}}}
+	case len(v.Checks) == 0:
+		return []Cell{{{Text: "  GitHub listed no check that failed", Role: Muted}}}
+	}
+	shown := v.Checks[:min(len(v.Checks), detailLines)]
+	var out []Cell
+	for _, c := range shown {
+		mark, role := "✗", Warn
+		if c.Running {
+			mark, role = "~", Prompt
+		}
+		out = append(out, Cell{{Text: "  " + mark + " ", Role: role}, {Text: c.Name, Role: Text}})
+	}
+	if more := max(v.ChecksFailed+v.ChecksRunning, len(v.Checks)) - len(shown); more > 0 {
+		out = append(out, Cell{{Text: fmt.Sprintf("  … %d more", more), Role: Dim}})
+	}
+	return out
 }
 
 // Quiet is the part shown when no section has anything to show.

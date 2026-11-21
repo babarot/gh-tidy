@@ -201,3 +201,54 @@ func errorShape(err error) string {
 	}
 	return fmt.Sprintf("%T", err)
 }
+
+// TestLiveDetail reads the alerts and checks of the viewer's repositories
+// that have some, and of a public repository of another owner, timing
+// each query. It prints counts only, never package or check names.
+func TestLiveDetail(t *testing.T) {
+	c := liveClient(t)
+	ctx := context.Background()
+	v, _, err := c.Viewer(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, err := c.List(ctx, v.Login, OwnerViewer, Pages{}, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var slugs []string
+	for _, r := range l.Repos {
+		if !r.Fork && !r.Archived {
+			slugs = append(slugs, r.NameWithOwner)
+		}
+	}
+	slugs = append(slugs[:min(len(slugs), 30)], "cli/cli")
+	read := 0
+	for i := 0; i < len(slugs); i += 10 {
+		got, _, err := c.Heavy(ctx, slugs[i:min(len(slugs), i+10)], Want{Default: true, CI: true, Alerts: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, h := range got {
+			want := DetailWant{Alerts: h.Alerts > 0, Oid: h.DefaultOid}
+			if !want.Alerts && h.CI != "FAILURE" && h.CI != "ERROR" && h.CI != "PENDING" && h.Asked != "github.com/cli/cli" {
+				continue
+			}
+			start := time.Now()
+			d, rate, err := c.RepoDetail(ctx, string(h.Asked)[len("github.com/"):], want)
+			if err != nil {
+				t.Errorf("detail of a repository: %v", err)
+				continue
+			}
+			read++
+			t.Logf("detail: %s, cost %d; alerts %d of %d (denied %v); checks %d listed, %d failed, %d running",
+				time.Since(start).Round(time.Millisecond), rate.Cost, len(d.Alerts), d.AlertsTotal, d.AlertsDenied, len(d.Checks), d.ChecksFailed, d.ChecksRunning)
+			if want.Alerts && !d.AlertsDenied && len(d.Alerts) == 0 {
+				t.Error("a repository with alerts listed none")
+			}
+		}
+	}
+	if read == 0 {
+		t.Log("no repository had alerts or failing checks")
+	}
+}
