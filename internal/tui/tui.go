@@ -123,6 +123,11 @@ type Model struct {
 
 	expanded map[string]bool
 	folds    map[string]bool
+	// groups are the sections the user named ([[sections]]); top are the
+	// rows above the first head while rows keep their places, apart from
+	// order, which holds every row shown.
+	groups []config.Group
+	top    map[string]bool
 
 	filter    string
 	filtering bool
@@ -210,8 +215,12 @@ func New(o Options) (*Model, error) {
 	m := &Model{eng: o.Engine, cmds: o.Commands, cwd: o.Cwd, actions: o.Config.Actions, cleanup: o.Config.Cleanup, keys: keys, sym: o.Config.Symbols, cols: cols, sections: secs, themeArg: o.Config.TUI.Theme,
 		save: o.Save, home: o.Home, now: now, noTimers: o.NoTimers, roots: o.Roots,
 		owners: append([]string{All}, o.Owners...), owner: o.Owner, lens: columns.Local, cursor: o.Select,
-		order: map[string]int{}, expanded: map[string]bool{}, folds: map[string]bool{}, pfold: map[string]bool{},
-		ph: previewDefault, dark: true}
+		order: map[string]int{}, expanded: map[string]bool{}, folds: map[string]bool{}, pfold: map[string]bool{}, top: map[string]bool{},
+		groups: o.Config.Groups,
+		ph:     previewDefault, dark: true}
+	for _, g := range m.groups {
+		m.folds[groupHead(g)] = g.Folded
+	}
 	if slices.Contains(columns.Lenses, columns.Lens(o.Lens)) {
 		m.lens = columns.Lens(o.Lens)
 	}
@@ -583,7 +592,7 @@ func (m *Model) setLens(l columns.Lens) {
 		m.cursor, m.moved = sel.key(), true
 	}
 	m.lens = l
-	m.order = map[string]int{}
+	m.unpin()
 	m.relayout()
 	m.keep()
 }
@@ -599,7 +608,7 @@ func (m *Model) openOwner(o string) {
 		return
 	}
 	m.owner = o
-	m.order = map[string]int{}
+	m.unpin()
 	m.filter, m.filtering = "", false
 	m.sel, m.offset, m.cursor, m.moved = 0, 0, "", false
 	m.eng.Open(o)

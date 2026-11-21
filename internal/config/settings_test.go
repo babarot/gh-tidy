@@ -19,7 +19,7 @@ func TestSettingsAreTheFilesKeys(t *testing.T) {
 	var want, got []string
 	for f := range reflect.TypeFor[File]().Fields() {
 		if f.Type.Kind() != reflect.Struct {
-			continue // [keys] and [[actions]] are not in the table
+			continue // [keys], [[sections]] and [[actions]] are not in the table
 		}
 		if !slices.ContainsFunc(tables, func(t table) bool { return t.Name == tag(f) }) {
 			t.Errorf("[%s] is not in tables", tag(f))

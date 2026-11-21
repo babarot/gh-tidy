@@ -2,9 +2,13 @@ package tui
 
 import (
 	"cmp"
+	"fmt"
+	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/babarot/gh-tidy/internal/config"
 	"github.com/babarot/gh-tidy/internal/model"
 	"github.com/babarot/gh-tidy/internal/policy"
 	"github.com/babarot/gh-tidy/internal/tui/columns"
@@ -126,22 +130,107 @@ func notCloned(r *model.Row) bool {
 	return r.Clone == "" && r.Listed.Has && !r.Listed.Value.Fork && !r.Listed.Value.Archived
 }
 
+// groupHead is the name a section the user named is kept under.
+func groupHead(g config.Group) string { return "section:" + g.Name }
+
+// groupOf is the first section the user named that r's repository
+// matches, or -1. It groups rows for the screen; it does not match clones
+// to GitHub. A clone is matched by where it lies, <owner>/<directory>,
+// known before it is read and not moved by a rename found; a repository
+// not cloned by its name on GitHub.
+func (m *Model) groupOf(r *model.Row) int {
+	var owner, name string
+	if r.Clone != "" {
+		p := string(r.Clone)
+		owner, name = filepath.Base(filepath.Dir(p)), filepath.Base(p)
+	} else if parts := strings.SplitN(string(r.Remote), "/", 3); len(parts) == 3 {
+		owner, name = parts[1], parts[2] // host/owner/name
+	}
+	name, slug := strings.ToLower(name), strings.ToLower(owner+"/"+name)
+	for i, g := range m.groups {
+		for _, p := range g.Repos {
+			subject := name
+			if strings.Contains(p, "/") {
+				subject = slug
+			}
+			if ok, _ := path.Match(strings.ToLower(p), subject); ok {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// headNote says what a section holds that needs doing, so that a folded
+// one hides nothing: in the local columns how many can be updated and
+// how many have changes, in the github ones how many have alerts and
+// failing checks.
+func (m *Model) headNote(rs []*model.Row) string {
+	var parts []string
+	add := func(n int, what string) {
+		if n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, what))
+		}
+	}
+	if m.lens == columns.GitHub {
+		alerts, failing := 0, 0
+		for _, r := range rs {
+			if h := r.Heavy; h.Has && h.Value.Found {
+				if h.Value.Alerts > 0 {
+					alerts++
+				}
+				if h.Value.CI == "FAILURE" || h.Value.CI == "ERROR" {
+					failing++
+				}
+			}
+		}
+		add(alerts, "with alerts")
+		add(failing, "failing")
+	} else {
+		up, changed := 0, 0
+		for _, r := range rs {
+			if !r.Local.Has {
+				continue
+			}
+			if columns.Main(r).CanUpdate() {
+				up++
+			}
+			c := r.Local.Value
+			if c.Dirty()+c.Untracked > 0 || slices.ContainsFunc(c.Linked(), func(w model.Worktree) bool { return w.Dirty > 0 }) {
+				changed++
+			}
+		}
+		add(up, "can update")
+		add(changed, "with changes")
+	}
+	return strings.Join(parts, " · ")
+}
+
 // buildLines lays out the owner's rows for the lens. order, when it holds
 // a row, keeps it where it was, so that values arriving do not move rows
 // under the cursor; rows it does not hold are placed by rank after them.
 func (m *Model) buildLines() []line {
 	o := &m.snap
 	var clones, remotes []*model.Row
+	// The rows of each section the user named, taken out first: a row in
+	// one goes nowhere else.
+	grouped := make([][]*model.Row, len(m.groups))
 	for i := range o.Rows {
 		r := &o.Rows[i]
 		name := line{kind: columns.KindClone, row: r}.name()
 		if !matches(r, name, m.filter) {
 			continue
 		}
-		switch {
-		case r.Clone != "":
+		if r.Clone == "" && (!notCloned(r) || o.All) {
+			continue
+		}
+		if g := m.groupOf(r); g >= 0 {
+			grouped[g] = append(grouped[g], r)
+			continue
+		}
+		if r.Clone != "" {
 			clones = append(clones, r)
-		case notCloned(r) && !o.All:
+		} else {
 			remotes = append(remotes, r)
 		}
 	}
@@ -160,31 +249,71 @@ func (m *Model) buildLines() []line {
 			out = append(out, line{kind: columns.KindWorktree, row: r, tree: &linked[i], last: i == len(linked)-1})
 		}
 	}
+	kindOf := func(r *model.Row) columns.Kind {
+		if r.Clone == "" {
+			return columns.KindRemote
+		}
+		return columns.KindClone
+	}
+	byGitHub := func(a, b *model.Row) int {
+		return cmp.Or(cmp.Compare(githubAttention(b), githubAttention(a)), cmp.Compare(pushedAt(b), pushedAt(a)), byName(a, b))
+	}
+	byAttention := func(a, b *model.Row) int {
+		return cmp.Or(cmp.Compare(attention(b), attention(a)), byName(a, b))
+	}
+	// groups writes the sections the user named, in the order written,
+	// leaving out those with no rows.
+	groups := func() {
+		for i, rs := range grouped {
+			if len(rs) == 0 {
+				continue
+			}
+			head := groupHead(m.groups[i])
+			out = append(out, line{kind: columns.KindHead, head: head, title: m.groups[i].Name, n: len(rs), note: m.headNote(rs)})
+			if m.folded(head) && !filtering {
+				continue
+			}
+			if m.lens == columns.GitHub {
+				m.sortRows(rs, byGitHub)
+			} else {
+				// The clones by what they need, then the repositories not
+				// cloned by name, as in not cloned.
+				var cl, re []*model.Row
+				for _, r := range rs {
+					if r.Clone != "" {
+						cl = append(cl, r)
+					} else {
+						re = append(re, r)
+					}
+				}
+				m.sortRows(cl, byAttention)
+				m.sortRows(re, byName)
+				rs = append(cl, re...)
+			}
+			for _, r := range rs {
+				push(r, kindOf(r))
+			}
+		}
+	}
 	if m.lens == columns.GitHub {
 		all := append(slices.Clone(clones), remotes...)
-		m.sortRows(all, func(a, b *model.Row) int {
-			return cmp.Or(cmp.Compare(githubAttention(b), githubAttention(a)), cmp.Compare(pushedAt(b), pushedAt(a)), byName(a, b))
-		})
+		m.sortRows(all, byGitHub)
 		for _, r := range all {
-			kind := columns.KindClone
-			if r.Clone == "" {
-				kind = columns.KindRemote
-			}
-			push(r, kind)
+			push(r, kindOf(r))
 		}
+		groups()
 		return out
 	}
-	m.sortRows(clones, func(a, b *model.Row) int {
-		return cmp.Or(cmp.Compare(attention(b), attention(a)), byName(a, b))
-	})
+	m.sortRows(clones, byAttention)
 	var quiet []*model.Row
 	for _, r := range clones {
-		if attention(r) == 0 && m.order[r.Key()] == 0 {
+		if attention(r) == 0 && !m.top[r.Key()] {
 			quiet = append(quiet, r)
 			continue
 		}
 		push(r, columns.KindClone)
 	}
+	groups()
 	if len(quiet) > 0 {
 		out = append(out, line{kind: columns.KindHead, head: headQuiet, title: "nothing to do", n: len(quiet)})
 		if !m.folded(headQuiet) || filtering {
@@ -226,12 +355,16 @@ func (m *Model) sortRows(rs []*model.Row, rank func(a, b *model.Row) int) {
 	})
 }
 
-// folded reports whether the section head is folded; both sections start
-// folded.
+// folded reports whether the section head is folded: gh tidy's own start
+// folded, and those the user named as the settings say.
 func (m *Model) folded(head string) bool {
 	f, ok := m.folds[head]
 	return !ok || f
 }
+
+// unpin lets the rows go from their places: the order they keep, and
+// which were above the first head, together.
+func (m *Model) unpin() { m.order, m.top = map[string]int{}, map[string]bool{} }
 
 // relayout builds the lines again from the copy of the owner, keeping the
 // cursor on the row it was on. While rows show what was done to them, or
@@ -244,18 +377,22 @@ func (m *Model) relayout() {
 		}
 	}
 	if !hold {
-		m.order = map[string]int{}
+		m.unpin()
 	}
 	m.lines = m.buildLines()
-	// The rows above the first head keep their places; those in a section
-	// stay in it.
+	// Every row shown keeps its place in its part of the list while rows
+	// keep their places; top says which were above the first head, so
+	// that one there whose work is done does not sink among the quiet.
 	if hold && len(m.order) == 0 {
+		above := true
 		for i, l := range m.lines {
 			if l.kind == columns.KindHead {
-				break
+				above = false
+				continue
 			}
 			if l.kind != columns.KindWorktree {
 				m.order[l.key()] = i + 1
+				m.top[l.key()] = above
 			}
 		}
 	}

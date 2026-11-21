@@ -1,0 +1,178 @@
+-- screen --
+ tidy // ‹ mika ›    local │ github                                                         4 can update · 4 with changes · 1 worktree done 
+  REPO                        ISSUES    PRS       DEPENDABOT  CI    STARS   PUSHED              MAIN
+▎ agent-runner ⌥3             4 +1      2         0           ✓     4       2h ago              <6                                          
+  dotfiles                    0         0         0           ✓     16      3h ago     private  <2
+  pixel-garden                0         0         0           ✓     4       20h ago             =
+  weather-cli                 0         0         off         -     37      9d ago     private  not cloned
+  color-picker                0         0         0           -     4       15d ago             =
+  scratchpad local only       -         -         -           -     -       -                   no origin
+  ▾ calendar work  2   2 with alerts · 1 failing
+  calendar-sync               1         0         2           ✗     11      3d ago              <1
+  tool-shed                   3         0         1           ✓     23      4d ago              not cloned
+  ▸ notes  1
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 7 clones · 2 not cloned
+╭─ agent-runner ───────────────────────────────────────────────────────────────────────────────────────────────────────────────── +/- size ╮
+│ OPEN 4 issues · 2 pull requests                                                     │ path     ~/github.com/mika/agent-runner            │
+│   • issue #41 Retry the runner when the socket closes  kai now                      │ fetched  5h ago                                    │
+│     issue #37 Document the cache layout  ren 2d ago                                 │ p        updates main · ff, not checked out        │
+│     pr    #40 Speed up status parsing  hana 3d ago                                  │ d        removes 1 worktree · keeps 2 worktrees    │
+│                                                                                     │ default  main from github                          │
+│                                                                                     │                                                    │
+│                                                                                     │                                                    │
+│                                                                                     │                                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+ v local · o open on GitHub · c clone · / filter · O owner · ? keys · q quit
+-- styles --
+L1 0-6 fg=#96bfff bg=#3b3b52 bold
+L1 6-9 fg=#706f87 bg=#3b3b52
+L1 9-11 fg=#8888a4 bg=#3b3b52
+L1 11-16 fg=#d0d6e8 bg=#3b3b52 bold
+L1 16-21 fg=#8888a4 bg=#3b3b52
+L1 21-27 fg=#b0b8d1 bg=#3b3b52
+L1 27-29 fg=#525270 bg=#3b3b52
+L1 29-35 fg=#96bfff bg=#3b3b52 bold underline
+L1 35-105 fg=#96bfff bg=#3b3b52
+L1 105-107 fg=#525270 bg=#3b3b52
+L1 107-122 fg=#ffe5a0 bg=#3b3b52
+L1 122-124 fg=#525270 bg=#3b3b52
+L1 124-140 fg=#b5f0b0 bg=#3b3b52
+L2 2-100 fg=#d0d6e8 bold
+L3 0-2 fg=#96bfff bg=#3b3b52
+L3 2-15 fg=#d4b0ff bg=#3b3b52 bold
+L3 15-30 fg=#ffc49a bg=#3b3b52
+L3 30-32 fg=#e0e4f0 bg=#3b3b52
+L3 32-40 fg=#96bfff bg=#3b3b52
+L3 40-50 fg=#e0e4f0 bg=#3b3b52
+L3 50-62 fg=#706f87 bg=#3b3b52
+L3 62-68 fg=#b5f0b0 bg=#3b3b52
+L3 68-96 fg=#b0b8d1 bg=#3b3b52
+L3 96-140 fg=#96bfff bg=#3b3b52
+L4 2-10 fg=#d4b0ff bold
+L4 30-51 fg=#706f87
+L4 62-63 fg=#b5f0b0
+L4 68-82 fg=#b0b8d1
+L4 87-94 fg=#706f87
+L4 96-98 fg=#96bfff
+L5 2-14 fg=#d4b0ff bold
+L5 30-51 fg=#706f87
+L5 62-63 fg=#b5f0b0
+L5 68-83 fg=#b0b8d1
+L5 96-97 fg=#706f87
+L6 2-13 fg=#8888a4
+L6 30-41 fg=#706f87
+L6 50-53 fg=#8888a4
+L6 62-63 fg=#706f87
+L6 68-82 fg=#b0b8d1
+L6 87-106 fg=#706f87
+L7 2-14 fg=#d4b0ff bold
+L7 30-63 fg=#706f87
+L7 68-83 fg=#b0b8d1
+L7 96-97 fg=#706f87
+L8 2-12 fg=#d4b0ff bold
+L8 13-23 fg=#f5a3b5
+L8 30-105 fg=#706f87
+L9 2-3 fg=#8888a4
+L9 4-17 fg=#b0b8d1 bold
+L9 19-48 fg=#706f87
+L10 2-15 fg=#d4b0ff bold
+L10 30-31 fg=#e0e4f0
+L10 40-41 fg=#706f87
+L10 50-63 fg=#f5a3b5
+L10 68-82 fg=#b0b8d1
+L10 96-98 fg=#96bfff
+L11 2-11 fg=#8888a4
+L11 30-31 fg=#e0e4f0
+L11 40-41 fg=#706f87
+L11 50-51 fg=#f5a3b5
+L11 62-63 fg=#b5f0b0
+L11 68-82 fg=#b0b8d1
+L11 96-106 fg=#706f87
+L12 2-3 fg=#8888a4
+L12 4-9 fg=#b0b8d1 bold
+L12 11-12 fg=#706f87
+L26 1-24 fg=#8888a4
+L27 0-140 fg=#525270
+L28 0-1 fg=#525270
+L28 2-33 fg=#b0b8d1 bold
+L28 86-87 fg=#706f87
+L28 88-92 fg=#b0b8d1
+L28 97-127 fg=#e0e4f0
+L28 139-140 fg=#525270
+L29 0-1 fg=#525270
+L29 4-5 fg=#96bfff
+L29 6-11 fg=#706f87
+L29 12-15 fg=#8888a4
+L29 16-55 fg=#e0e4f0
+L29 57-87 fg=#706f87
+L29 88-95 fg=#b0b8d1
+L29 97-103 fg=#8888a4
+L29 139-140 fg=#525270
+L30 0-1 fg=#525270
+L30 6-11 fg=#706f87
+L30 12-15 fg=#8888a4
+L30 16-41 fg=#e0e4f0
+L30 43-87 fg=#706f87
+L30 88-89 fg=#b0b8d1
+L30 97-109 fg=#b5f0b0
+L30 110-131 fg=#8888a4
+L30 139-140 fg=#525270
+L31 0-1 fg=#525270
+L31 6-8 fg=#706f87
+L31 12-15 fg=#8888a4
+L31 16-39 fg=#e0e4f0
+L31 41-87 fg=#706f87
+L31 88-89 fg=#b0b8d1
+L31 97-115 fg=#b5f0b0
+L31 116-135 fg=#8888a4
+L31 139-140 fg=#525270
+L32 0-1 fg=#525270
+L32 86-87 fg=#706f87
+L32 88-95 fg=#b0b8d1
+L32 97-101 fg=#d0d6e8
+L32 102-113 fg=#706f87
+L32 139-140 fg=#525270
+L33 0-1 fg=#525270
+L33 86-87 fg=#706f87
+L33 139-140 fg=#525270
+L34 0-1 fg=#525270
+L34 86-87 fg=#706f87
+L34 139-140 fg=#525270
+L35 0-1 fg=#525270
+L35 86-87 fg=#706f87
+L35 139-140 fg=#525270
+L36 0-140 fg=#525270
+L38 1-2 fg=#96bfff bold
+L38 3-8 fg=#8888a4
+L38 9-10 fg=#525270
+L38 11-12 fg=#96bfff bold
+L38 13-27 fg=#8888a4
+L38 28-29 fg=#525270
+L38 30-31 fg=#96bfff bold
+L38 32-37 fg=#8888a4
+L38 38-39 fg=#525270
+L38 40-41 fg=#96bfff bold
+L38 42-48 fg=#8888a4
+L38 49-50 fg=#525270
+L38 51-52 fg=#96bfff bold
+L38 53-58 fg=#8888a4
+L38 59-60 fg=#525270
+L38 61-62 fg=#96bfff bold
+L38 63-67 fg=#8888a4
+L38 68-69 fg=#525270
+L38 70-71 fg=#96bfff bold
+L38 72-76 fg=#8888a4

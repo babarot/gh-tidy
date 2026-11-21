@@ -604,7 +604,7 @@ func TestTheQuietHeadStaysWhileRowsHold(t *testing.T) {
 	m.relayout()
 	// Rows hold their places while something is read.
 	m.snap.Reading = "reading GitHub"
-	m.order = map[string]int{}
+	m.unpin()
 	m.relayout()
 	m.relayout()
 	if !strings.Contains(screen(m), "▾ nothing to do") {
@@ -1475,5 +1475,133 @@ func TestRestingOnHeldTitlesMarksThemSeen(t *testing.T) {
 	w.settle(m)
 	if s := plain(m.row(m.lines[i], false, cols, ws)); strings.Contains(s, "+1") {
 		t.Errorf("the held titles were not marked seen: %q", s)
+	}
+}
+
+// The sections the user names gather every row they match, attention or
+// not, cloned or not, in the first one matched; a section with nothing in
+// it is left out, and folded = false starts open.
+func TestSectionsTheUserNames(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(func(o *Options) {
+		o.Config.Groups = []config.Group{
+			{Name: "calendar work", Repos: []string{"calendar-*", "MIKA/tool-*"}},
+			{Name: "notes", Repos: []string{"trail-notes", "calendar-sync"}, Folded: true},
+			{Name: "nobody", Repos: []string{"other/*"}},
+		}
+	})
+	s := screen(m)
+	for _, want := range []string{"▾ calendar work  2", "▸ notes  1"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("lacks %q:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "nobody") {
+		t.Errorf("an empty section is shown:\n%s", s)
+	}
+	// calendar-sync needs attention, yet it is in its section, the first
+	// matched; tool-shed is not cloned, matched by owner/name.
+	var head string
+	where := map[string]string{}
+	for _, l := range m.lines {
+		switch {
+		case l.kind == columns.KindHead:
+			head = l.title
+		case l.row != nil:
+			where[l.name()] = head
+		}
+	}
+	if where["calendar-sync"] != "calendar work" {
+		t.Errorf("calendar-sync under %q", where["calendar-sync"])
+	}
+	if _, ok := where["trail-notes"]; ok {
+		t.Error("a row of a folded section is shown")
+	}
+	press(w, m, "/", "t", "r", "a", "i", "l", "enter")
+	if s := screen(m); !strings.Contains(s, "trail-notes") {
+		t.Errorf("the filter does not open the folded section:\n%s", s)
+	}
+	press(w, m, "esc")
+	m.setLens(columns.GitHub)
+	w.settle(m)
+	head, where = "", map[string]string{}
+	for _, l := range m.lines {
+		switch {
+		case l.kind == columns.KindHead:
+			head = l.title
+		case l.row != nil:
+			where[l.name()] = head
+		}
+	}
+	if where["tool-shed"] != "calendar work" || where["calendar-sync"] != "calendar work" {
+		t.Errorf("in the github columns: %v", where)
+	}
+	golden(t, "sections-github", m)
+}
+
+// While GitHub is read, the rows of a section keep their places, as those
+// above the heads do; once it is done they take their order.
+func TestRowsInASectionKeepTheirPlaces(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(func(o *Options) {
+		o.Config.Groups = []config.Group{{Name: "work", Repos: []string{"calendar-sync", "tool-shed"}}}
+	})
+	m.setLens(columns.GitHub)
+	w.settle(m)
+	names := func() []string {
+		var out []string
+		in := false
+		for _, l := range m.lines {
+			if l.kind == columns.KindHead {
+				in = l.title == "work"
+				continue
+			}
+			if in {
+				out = append(out, l.name())
+			}
+		}
+		return out
+	}
+	before := names()
+	if len(before) != 2 || before[0] != "calendar-sync" {
+		t.Fatalf("work = %q", before)
+	}
+	m.snap.Reading = "reading GitHub"
+	m.relayout() // the order is taken
+	for i := range m.snap.Rows {
+		if m.snap.Rows[i].Remote == "github.com/mika/tool-shed" {
+			m.snap.Rows[i].Heavy.Value.Alerts = 900 // now it ranks first
+		}
+	}
+	m.relayout()
+	if got := names(); !slices.Equal(got, before) {
+		t.Errorf("while reading: %q; want %q kept", got, before)
+	}
+	m.snap.Reading = ""
+	m.relayout()
+	if got := names(); got[0] != "tool-shed" {
+		t.Errorf("after reading: %q", got)
+	}
+}
+
+// Switching the columns there and back while rows keep their places
+// leaves nothing to do as it was: which rows were above the first head is
+// let go with their order.
+func TestTheQuietHeadStaysAcrossALensSwitch(t *testing.T) {
+	w := newWorld(t)
+	m := w.model(nil)
+	m.snap.Reading = "reading GitHub"
+	m.relayout()
+	if !strings.Contains(screen(m), "nothing to do  2") {
+		t.Fatalf("before:\n%s", screen(m))
+	}
+	m.setLens(columns.GitHub)
+	m.snap.Reading = "reading GitHub"
+	m.relayout()
+	m.setLens(columns.Local)
+	m.snap.Reading = "reading GitHub"
+	m.relayout()
+	if s := screen(m); !strings.Contains(s, "nothing to do  2") {
+		t.Errorf("after switching there and back:\n%s", s)
 	}
 }

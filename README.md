@@ -104,7 +104,7 @@ A clone is skipped, with why, when it has no local default branch, when its defa
 
 `~/.config/gh-tidy/config.toml`. Every setting is optional; `gh tidy --print-config` prints them all at their defaults, and [docs/configuration.md](docs/configuration.md) shows the same. A mistake is reported with where it is in the file.
 
-You can choose the columns of each set and the parts of the pane, change the marks to match your own prompt, add or hide owners, and change the keys.
+You can choose the columns of each set and the parts of the pane, gather repositories into sections of your own (`[[sections]]`), change the marks to match your own prompt, add or hide owners, and change the keys.
 
 ### Handing work to other tools
 
