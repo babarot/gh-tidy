@@ -1,4 +1,4 @@
-.PHONY: build test check lint install
+.PHONY: build test check lint install demo
 
 build:
 	go build -o gh-tidy .
@@ -20,3 +20,8 @@ lint:
 install: build
 	gh extension remove tidy 2>/dev/null || true
 	gh extension install .
+
+# Record the README's demo with VHS, against a made-up world (ADR-010):
+# demo/recording/out/demo.gif, not kept in git.
+demo:
+	vhs demo/recording/tapes/demo.tape

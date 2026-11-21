@@ -25,6 +25,8 @@ gh-tidy is split into packages by layer. A package imports only packages of lowe
 | 4 | `internal/tui` | The screen: one owner's clones and repositories in a list, the preview of the row selected, the popups; what is known is the engine's | `internal/config`, `internal/model`, `internal/policy`, `internal/theme`, `internal/tui/columns`, `internal/tui/keymap`, `internal/tui/statusline` | `charm.land/bubbletea/v2`, `charm.land/lipgloss/v2`, `github.com/charmbracelet/x/ansi` |
 | 5 | `internal/app` | Putting gh-tidy together: flags, settings, the engine built from the concrete packages, the owner to open, the screen | `internal/command`, `internal/config`, `internal/engine`, `internal/github`, `internal/local`, `internal/locate`, `internal/logging`, `internal/model`, `internal/store`, `internal/tui`, `internal/version` | `charm.land/bubbletea/v2` |
 | 6 | `main` | Running gh tidy | `internal/app` | - |
+| 6 | `demo/internal/recording` | The made-up world the demo recording runs gh tidy against: real git clones in a temporary directory and a made-up GitHub; never part of gh tidy (ADR-010) | `internal/app`, `internal/config`, `internal/engine`, `internal/github`, `internal/gitx`, `internal/locate`, `internal/logging`, `internal/model`, `internal/store`, `internal/tui` | `charm.land/bubbletea/v2` |
+| 7 | `demo/recording` | Running gh tidy against the made-up world, for the recording in the README | `demo/internal/recording` | - |
 
 Standard library packages that reach outside the process:
 
