@@ -67,8 +67,8 @@ var Defaults = []Def{
 	{"fetch", ScopeList, []string{"f"}, "fetch", "fetches the clone"},
 	{"fetch_all", ScopeList, []string{"F"}, "fetch all", "fetches every clone"},
 	// The default branch, not the branch checked out.
-	{"pull", ScopeList, []string{"p"}, "update", "moves the clone's default branch forward"},
-	{"pull_all", ScopeList, []string{"P"}, "update all", "fetches every clone, then moves each default branch forward; asks first"},
+	{"pull", ScopeList, []string{"p"}, "pull", "moves the clone's default branch forward"},
+	{"pull_all", ScopeList, []string{"P"}, "pull all", "fetches every clone, then moves each default branch forward; asks first"},
 	{"cleanup", ScopeList, []string{"d"}, "clean up", "cleans up the clone; asks first"},
 	{"cleanup_all", ScopeList, []string{"D"}, "clean up all", "cleans up every clone's finished worktrees; asks first"},
 	{"clone", ScopeList, []string{"c"}, "clone", "clones the repository selected"},

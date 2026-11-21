@@ -98,7 +98,7 @@ func (m *Model) operate(k string) (tea.Cmd, bool) {
 		if !ok {
 			return m.say(statusline.Info, "select a clone to update"), true
 		}
-		return m.busySaid("update", m.eng.Advance([]model.CloneKey{r.Clone})), true
+		return m.busySaid("pull", m.eng.Advance([]model.CloneKey{r.Clone})), true
 	case on("pull_all"):
 		m.open(m.updateAllPopup())
 		return nil, true
@@ -240,11 +240,11 @@ func (m *Model) updateAllPopup() *popup {
 		{parts: []cell{{text: fmt.Sprintf("Fetch the %d clones of %s, then fast-forward each default branch", len(ks), scope), role: roleText}}},
 		{parts: []cell{{text: "where nothing is in the way. Branches being worked on are not touched.", role: roleText}}},
 		{},
-		{parts: []cell{{text: fmt.Sprintf("as last read: %d can update", can), role: roleAccent}, {text: fmt.Sprintf(" · %d in the way", blocked), role: rolePrompt}}},
+		{parts: []cell{{text: fmt.Sprintf("as last read: %d can pull", can), role: roleAccent}, {text: fmt.Sprintf(" · %d in the way", blocked), role: rolePrompt}}},
 		{parts: []cell{{text: "each is decided again after its fetch", role: roleMuted}}},
 	}
-	return m.confirmPopup("update all", body, func(m *Model) tea.Cmd {
-		return m.busySaid("update", m.eng.Advance(ks))
+	return m.confirmPopup("pull all", body, func(m *Model) tea.Cmd {
+		return m.busySaid("pull", m.eng.Advance(ks))
 	})
 }
 

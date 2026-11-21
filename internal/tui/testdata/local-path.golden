@@ -1,5 +1,5 @@
 -- screen --
- tidy // ‹ mika ›    local │ github                                                         4 can update · 4 with changes · 1 worktree done 
+ tidy // ‹ mika ›    local │ github                                                           4 can pull · 4 with changes · 1 worktree done 
   REPO                        MAIN            CHECKED OUT                   CHANGES         PATH                                   FETCHED
 ▎ agent-runner ⌥3             ⇣6              retry-backoff ⇡2 ⇠5           !1              ~/github.com/mika/agent-runner         5h ago   
     ├ ⌥ fix-cgo                               fix-cgo ⇡1                                    /wt/fix-cgo
@@ -36,7 +36,7 @@
 │ ▾ ⇠5  on main, not in retry-backoff                                                 │                                                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
- enter worktrees · v github · P update all · p update · f fetch · d clean up · D clean up all · / filter · O owner · + - preview · ? keys
+ enter worktrees · v github · P pull all · p pull · f fetch · d clean up · D clean up all · / filter · O owner · + - preview · ? keys
 -- styles --
 L1 0-6 fg=#96bfff bg=#3b3b52 bold
 L1 6-9 fg=#706f87 bg=#3b3b52
@@ -45,8 +45,8 @@ L1 11-16 fg=#d0d6e8 bg=#3b3b52 bold
 L1 16-21 fg=#8888a4 bg=#3b3b52
 L1 21-26 fg=#96bfff bg=#3b3b52 bold underline
 L1 26-29 fg=#525270 bg=#3b3b52
-L1 29-92 fg=#b0b8d1 bg=#3b3b52
-L1 92-105 fg=#96bfff bg=#3b3b52
+L1 29-94 fg=#b0b8d1 bg=#3b3b52
+L1 94-105 fg=#96bfff bg=#3b3b52
 L1 105-107 fg=#525270 bg=#3b3b52
 L1 107-122 fg=#ffe5a0 bg=#3b3b52
 L1 122-124 fg=#525270 bg=#3b3b52
@@ -168,28 +168,28 @@ L38 19-20 fg=#96bfff bold
 L38 21-27 fg=#8888a4
 L38 28-29 fg=#525270
 L38 30-31 fg=#96bfff bold
-L38 32-42 fg=#8888a4
-L38 43-44 fg=#525270
-L38 45-46 fg=#96bfff bold
-L38 47-53 fg=#8888a4
-L38 54-55 fg=#525270
-L38 56-57 fg=#96bfff bold
-L38 58-63 fg=#8888a4
-L38 64-65 fg=#525270
-L38 66-67 fg=#96bfff bold
-L38 68-76 fg=#8888a4
-L38 77-78 fg=#525270
-L38 79-80 fg=#96bfff bold
-L38 81-93 fg=#8888a4
-L38 94-95 fg=#525270
-L38 96-97 fg=#96bfff bold
-L38 98-104 fg=#8888a4
-L38 105-106 fg=#525270
-L38 107-108 fg=#96bfff bold
-L38 109-114 fg=#8888a4
-L38 115-116 fg=#525270
-L38 117-120 fg=#96bfff bold
-L38 121-128 fg=#8888a4
-L38 129-130 fg=#525270
-L38 131-132 fg=#96bfff bold
-L38 133-137 fg=#8888a4
+L38 32-40 fg=#8888a4
+L38 41-42 fg=#525270
+L38 43-44 fg=#96bfff bold
+L38 45-49 fg=#8888a4
+L38 50-51 fg=#525270
+L38 52-53 fg=#96bfff bold
+L38 54-59 fg=#8888a4
+L38 60-61 fg=#525270
+L38 62-63 fg=#96bfff bold
+L38 64-72 fg=#8888a4
+L38 73-74 fg=#525270
+L38 75-76 fg=#96bfff bold
+L38 77-89 fg=#8888a4
+L38 90-91 fg=#525270
+L38 92-93 fg=#96bfff bold
+L38 94-100 fg=#8888a4
+L38 101-102 fg=#525270
+L38 103-104 fg=#96bfff bold
+L38 105-110 fg=#8888a4
+L38 111-112 fg=#525270
+L38 113-116 fg=#96bfff bold
+L38 117-124 fg=#8888a4
+L38 125-126 fg=#525270
+L38 127-128 fg=#96bfff bold
+L38 129-133 fg=#8888a4

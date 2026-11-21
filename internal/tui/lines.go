@@ -200,7 +200,7 @@ func (m *Model) headNote(rs []*model.Row) string {
 				changed++
 			}
 		}
-		add(up, "can update")
+		add(up, "can pull")
 		add(changed, "with changes")
 	}
 	return strings.Join(parts, " · ")

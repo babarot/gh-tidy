@@ -7,7 +7,7 @@ A gh extension that keeps one GitHub owner's local clones up to date and clear o
 A coding agent works from the clone it is given. If the clone's default branch is behind GitHub's, the agent starts its work from old code, or reads old code as context and decides on it. gh tidy lists an owner's clones with what stands in the way, moves their default branches forward where nothing is in the way, and removes the worktrees and branches you are done with.
 
 ```
- tidy // ‹ mika ›    local │ github                              4 can update · 4 with changes · 1 worktree done
+ tidy // ‹ mika ›    local │ github                              4 can pull · 4 with changes · 1 worktree done
   REPO                        MAIN            CHECKED OUT                   CHANGES         WORKTREES
 ▎ agent-runner ⌥3             <6              retry-backoff >2 ⇣5           *1              1 busy  1 new  1 done
   scratchpad local only       no origin       main                          %4
