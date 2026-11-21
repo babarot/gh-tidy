@@ -46,6 +46,7 @@ type repo struct {
 	prs     []opened
 	head    string // the bare remote's main, read once built
 	private bool
+	id      int64 // GitHub's number for it, set once built
 }
 
 type alert struct{ severity, pkg, ecosystem, vulnerable, fixed, manifest string }
@@ -87,10 +88,15 @@ func Build(ctx context.Context, dir string) (*World, error) {
 		{name: "weather-cli", cloned: true, stars: 4, pushed: 230 * time.Hour, ci: "SUCCESS"},
 	}
 	for i := range w.repos {
+		w.repos[i].id = int64(1001 + i)
 		if err := w.make(ctx, &w.repos[i]); err != nil {
 			return nil, fmt.Errorf("%s: %w", w.repos[i].name, err)
 		}
 	}
+	// The commits of the world are made; what gh tidy makes from now on
+	// is made at the time it is made.
+	os.Unsetenv("GIT_AUTHOR_DATE")
+	os.Unsetenv("GIT_COMMITTER_DATE")
 	cfg := fmt.Sprintf("[core]\nroots = [%q]\n\n[tui]\ntheme = \"catppuccin-mocha\"\n", w.Root)
 	if err := os.WriteFile(w.Config, []byte(cfg), 0o644); err != nil {
 		return nil, err
@@ -104,6 +110,38 @@ func (w *World) at(d time.Duration) {
 	t := w.Built.Add(-d).Format(time.RFC3339)
 	os.Setenv("GIT_AUTHOR_DATE", t)
 	os.Setenv("GIT_COMMITTER_DATE", t)
+}
+
+// clone clones the bare remote of the repository name into dir, its
+// origin GitHub's name for it, sent to the bare remote by the clone's own
+// insteadOf.
+func (w *World) clone(ctx context.Context, name, dir string) error {
+	bare := filepath.Join(w.remotes, name+".git")
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+		return err
+	}
+	if err := git(ctx, filepath.Dir(dir), "clone", "-q", bare, dir); err != nil {
+		return err
+	}
+	url := "git@github.com:" + Owner + "/" + name + ".git"
+	for _, args := range [][]string{{"remote", "set-url", "origin", url}, {"config", "url." + bare + ".insteadOf", url}} {
+		if err := git(ctx, dir, args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Cloner clones from the world's remotes, as c would from GitHub: the
+// recording never runs gh, which would reach GitHub signed in as the user.
+type Cloner struct{ w *World }
+
+// Cloner returns the world's cloner.
+func (w *World) Cloner() Cloner { return Cloner{w} }
+
+func (c Cloner) Clone(ctx context.Context, _, slug, dir string) error {
+	_, name, _ := strings.Cut(slug, "/")
+	return c.w.clone(ctx, name, dir)
 }
 
 func git(ctx context.Context, dir string, args ...string) error {
@@ -149,21 +187,14 @@ func (w *World) make(ctx context.Context, r *repo) error {
 	}
 	clone := filepath.Join(w.Root, "github.com", Owner, r.name)
 	if r.cloned {
-		if err := os.MkdirAll(filepath.Dir(clone), 0o755); err != nil {
+		if err := w.clone(ctx, r.name, clone); err != nil {
 			return err
 		}
-		if err := git(ctx, filepath.Dir(clone), "clone", "-q", bare, clone); err != nil {
+		if err := git(ctx, clone, "fetch", "-q", "origin"); err != nil {
 			return err
-		}
-		// The origin is GitHub's name, sent to the bare remote here.
-		url := "git@github.com:" + Owner + "/" + r.name + ".git"
-		for _, args := range [][]string{{"remote", "set-url", "origin", url}, {"config", "url." + bare + ".insteadOf", url}, {"fetch", "-q", "origin"}} {
-			if err := git(ctx, clone, args...); err != nil {
-				return err
-			}
 		}
 		// Fetched last a while ago, before GitHub moved on.
-		last := w.Built.Add(-(r.pushed/2 + 3*time.Hour))
+		last := w.Built.Add(-(r.pushed + 3*time.Hour))
 		if err := os.Chtimes(filepath.Join(clone, ".git", "FETCH_HEAD"), last, last); err != nil {
 			return err
 		}

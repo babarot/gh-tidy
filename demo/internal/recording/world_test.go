@@ -17,7 +17,9 @@ func TestTheWorldAsRecorded(t *testing.T) {
 		"GIT_AUTHOR_EMAIL": "mika@example.com", "GIT_COMMITTER_NAME": "Mika", "GIT_COMMITTER_EMAIL": "mika@example.com", "GIT_ALLOW_PROTOCOL": "file"} {
 		t.Setenv(k, v)
 	}
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", home) // git reads no ignore or attributes of the user's
 	ctx := context.Background()
 	w, err := Build(ctx, t.TempDir())
 	if err != nil {
@@ -66,6 +68,15 @@ func TestTheWorldAsRecorded(t *testing.T) {
 		if r.Remote == "github.com/"+Owner+"/agent-runner" && r.Ahead.Value.Ahead {
 			t.Error("agent-runner is still behind after P")
 		}
+	}
+	// c clones from the world's remotes, never through gh.
+	dir, err := eng.Clone("github.com/" + Owner + "/tool-shed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idle()
+	if _, err := os.Stat(dir + "/README.md"); err != nil {
+		t.Errorf("tool-shed was not cloned from the world: %v", err)
 	}
 	for _, r := range eng.Owner().Rows {
 		if r.Clone != "" && r.Op.Failed {

@@ -71,7 +71,7 @@ func (g *GitHub) Heavy(ctx context.Context, slugs []string, want github.Want) ([
 		return nil, github.Rate{}, err
 	}
 	var out []github.HeavyRepo
-	for i, s := range slugs {
+	for _, s := range slugs {
 		k := model.NewRemoteKey("github.com", s)
 		r := g.find(s)
 		if r == nil {
@@ -79,7 +79,7 @@ func (g *GitHub) Heavy(ctx context.Context, slugs []string, want github.Want) ([
 			continue
 		}
 		h := github.HeavyRepo{Asked: k, Key: k, Found: true, PushedAt: g.w.Built.Add(-r.pushed), Default: "main", DefaultOid: r.head,
-			CI: r.ci, Issues: len(r.issues), PRs: len(r.prs), Alerts: len(r.alerts), Stars: r.stars, ID: int64(1000 + i + len(r.name))}
+			CI: r.ci, Issues: len(r.issues), PRs: len(r.prs), Alerts: len(r.alerts), Stars: r.stars, ID: r.id}
 		if want.Newest {
 			for _, o := range r.issues {
 				h.IssuesNewest = append(h.IssuesNewest, g.w.Built.Add(-o.made))

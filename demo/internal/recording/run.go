@@ -49,7 +49,7 @@ func (w *World) start(ctx context.Context) (*engine.Engine, config.File, []strin
 		return nil, cfg, nil, nil, err
 	}
 	parts := app.NewParts(cfg)
-	eng := engine.New(engine.Options{Roots: roots, Local: parts.Local, Change: slow{parts.Change}, Cloner: parts.Cloner,
+	eng := engine.New(engine.Options{Roots: roots, Local: parts.Local, Change: slow{parts.Change}, Cloner: w.Cloner(),
 		GitHub: w.GitHub(), Store: st, Logger: logging.Discard()})
 	if err := eng.Start(ctx); err != nil {
 		return nil, cfg, nil, nil, err
@@ -79,9 +79,10 @@ func pause(ctx context.Context, d time.Duration) {
 	}
 }
 
-// quiet runs the programs the world needs (git for worktree_remove, the
-// user's actions) and leaves the screen's outside effects undone: no
-// browser opens, no Finder, and the clipboard is not written.
+// quiet runs the programs the world needs (git for worktree_remove) and
+// leaves the screen's outside effects undone: no browser opens, no Finder,
+// and pbcopy is not run. The screen still asks the terminal to copy
+// (OSC 52), which a terminal may honor.
 type quiet struct{ tui.Commands }
 
 func (quiet) OpenURL(string) error { return nil }
