@@ -166,8 +166,7 @@ type Model struct {
 	width, height int
 	dark          bool
 
-	hits      []hit
-	lastClick click
+	hits []hit
 	// roots are where clones live, and twins the clones whose name
 	// another clone of the list shares.
 	roots []string
@@ -463,8 +462,10 @@ func (m *Model) key(k string) tea.Cmd {
 		m.move(-m.listHeight())
 	case on("page_down"):
 		m.move(m.listHeight())
-	case on("expand"):
-		m.toggle()
+	case on("open"):
+		m.openRow()
+	case on("close"):
+		m.closeRow()
 	case on("lens"):
 		m.setLens(columns.Lenses[(slices.Index(columns.Lenses, m.lens)+1)%len(columns.Lenses)])
 	case on("prev_owner"):
@@ -594,29 +595,80 @@ func (m *Model) moveTo(i int) {
 
 // toggle opens or closes the worktrees of the clone selected, or the
 // section whose head is selected. On a worktree it closes its clone's.
-func (m *Model) toggle() {
+// openRow unfolds the section under the cursor, or shows the worktrees of
+// the clone under it.
+func (m *Model) openRow() {
 	l, ok := m.selected()
 	if !ok {
 		return
 	}
-	switch l.kind {
-	case columns.KindHead:
-		if l.head == headUnlisted {
-			return
-		}
-		m.folds[l.head] = !m.folded(l.head)
-	case columns.KindWorktree:
-		m.expanded[string(l.row.Clone)] = false
-		m.cursor = l.row.Key()
-	case columns.KindClone:
-		if m.lens != columns.Local || !l.row.Local.Has || len(l.row.Local.Value.Linked()) == 0 {
-			return
-		}
-		m.expanded[string(l.row.Clone)] = !m.expanded[string(l.row.Clone)]
+	switch {
+	case l.kind == columns.KindHead && l.head != headUnlisted && m.folded(l.head):
+		m.folds[l.head] = false
+	case l.kind == columns.KindClone && m.hasWorktrees(l) && !m.expanded[string(l.row.Clone)]:
+		m.expanded[string(l.row.Clone)] = true
 	default:
 		return
 	}
 	m.relayout()
+}
+
+// closeRow folds what the cursor is on, or what holds it: a section's head
+// folds it; a clone showing its worktrees hides them; a worktree hides
+// its clone's, and a row in a section folds the section, each moving
+// the cursor to what it closed.
+func (m *Model) closeRow() {
+	l, ok := m.selected()
+	if !ok {
+		return
+	}
+	switch {
+	case l.kind == columns.KindHead:
+		if l.head == headUnlisted || m.folded(l.head) {
+			return
+		}
+		m.folds[l.head] = true
+	case l.kind == columns.KindWorktree:
+		m.expanded[string(l.row.Clone)] = false
+		m.cursor = l.row.Key()
+	case l.kind == columns.KindClone && m.expanded[string(l.row.Clone)]:
+		m.expanded[string(l.row.Clone)] = false
+	default:
+		h, ok := m.headAbove(m.sel)
+		if !ok || h.head == headUnlisted {
+			return
+		}
+		m.folds[h.head] = true
+		m.cursor = h.key()
+	}
+	m.relayout()
+}
+
+// toggle folds or unfolds the section whose head is under the cursor.
+func (m *Model) toggle() {
+	if l, ok := m.selected(); ok && l.kind == columns.KindHead {
+		if m.folded(l.head) {
+			m.openRow()
+		} else {
+			m.closeRow()
+		}
+	}
+}
+
+// hasWorktrees says the clone of l has worktrees to show as rows.
+func (m *Model) hasWorktrees(l line) bool {
+	return m.lens == columns.Local && l.row.Local.Has && len(l.row.Local.Value.Linked()) > 0
+}
+
+// headAbove is the head of the section the line at i is in: the nearest
+// head above it, since the rows of no section come before every head.
+func (m *Model) headAbove(i int) (line, bool) {
+	for j := i - 1; j >= 0; j-- {
+		if m.lines[j].kind == columns.KindHead {
+			return m.lines[j], true
+		}
+	}
+	return line{}, false
 }
 
 func (m *Model) setLens(l columns.Lens) {

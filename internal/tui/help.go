@@ -72,8 +72,7 @@ func helpSections(keys keymap.Map, actions []config.Action, sym config.Marks) []
 		out = append(out, sec)
 	}
 	out = append(out, helpSection{title: "The mouse, which only moves, opens and folds", words: true, rows: []helpRow{
-		{keys: []string{"click"}, does: "puts the cursor on a row"},
-		{keys: []string{"double click"}, does: "shows a clone's worktrees, or folds a section"},
+		{keys: []string{"click"}, does: "puts the cursor on a row; on a section's head, folds or unfolds it"},
 		{keys: []string{"wheel"}, does: "over the list moves the cursor; over the pane scrolls it"},
 		{keys: []string{"click the owner"}, does: "chooses an owner; ‹ and › step to the previous and next"},
 		{keys: []string{"click local, github"}, does: "switches the columns"},

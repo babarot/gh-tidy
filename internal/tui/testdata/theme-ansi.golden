@@ -36,7 +36,7 @@
 │ ▾ ⇠5  on main, not in retry-backoff                                                 │                                                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
- enter worktrees · v github · P pull all · p pull · f fetch · d clean up · D clean up all · / filter · O owner · + - preview · ? keys
+ l h open / close · v github · P pull all · p pull · f fetch · d clean up · D clean up all · / filter · O owner · + - preview · ? keys
 -- styles --
 L1 0-6 fg=c12 bg=c8 bold
 L1 6-11 fg=c8 bg=c8
@@ -132,25 +132,25 @@ L35 4-6 fg=c12 bold
 L35 8-37 fg=c7
 L35 86-140 fg=c8
 L36 0-140 fg=c8
-L38 1-6 fg=c12 bold
-L38 7-18 fg=c8
-L38 19-20 fg=c12 bold
-L38 21-29 fg=c8
-L38 30-31 fg=c12 bold
-L38 32-42 fg=c8
-L38 43-44 fg=c12 bold
-L38 45-51 fg=c8
-L38 52-53 fg=c12 bold
-L38 54-61 fg=c8
-L38 62-63 fg=c12 bold
-L38 64-74 fg=c8
-L38 75-76 fg=c12 bold
-L38 77-91 fg=c8
-L38 92-93 fg=c12 bold
-L38 94-102 fg=c8
-L38 103-104 fg=c12 bold
-L38 105-112 fg=c8
-L38 113-116 fg=c12 bold
-L38 117-126 fg=c8
-L38 127-128 fg=c12 bold
-L38 129-133 fg=c8
+L38 1-4 fg=c12 bold
+L38 5-19 fg=c8
+L38 20-21 fg=c12 bold
+L38 22-30 fg=c8
+L38 31-32 fg=c12 bold
+L38 33-43 fg=c8
+L38 44-45 fg=c12 bold
+L38 46-52 fg=c8
+L38 53-54 fg=c12 bold
+L38 55-62 fg=c8
+L38 63-64 fg=c12 bold
+L38 65-75 fg=c8
+L38 76-77 fg=c12 bold
+L38 78-92 fg=c8
+L38 93-94 fg=c12 bold
+L38 95-103 fg=c8
+L38 104-105 fg=c12 bold
+L38 106-113 fg=c8
+L38 114-117 fg=c12 bold
+L38 118-127 fg=c8
+L38 128-129 fg=c12 bold
+L38 130-134 fg=c8

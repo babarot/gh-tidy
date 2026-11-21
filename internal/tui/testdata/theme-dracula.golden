@@ -36,7 +36,7 @@
 │ ▾ ⇠5  on main, not in retry-backoff                                                 │                                                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
- enter worktrees · v github · P pull all · p pull · f fetch · d clean up · D clean up all · / filter · O owner · + - preview · ? keys
+ l h open / close · v github · P pull all · p pull · f fetch · d clean up · D clean up all · / filter · O owner · + - preview · ? keys
 -- styles --
 L1 0-6 fg=#8be9fd bg=#44475a bold
 L1 6-11 fg=#6272a4 bg=#44475a
@@ -132,25 +132,25 @@ L35 4-6 fg=#8be9fd bold
 L35 8-37 fg=#bfbfbf
 L35 86-140 fg=#6272a4
 L36 0-140 fg=#6272a4
-L38 1-6 fg=#8be9fd bold
-L38 7-18 fg=#6272a4
-L38 19-20 fg=#8be9fd bold
-L38 21-29 fg=#6272a4
-L38 30-31 fg=#8be9fd bold
-L38 32-42 fg=#6272a4
-L38 43-44 fg=#8be9fd bold
-L38 45-51 fg=#6272a4
-L38 52-53 fg=#8be9fd bold
-L38 54-61 fg=#6272a4
-L38 62-63 fg=#8be9fd bold
-L38 64-74 fg=#6272a4
-L38 75-76 fg=#8be9fd bold
-L38 77-91 fg=#6272a4
-L38 92-93 fg=#8be9fd bold
-L38 94-102 fg=#6272a4
-L38 103-104 fg=#8be9fd bold
-L38 105-112 fg=#6272a4
-L38 113-116 fg=#8be9fd bold
-L38 117-126 fg=#6272a4
-L38 127-128 fg=#8be9fd bold
-L38 129-133 fg=#6272a4
+L38 1-4 fg=#8be9fd bold
+L38 5-19 fg=#6272a4
+L38 20-21 fg=#8be9fd bold
+L38 22-30 fg=#6272a4
+L38 31-32 fg=#8be9fd bold
+L38 33-43 fg=#6272a4
+L38 44-45 fg=#8be9fd bold
+L38 46-52 fg=#6272a4
+L38 53-54 fg=#8be9fd bold
+L38 55-62 fg=#6272a4
+L38 63-64 fg=#8be9fd bold
+L38 65-75 fg=#6272a4
+L38 76-77 fg=#8be9fd bold
+L38 78-92 fg=#6272a4
+L38 93-94 fg=#8be9fd bold
+L38 95-103 fg=#6272a4
+L38 104-105 fg=#8be9fd bold
+L38 106-113 fg=#6272a4
+L38 114-117 fg=#8be9fd bold
+L38 118-127 fg=#6272a4
+L38 128-129 fg=#8be9fd bold
+L38 130-134 fg=#6272a4

@@ -58,7 +58,9 @@ var Defaults = []Def{
 	{"page_up", ScopeNav, []string{"pgup", "ctrl+b"}, "page up", "moves a screen up"},
 	{"page_down", ScopeNav, []string{"pgdown", "ctrl+f"}, "page down", "moves a screen down"},
 
-	{"expand", ScopeList, []string{"enter"}, "worktrees", "shows a clone's worktrees, or folds a section"},
+	{"open", ScopeList, []string{"l", "right"}, "open", "opens a folded section, or shows a clone's worktrees"},
+	// On a row in a section or a worktree, closes what holds it.
+	{"close", ScopeList, []string{"h", "left"}, "close", "folds a section, or hides a clone's worktrees"},
 	{"lens", ScopeList, []string{"v"}, "local / github", "switches between the local and the github columns"},
 	{"prev_owner", ScopeList, []string{"<"}, "previous owner", "shows the previous owner"},
 	{"next_owner", ScopeList, []string{">"}, "next owner", "shows the next owner"},

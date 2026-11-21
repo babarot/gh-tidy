@@ -108,7 +108,8 @@ This page is written from the code (`go test ./internal/config -run TestConfigur
 # bottom = ["end", "G"]
 # page_up = ["pgup", "ctrl+b"]
 # page_down = ["pgdown", "ctrl+f"]
-# expand = "enter"
+# open = ["l", "right"]
+# close = ["h", "left"]
 # lens = "v"
 # prev_owner = "<"
 # next_owner = ">"
